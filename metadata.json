@@ -1,0 +1,7 @@
+{
+  "name": "PRIME GROUP - Operação Transportadora",
+  "description": "Sistema interno para gestão operacional de frotas, abastecimento, manutenção e rotas da PRIME GROUP.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
