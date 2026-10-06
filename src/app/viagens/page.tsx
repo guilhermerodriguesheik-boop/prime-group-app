@@ -1,0 +1,2 @@
+import { Header, Metric, SectionTitle } from "@/components/ui";
+export default function Page(){return <><Header title="Viagens e CT-e" subtitle="Cada CT-e vira uma operação com receita, custos e margem."/><div className="grid grid-4"><Metric label="Fretes no mês" value="23"/><Metric label="Receita" value="R$ 58.700"/><Metric label="Custos diretos" value="R$ 27.200"/><Metric label="Lucro direto" value="R$ 31.500" tone="positive"/></div><SectionTitle title="Integração"/><div className="notice">Cargozilla → CT-e → viagem → despesas → recebimento → lucro final.</div></>}

@@ -1,0 +1,2 @@
+import { Header } from "@/components/ui";
+export default function Page(){return <><Header title="Assistente financeiro" subtitle="Consultas e lançamentos em linguagem natural."/><div className="card"><h3>Exemplos</h3><div className="grid grid-2"><div className="mini">“Gastei 450 de chapa no 12.170.”</div><div className="mini">“João pagou 3 mil hoje.”</div><div className="mini">“Quanto a Prime lucrou este mês?”</div><div className="mini">“Qual veículo tem maior custo por km?”</div></div></div></>}
