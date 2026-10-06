@@ -1,11 +1,12 @@
-import { Suspense } from "react";
 import { Cadastros } from "@/components/ledger/cadastros";
-import { Header } from "@/components/ui";
+import { parsePart } from "@/lib/ledger/parts";
 
-export default function Page() {
-  return (
-    <Suspense fallback={<Header title="Cadastros" subtitle="Veículos, despesas, receitas e contas, cada um no seu ambiente." />}>
-      <Cadastros />
-    </Suspense>
-  );
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ parte?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const raw = Array.isArray(params.parte) ? params.parte[0] : params.parte;
+  return <Cadastros initialPart={parsePart(raw)} />;
 }

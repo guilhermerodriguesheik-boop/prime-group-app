@@ -1,8 +1,8 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import { Header, SectionTitle } from "@/components/ui";
+import { PARTS, type Part } from "@/lib/ledger/parts";
 import { formatCents, formatDate, parseMoneyToCents } from "@/lib/ledger/money";
 import { vehicleName } from "@/lib/ledger/selectors";
 import {
@@ -19,19 +19,6 @@ import {
 } from "@/lib/ledger/types";
 import { useLedger } from "./use-ledger";
 
-const PARTS = [
-  { id: "veiculos", label: "Veículos" },
-  { id: "despesas", label: "Despesas" },
-  { id: "receitas", label: "Receitas" },
-  { id: "contas", label: "Contas" },
-] as const;
-
-type Part = (typeof PARTS)[number]["id"];
-
-function parsePart(value: string | null): Part {
-  return PARTS.some((part) => part.id === value) ? (value as Part) : "veiculos";
-}
-
 function todayISO() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
@@ -42,18 +29,19 @@ function newId() {
   return crypto.randomUUID();
 }
 
-export function Cadastros() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const part = parsePart(params.get("parte"));
+export function Cadastros({ initialPart }: { initialPart: Part }) {
   const ledger = useLedger();
+  const [part, setPart] = useState<Part>(initialPart);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   function selectPart(next: Part) {
+    setPart(next);
     setMessage(null);
     setError(null);
-    router.replace(`/cadastros?parte=${next}`, { scroll: false });
+    const url = new URL(window.location.href);
+    url.searchParams.set("parte", next);
+    window.history.replaceState(window.history.state, "", `${url.pathname}?${url.searchParams.toString()}`);
   }
 
   function notify(text: string) {
@@ -71,7 +59,7 @@ export function Cadastros() {
       <Header title="Cadastros" subtitle="Veículos, despesas, receitas e contas, cada um no seu ambiente." />
       <div className="tabs" role="tablist">
         {PARTS.map((item) => (
-          <button key={item.id} className={part === item.id ? "tab active" : "tab"} type="button" onClick={() => selectPart(item.id)}>
+          <button key={item.id} className={part === item.id ? "tab active" : "tab"} type="button" role="tab" aria-selected={part === item.id} onClick={() => selectPart(item.id)}>
             {item.label}
           </button>
         ))}
