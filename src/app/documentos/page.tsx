@@ -1,0 +1,2 @@
+import { Header, SectionTitle } from "@/components/ui";
+export default function Page(){return <><Header title="Documentos" subtitle="Notas, recibos, XML, CT-e, faturas e comprovantes."/><div className="card"><h3>Entrada inteligente</h3><div className="metric-value">Foto, PDF, XML ou WhatsApp</div><div className="metric-foot">A IA poderá extrair valor, fornecedor, categoria, veículo e viagem.</div></div><SectionTitle title="Fluxo"/><div className="notice">Receber → interpretar → conciliar → confirmar → contabilizar.</div></>}
