@@ -1,2 +1,16 @@
-import { Header, Metric, SectionTitle } from "@/components/ui";
-export default function Page(){return <><Header title="Contas e cartões" subtitle="Bancos, cartões, faturas e conciliação."/><div className="grid grid-4"><Metric label="Saldo em bancos" value="R$ 87.420"/><Metric label="Faturas abertas" value="R$ 12.430" tone="warning"/><Metric label="Entradas a conciliar" value="R$ 5.000"/><Metric label="Saídas a conciliar" value="R$ 1.284,50"/></div><SectionTitle title="Conciliação"/><div className="notice">Open Finance poderá cruzar PIX, compras, faturas e transferências automaticamente.</div></>}
+import Link from "next/link";
+import { AccountsBoard } from "@/components/ledger/workspace-board";
+import { Header } from "@/components/ui";
+
+export default function Page() {
+  return (
+    <>
+      <Header title="Contas e cartões" subtitle="Bancos, cartões, faturas e conciliação." />
+      <div className="quick">
+        <Link href="/cadastros?parte=contas">Cadastrar conta</Link>
+        <Link href="/cadastros?parte=despesas">Registrar pagamento ou transferência</Link>
+      </div>
+      <AccountsBoard />
+    </>
+  );
+}

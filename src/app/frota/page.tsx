@@ -1,2 +1,18 @@
-import { Header, Money, SectionTitle } from "@/components/ui"; import { fleet } from "@/data/demo";
-export default function Page(){return <><Header title="Frota" subtitle="Rentabilidade, combustível e custo por veículo."/><SectionTitle title="Indicadores"/><div className="grid grid-3">{fleet.map(v=><div className="card" key={v.vehicle}><h3>{v.vehicle}</h3><div className="metric-value positive"><Money value={v.profit}/></div><div className="metric-foot">lucro no período · {v.kmL.toFixed(1)} km/l</div></div>)}</div></>}
+import Link from "next/link";
+import { FleetCards } from "@/components/ledger/fleet-table";
+import { Header, SectionTitle } from "@/components/ui";
+
+export default function Page() {
+  return (
+    <>
+      <Header title="Frota" subtitle="Rentabilidade, combustível e custo por veículo." />
+      <div className="quick">
+        <Link href="/cadastros?parte=veiculos">Cadastrar veículo</Link>
+        <Link href="/cadastros?parte=despesas">Lançar despesa da frota</Link>
+        <Link href="/cadastros?parte=receitas">Lançar receita da frota</Link>
+      </div>
+      <SectionTitle title="Indicadores" />
+      <FleetCards />
+    </>
+  );
+}

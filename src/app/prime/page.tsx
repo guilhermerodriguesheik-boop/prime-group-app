@@ -1,2 +1,17 @@
-import { Header, Metric, Money, SectionTitle } from "@/components/ui"; import { fleet } from "@/data/demo";
-export default function Page(){return <><Header title="Prime Group" subtitle="Financeiro e operação da transportadora."/><div className="grid grid-4"><Metric label="Faturamento" value="R$ 58.700"/><Metric label="Custos operacionais" value="R$ 31.200"/><Metric label="Resultado" value="R$ 27.500" tone="positive"/><Metric label="Margem" value="46,8%"/></div><SectionTitle title="Resultado por veículo"/><div className="table-wrap"><table><thead><tr><th>Veículo</th><th>Receita</th><th>Custo</th><th>Lucro</th></tr></thead><tbody>{fleet.map(v=><tr key={v.vehicle}><td>{v.vehicle}</td><td><Money value={v.revenue}/></td><td><Money value={v.cost}/></td><td className="positive"><Money value={v.profit}/></td></tr>)}</tbody></table></div></>}
+import Link from "next/link";
+import { WorkspaceBoard } from "@/components/ledger/workspace-board";
+import { Header } from "@/components/ui";
+
+export default function Page() {
+  return (
+    <>
+      <Header title="Prime Group" subtitle="Financeiro e operação da transportadora." />
+      <div className="quick">
+        <Link href="/cadastros?parte=receitas">Cadastrar receita</Link>
+        <Link href="/cadastros?parte=despesas">Cadastrar despesa</Link>
+        <Link href="/cadastros?parte=veiculos">Cadastrar veículo</Link>
+      </div>
+      <WorkspaceBoard workspace="Prime" />
+    </>
+  );
+}

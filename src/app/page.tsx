@@ -1,4 +1,5 @@
-import { fleet, receivables } from "@/data/demo";
+import { FleetTable } from "@/components/ledger/fleet-table";
+import { receivables } from "@/data/demo";
 import { Header, Metric, Money, SectionTitle } from "@/components/ui";
 import Link from "next/link";
 
@@ -21,23 +22,7 @@ export default function Home() {
       </div>
 
       <SectionTitle title="Frota · resultado do mês" hint="receita menos custos diretos" />
-      <div className="table-wrap">
-        <table>
-          <thead><tr><th>Veículo</th><th>Receita</th><th>Custo</th><th>Lucro</th><th>Margem</th><th>KM/L</th></tr></thead>
-          <tbody>
-            {fleet.map((v) => (
-              <tr key={v.vehicle}>
-                <td><b>{v.vehicle}</b></td>
-                <td><Money value={v.revenue} /></td>
-                <td><Money value={v.cost} /></td>
-                <td className="positive"><Money value={v.profit} /></td>
-                <td>{Math.round((v.profit / v.revenue) * 100)}%</td>
-                <td>{v.kmL.toFixed(1)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <FleetTable />
 
       <SectionTitle title="Próximos recebimentos" hint="conciliação automática quando cair no banco" />
       <div className="table-wrap">
@@ -56,6 +41,7 @@ export default function Home() {
 
       <SectionTitle title="Ações rápidas" />
       <div className="quick">
+        <Link href="/cadastros">Cadastrar veículo, despesa ou receita</Link>
         <Link href="/assistente">Registrar por texto/IA</Link>
         <Link href="/documentos">Enviar nota, XML ou comprovante</Link>
         <Link href="/integracoes">Conectar bancos, WhatsApp e Cargozilla</Link>
