@@ -1,0 +1,3 @@
+import { Header, SectionTitle } from "@/components/ui";
+const items=[["Supabase","Banco, autenticação e arquivos"],["Cargozilla","CT-e, fretes e viagens"],["WhatsApp Cloud API","Texto, áudio, fotos e PDFs"],["Open Finance / Pluggy","Contas, transações e faturas"],["Vercel AI Gateway","Interpretação e consultas"]];
+export default function Page(){return <><Header title="Integrações" subtitle="Conectores desacoplados do núcleo financeiro."/><SectionTitle title="Status"/><div className="grid grid-2">{items.map(([n,d])=><div className="card" key={n}><h3>{n}</h3><p className="metric-foot">{d}</p><span className="badge green">Preparado</span></div>)}</div></>}
