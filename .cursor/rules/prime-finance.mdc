@@ -1,0 +1,44 @@
+---
+description: Regras permanentes de desenvolvimento e deploy do Prime Finance
+alwaysApply: true
+---
+
+# Prime Finance — fluxo obrigatório
+
+- A branch oficial é `main`. Trabalhe nela, salvo se o usuário pedir explicitamente uma branch separada.
+- Antes de alterar código, leia os arquivos relacionados e preserve a arquitetura existente.
+- Use TypeScript em código novo.
+- Não coloque tokens, senhas, chaves, certificados, credenciais bancárias ou segredos no código ou no Git.
+- Segredos devem existir somente em variáveis de ambiente locais/Vercel/Supabase.
+- Nunca versionar `.env`, `.env.local` ou equivalentes.
+- Valores monetários persistidos devem usar tipos decimais/numeric no banco; nunca float.
+- Manter separação lógica entre Prime Group, Pessoal e Recebíveis/Juros.
+- Não duplicar transações financeiras: pagamento de cartão e transferência entre contas não são uma nova despesa/receita.
+- Integrações externas devem ficar desacopladas do domínio em `src/lib/integrations`.
+- Cargozilla continua como emissor/TMS; Prime Finance consome os dados.
+- Toda importação externa precisa ser idempotente.
+- Mudanças em banco devem ser feitas por migrations versionadas no Supabase.
+- APIs e Server Actions devem validar autenticação/autorização.
+- Interface deve permanecer responsiva para desktop e celular.
+
+# Validação automática antes de publicar
+
+Ao concluir uma alteração solicitada pelo usuário:
+
+1. Rode `npm run lint`.
+2. Rode `npm run build`.
+3. Corrija qualquer erro causado pela alteração.
+4. Confira `git status` e nunca inclua arquivos de segredo.
+5. Faça commit com mensagem curta e descritiva.
+6. Faça push para `origin main`, exceto se o usuário disser explicitamente para não publicar.
+7. Informe de forma objetiva o que mudou e qualquer pendência externa.
+
+O push na `main` dispara automaticamente o CI do GitHub e o deploy de produção na Vercel.
+
+# Segurança
+
+- Nunca executar `npm audit fix --force` automaticamente.
+- Não remover migrations ou dados para resolver erros.
+- Não sobrescrever dados reais de produção com mocks.
+- Mudanças destrutivas no banco devem exigir confirmação explícita.
+- Não criar integrações de scraping de banco; usar Open Finance/provedor autorizado.
