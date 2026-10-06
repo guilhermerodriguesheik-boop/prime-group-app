@@ -32,11 +32,17 @@ export default function Page() {
       const data = (await response.json()) as {
         answer?: string;
         error?: string;
+        detail?: string;
+        gatewayAuth?: string;
+        model?: string;
         conversationId?: string | null;
       };
 
       if (!response.ok || !data.answer) {
-        throw new Error(data.error || "Não foi possível consultar o assistente.");
+        const diagnostics = [data.error, data.detail, data.gatewayAuth, data.model]
+          .filter(Boolean)
+          .join(" · ");
+        throw new Error(diagnostics || "Não foi possível consultar o assistente.");
       }
 
       setAnswer(data.answer);

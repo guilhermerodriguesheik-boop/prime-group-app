@@ -185,8 +185,23 @@ ${JSON.stringify(context)}`,
     });
   } catch (error) {
     console.error("Prime Finance AI error", error);
+
+    const rawMessage = error instanceof Error ? error.message : "Falha desconhecida no AI Gateway.";
+    const safeMessage = rawMessage
+      .replace(/Bearer\\s+[A-Za-z0-9._~+\\/-]+/gi, "Bearer [redacted]")
+      .replace(/(?:sk|key|token)_[A-Za-z0-9_-]{12,}/gi, "[redacted]");
+
     return NextResponse.json(
-      { error: "A IA não respondeu. Verifique a configuração do AI Gateway." },
+      {
+        error: "A IA não respondeu.",
+        detail: safeMessage.slice(0, 500),
+        gatewayAuth: process.env.VERCEL_OIDC_TOKEN
+          ? "OIDC disponível"
+          : process.env.AI_GATEWAY_API_KEY
+            ? "API key disponível"
+            : "Sem credencial do AI Gateway",
+        model: process.env.PRIME_AI_MODEL || "openai/gpt-5.6-luna",
+      },
       { status: 502 },
     );
   }
