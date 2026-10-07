@@ -7,7 +7,8 @@ export function Metric({ label, value, foot, tone }: { label: string; value: str
 }
 
 export function Header({ title, subtitle }: { title: string; subtitle: string }) {
-  return <div className="topbar"><div><h1>{title}</h1><p>{subtitle}</p></div><div className="pills"><span className="pill">Demo segura</span><span className="pill">06 out 2026</span></div></div>;
+  const date = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date());
+  return <div className="topbar"><div><h1>{title}</h1><p>{subtitle}</p></div><div className="pills"><span className="pill">Dados reais</span><span className="pill">{date}</span></div></div>;
 }
 
 export function SectionTitle({ title, hint }: { title: string; hint?: string }) {

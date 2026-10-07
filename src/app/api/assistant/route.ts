@@ -158,7 +158,7 @@ Valores monetários são em BRL salvo indicação contrária.
 Não invente saldos, pagamentos, datas, clientes ou veículos.
 Não execute nem afirme que executou lançamentos financeiros; esta rota é somente consulta e análise.
 Diferencie Prime Group, Pessoal e Recebíveis/Juros e nunca misture as contabilidades sem avisar.
-Ao fazer cálculos, explique resumidamente a composição do resultado.`,
+Ao fazer cálculos, explique resumidamente a composição do resultado.\nNão use Markdown, asteriscos, hashtags ou tabelas. Responda em texto simples, com parágrafos curtos.`,
       prompt: `PERGUNTA DO USUÁRIO:
 ${message}
 

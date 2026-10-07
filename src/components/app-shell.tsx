@@ -5,10 +5,13 @@ import { usePathname } from "next/navigation";
 
 const nav = [
   ["▦", "Visão geral", "/"],
+  ["＋", "Cadastros", "/cadastros"],
   ["▤", "Prime", "/prime"],
   ["⌂", "Pessoal", "/pessoal"],
   ["%", "Juros", "/juros"],
   ["▣", "Contas", "/contas"],
+  ["◴", "Planejamento", "/planejamento"],
+  ["▥", "Relatórios", "/relatorios"],
   ["↔", "Viagens", "/viagens"],
   ["▰", "Frota", "/frota"],
   ["▱", "Documentos", "/documentos"],
@@ -35,11 +38,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="nav-section">Principal</div>
         <nav className="nav">
-          {nav.map(([icon, label, href]) => (
-            <Link key={href} href={href} className={pathname === href ? "active" : undefined}>
-              <span>{icon}</span> <span className="label">{label}</span>
-            </Link>
-          ))}
+          {nav.map(([icon, label, href]) => {
+            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            return (
+              <Link key={href} href={href} className={active ? "active" : undefined}>
+                <span>{icon}</span> <span className="label">{label}</span>
+              </Link>
+            );
+          })}
         </nav>
         <form action="/auth/signout" method="post" className="sidebar-footer">
           <button className="button ghost" type="submit">Sair</button>
