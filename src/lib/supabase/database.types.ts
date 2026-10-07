@@ -134,6 +134,60 @@ export type Database = {
           },
         ]
       }
+      assistant_actions: {
+        Row: {
+          action_type: string
+          conversation_id: string | null
+          created_at: string
+          id: string
+          idempotency_key: string
+          input: Json
+          result: Json
+          status: string
+          user_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          action_type: string
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          input?: Json
+          result?: Json
+          status?: string
+          user_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          input?: Json
+          result?: Json
+          status?: string
+          user_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assistant_actions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assistant_actions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
