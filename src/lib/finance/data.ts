@@ -22,6 +22,7 @@ export async function getFinanceSnapshot() {
     vehicleResult,
     tripResult,
     loanResult,
+    counterpartyResult,
   ] = await Promise.all([
     supabase.from("workspaces").select("id,name,kind,currency").order("kind"),
     supabase.from("accounts").select("id,workspace_id,name,institution,account_type,opening_balance,active").eq("active", true).order("name"),
@@ -30,7 +31,8 @@ export async function getFinanceSnapshot() {
     supabase.from("receivables").select("id,workspace_id,description,amount,received_amount,due_date,status").neq("status", "cancelled").order("due_date").limit(300),
     supabase.from("vehicles").select("id,workspace_id,nickname,plate,make,model,year,status,odometer_km,estimated_value").order("nickname"),
     supabase.from("trips").select("id,workspace_id,vehicle_id,reference,origin,destination,started_at,ended_at,distance_km,freight_revenue,status").order("started_at", { ascending: false }).limit(200),
-    supabase.from("loans").select("id,workspace_id,principal,status,maturity_date,direction").neq("status", "cancelled").limit(200),
+    supabase.from("loans").select("id,workspace_id,counterparty_id,principal,periodic_rate,rate_period,interest_type,fixed_interest,start_date,status,maturity_date,direction").neq("status", "cancelled").limit(200),
+    supabase.from("counterparties").select("id,workspace_id,name,document,phone,email,kind").order("name").limit(300),
   ]);
 
   const error = [
@@ -42,6 +44,7 @@ export async function getFinanceSnapshot() {
     vehicleResult.error,
     tripResult.error,
     loanResult.error,
+    counterpartyResult.error,
   ].find(Boolean);
 
   if (error) throw error;
@@ -54,6 +57,7 @@ export async function getFinanceSnapshot() {
   const vehicles = vehicleResult.data ?? [];
   const trips = tripResult.data ?? [];
   const loans = loanResult.data ?? [];
+  const counterparties = counterpartyResult.data ?? [];
 
   const workspaceMap = new Map(workspaces.map((item) => [item.id, item]));
   const now = new Date();
@@ -133,6 +137,7 @@ export async function getFinanceSnapshot() {
     vehicles,
     trips,
     loans,
+    counterparties,
     monthly,
     cash,
     receivable30,
