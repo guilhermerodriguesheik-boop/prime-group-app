@@ -24,7 +24,6 @@ async function extractPdfText(data: Uint8Array) {
   const loadingTask = pdfjs.getDocument({
     data,
     useSystemFonts: true,
-    isEvalSupported: false,
   });
 
   const pdf = await loadingTask.promise;
