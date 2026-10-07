@@ -21,12 +21,19 @@ export default async function Page() {
         <form action={createTransaction} className="card form-grid">
           <h3>Receita ou despesa realizada</h3>
           <select name="workspace" required>{workspaceOptions.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
-          <select name="type" required><option value="expense">Despesa</option><option value="income">Receita</option></select>
+          <select name="entry_mode" required>
+            <option value="expense">Despesa paga à vista / conta</option>
+            <option value="income">Receita recebida</option>
+            <option value="card_purchase">Compra no cartão</option>
+            <option value="card_payment">Pagamento de fatura</option>
+          </select>
           <input name="description" placeholder="Descrição" required />
           <input name="amount" inputMode="decimal" placeholder="Valor, ex.: 450,00" required />
           <input name="occurred_at" type="date" required />
-          <select name="account_id"><option value="">Sem conta vinculada</option>{data.accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+          <select name="account_id"><option value="">Sem conta vinculada</option>{data.accounts.map((item) => <option key={item.id} value={item.id}>{item.name} · {workspaceLabel(data.workspaceMap.get(item.workspace_id)?.kind ?? "")}</option>)}</select>
+          <select name="card_id"><option value="">Sem cartão</option>{data.cards.map((item) => <option key={item.id} value={item.id}>{item.name} · {workspaceLabel(data.workspaceMap.get(item.workspace_id)?.kind ?? "")}</option>)}</select>
           <select name="vehicle_id"><option value="">Sem veículo</option>{data.vehicles.map((item) => <option key={item.id} value={item.id}>{item.nickname}</option>)}</select>
+          <div className="metric-foot">Compra no cartão conta como despesa, mas só reduz o caixa quando a fatura for paga.</div>
           <button className="button primary" type="submit">Salvar lançamento</button>
         </form>
 
