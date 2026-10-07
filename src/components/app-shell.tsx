@@ -11,6 +11,7 @@ const nav = [
   ["%", "Juros", "/juros"],
   ["▣", "Contas", "/contas"],
   ["◴", "Planejamento", "/planejamento"],
+  ["▥", "Relatórios", "/relatorios"],
   ["↔", "Viagens", "/viagens"],
   ["▰", "Frota", "/frota"],
   ["▱", "Documentos", "/documentos"],
