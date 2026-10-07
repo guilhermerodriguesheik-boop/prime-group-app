@@ -1,7 +1,7 @@
 import { Header, SectionTitle } from "@/components/ui";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, shortDate, workspaceLabel } from "@/lib/finance/format";
-import { createAccount, createCounterparty, createLoan, createPayable, createReceivable, createTransaction, createVehicle, settlePayable, settleReceivable } from "./actions";
+import { createAccount, createCard, createCounterparty, createLoan, createPayable, createReceivable, createRecurringEntry, createTransaction, createVehicle, settlePayable, settleReceivable } from "./actions";
 
 const workspaceOptions = [
   ["prime", "Prime Group"],
@@ -56,6 +56,33 @@ export default async function Page() {
           <select name="account_type"><option value="checking">Conta corrente</option><option value="savings">Poupança</option><option value="cash">Dinheiro</option><option value="wallet">Carteira digital</option><option value="investment">Investimento</option><option value="other">Outra</option></select>
           <input name="opening_balance" inputMode="decimal" placeholder="Saldo inicial" defaultValue="0" />
           <button className="button primary" type="submit">Cadastrar conta</button>
+        </form>
+
+
+        <form action={createCard} className="card form-grid">
+          <h3>Cartão de crédito</h3>
+          <select name="workspace" required>{workspaceOptions.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <input name="name" placeholder="Nome do cartão" required />
+          <input name="issuer" placeholder="Emissor / banco" />
+          <input name="last4" inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos" />
+          <select name="account_id"><option value="">Sem conta de pagamento vinculada</option>{data.accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+          <input name="closing_day" inputMode="numeric" placeholder="Dia do fechamento" />
+          <input name="due_day" inputMode="numeric" placeholder="Dia do vencimento" />
+          <input name="credit_limit" inputMode="decimal" placeholder="Limite" />
+          <button className="button primary" type="submit">Cadastrar cartão</button>
+        </form>
+
+        <form action={createRecurringEntry} className="card form-grid">
+          <h3>Receita ou despesa recorrente</h3>
+          <select name="workspace" required>{workspaceOptions.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <select name="type"><option value="expense">Despesa</option><option value="income">Receita</option></select>
+          <input name="name" placeholder="Descrição" required />
+          <input name="amount" inputMode="decimal" placeholder="Valor" required />
+          <select name="frequency"><option value="monthly">Mensal</option><option value="weekly">Semanal</option><option value="quarterly">Trimestral</option><option value="yearly">Anual</option><option value="custom">Personalizado</option></select>
+          <input name="due_day" inputMode="numeric" placeholder="Dia do vencimento" />
+          <input name="starts_on" type="date" required />
+          <input name="ends_on" type="date" />
+          <button className="button primary" type="submit">Cadastrar recorrência</button>
         </form>
 
         <form action={createVehicle} className="card form-grid">
