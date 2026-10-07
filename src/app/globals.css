@@ -3,3 +3,6 @@
 
 .form-grid{display:grid;gap:10px}.form-grid h3{margin-bottom:2px}.form-grid input,.form-grid select{width:100%;border:1px solid var(--line);background:#0e1628;color:var(--text);border-radius:10px;padding:11px 12px;font:inherit;outline:none}.form-grid input:focus,.form-grid select:focus{border-color:var(--accent)}.list-row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}.list-row:last-child{border-bottom:0}.attention{margin:14px 0;border-style:solid;border-color:#704f2f;background:#2a2113;color:#f4cf8d}.badge.red{color:#ff9c9c}.quick{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:18px}.quick a:hover{border-color:#506284;transform:translateY(-1px)}.card{box-shadow:0 10px 30px rgba(0,0,0,.08)}tbody tr:hover{background:rgba(255,255,255,.018)}
 @media(max-width:650px){.main{padding:14px}.card{padding:15px}.metric-value{font-size:23px}.pills{width:100%;overflow:auto}.topbar h1{font-size:24px}.nav a{min-width:72px;padding:9px 8px}.list-row{align-items:flex-start;flex-direction:column;gap:4px}}
+
+.row-actions{display:flex;align-items:center;gap:10px}.button.compact{padding:7px 10px;font-size:12px}
+@media(max-width:650px){.row-actions{width:100%;justify-content:space-between}}
