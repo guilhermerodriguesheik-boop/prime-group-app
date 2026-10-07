@@ -28,7 +28,7 @@ export async function getFinanceSnapshot() {
   ] = await Promise.all([
     supabase.from("workspaces").select("id,name,kind,currency").order("kind"),
     supabase.from("accounts").select("id,workspace_id,name,institution,account_type,opening_balance,active").eq("active", true).order("name"),
-    supabase.from("transactions").select("id,workspace_id,account_id,vehicle_id,trip_id,type,amount,occurred_at,due_date,description,status,source").neq("status", "cancelled").order("occurred_at", { ascending: false }).limit(500),
+    supabase.from("transactions").select("id,workspace_id,account_id,card_id,vehicle_id,trip_id,type,amount,occurred_at,due_date,description,status,source").neq("status", "cancelled").order("occurred_at", { ascending: false }).limit(500),
     supabase.from("payables").select("id,workspace_id,description,amount,paid_amount,due_date,status").neq("status", "cancelled").order("due_date").limit(300),
     supabase.from("receivables").select("id,workspace_id,description,amount,received_amount,due_date,status").neq("status", "cancelled").order("due_date").limit(300),
     supabase.from("vehicles").select("id,workspace_id,nickname,plate,make,model,year,status,odometer_km,estimated_value").order("nickname"),
@@ -83,7 +83,8 @@ export async function getFinanceSnapshot() {
   const cash = accounts.reduce((sum, account) => sum + number(account.opening_balance), 0)
     + posted.reduce((sum, item) => {
       if (item.type === "income") return sum + number(item.amount);
-      if (item.type === "expense") return sum - number(item.amount);
+      if (item.type === "expense" && !item.card_id) return sum - number(item.amount);
+      if (item.type === "card_payment") return sum - number(item.amount);
       return sum;
     }, 0);
 
