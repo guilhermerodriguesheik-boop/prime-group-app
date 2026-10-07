@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Header, Metric, SectionTitle } from "@/components/ui";
+import { CommandCenter } from "@/components/assistant/command-center";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, pct, shortDate, workspaceLabel } from "@/lib/finance/format";
 
@@ -9,6 +10,7 @@ export default async function Home() {
   return (
     <>
       <Header title="Visão geral" subtitle="Prime + pessoal + recebíveis, sem misturar as contabilidades." />
+      <CommandCenter workspaces={data.workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, kind: workspace.kind }))} />
       <div className="grid grid-4">
         <Metric label="Caixa consolidado" value={brl(data.cash)} foot="saldo inicial + movimentos realizados" />
         <Metric label="A receber · 30 dias" value={brl(data.receivable30)} foot="recebíveis em aberto" tone="positive" />
