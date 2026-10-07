@@ -147,11 +147,15 @@ export function createAssistantTools(input: CreateToolsInput) {
 
       if (error) {
         if (error.code === "23505") {
-          const { data: raced } = await supabase
+          const { data: raced, error: racedError } = await supabase
             .from("assistant_actions")
             .select("id,status,result")
             .eq("idempotency_key", key)
             .single();
+
+          if (racedError || !raced) {
+            throw racedError ?? new Error("Não foi possível recuperar a ação concorrente da IA.");
+          }
 
           if (raced.status === "executed") {
             const result = (raced.result ?? {}) as Json;
