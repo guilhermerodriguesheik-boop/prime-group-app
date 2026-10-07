@@ -1,7 +1,7 @@
 import { Header, SectionTitle } from "@/components/ui";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, shortDate, workspaceLabel } from "@/lib/finance/format";
-import { createAccount, createCounterparty, createLoan, createPayable, createReceivable, createTransaction, createVehicle } from "./actions";
+import { createAccount, createCounterparty, createLoan, createPayable, createReceivable, createTransaction, createVehicle, settlePayable, settleReceivable } from "./actions";
 
 const workspaceOptions = [
   ["prime", "Prime Group"],
@@ -121,12 +121,12 @@ export default async function Page() {
       <div className="grid grid-2">
         <div className="card">
           <h3>A receber</h3>
-          {data.receivables.slice(0, 6).map((item) => <div className="list-row" key={item.id}><span>{shortDate(item.due_date)} · {item.description}</span><b>{brl(Number(item.amount)-Number(item.received_amount))}</b></div>)}
+          {data.receivables.filter((item) => ["open","partial","overdue"].includes(item.status)).slice(0, 6).map((item) => <div className="list-row" key={item.id}><span>{shortDate(item.due_date)} · {item.description}</span><span className="row-actions"><b>{brl(Number(item.amount)-Number(item.received_amount))}</b><form action={settleReceivable.bind(null,item.id)}><button className="button compact" type="submit">Receber</button></form></span></div>)}
           {data.receivables.length === 0 && <div className="metric-foot">Nenhum recebível cadastrado.</div>}
         </div>
         <div className="card">
           <h3>A pagar</h3>
-          {data.payables.slice(0, 6).map((item) => <div className="list-row" key={item.id}><span>{shortDate(item.due_date)} · {item.description}</span><b>{brl(Number(item.amount)-Number(item.paid_amount))}</b></div>)}
+          {data.payables.filter((item) => ["open","partial","overdue"].includes(item.status)).slice(0, 6).map((item) => <div className="list-row" key={item.id}><span>{shortDate(item.due_date)} · {item.description}</span><span className="row-actions"><b>{brl(Number(item.amount)-Number(item.paid_amount))}</b><form action={settlePayable.bind(null,item.id)}><button className="button compact" type="submit">Pagar</button></form></span></div>)}
           {data.payables.length === 0 && <div className="metric-foot">Nenhuma conta cadastrada.</div>}
         </div>
       </div>
