@@ -9,7 +9,15 @@ function textValue(formData: FormData, key: string) {
 }
 
 function numberValue(formData: FormData, key: string) {
-  const value = Number(textValue(formData, key).replace(",", "."));
+  const raw = textValue(formData, key).replace(/^R\$/i, "").replace(/\s/g, "");
+  if (!raw) return 0;
+  let normalized = raw;
+  if (raw.includes(",")) {
+    normalized = raw.replace(/\./g, "").replace(",", ".");
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(raw)) {
+    normalized = raw.replace(/\./g, "");
+  }
+  const value = Number(normalized);
   return Number.isFinite(value) ? value : 0;
 }
 
@@ -34,7 +42,7 @@ async function workspaceId(kind: "prime" | "personal" | "interest") {
 }
 
 function refreshAll() {
-  ["/", "/cadastros", "/prime", "/pessoal", "/juros", "/contas", "/frota", "/viagens"].forEach((path) => revalidatePath(path));
+  ["/", "/cadastros", "/prime", "/pessoal", "/juros", "/contas", "/planejamento", "/relatorios", "/frota", "/viagens"].forEach((path) => revalidatePath(path));
 }
 
 export async function createAccount(formData: FormData) {
@@ -75,14 +83,39 @@ export async function createTransaction(formData: FormData) {
   const { supabase, user } = await context();
   const workspace = textValue(formData, "workspace") as "prime" | "personal" | "interest";
   const id = await workspaceId(workspace);
-  const type = textValue(formData, "type") as "income" | "expense";
+  const mode = textValue(formData, "entry_mode") || "expense";
+  const type = mode === "card_purchase" ? "expense" : mode as "income" | "expense" | "card_payment";
   const occurred = textValue(formData, "occurred_at");
+  const accountId = textValue(formData, "account_id") || null;
+  const selectedCardId = textValue(formData, "card_id") || null;
+  const cardId = mode === "card_purchase" || mode === "card_payment" ? selectedCardId : null;
+  const vehicleId = textValue(formData, "vehicle_id") || null;
+  const amount = numberValue(formData, "amount");
+
+  if (amount <= 0) throw new Error("Informe um valor maior que zero.");
+  if (mode === "card_purchase" && !cardId) throw new Error("Selecione o cartão da compra.");
+  if (mode === "card_payment" && (!cardId || !accountId)) throw new Error("Pagamento de fatura exige conta de saída e cartão.");
+
+  if (accountId) {
+    const { data: account } = await supabase.from("accounts").select("workspace_id").eq("id", accountId).maybeSingle();
+    if (!account || account.workspace_id !== id) throw new Error("A conta selecionada pertence a outro ambiente.");
+  }
+  if (cardId) {
+    const { data: card } = await supabase.from("cards").select("workspace_id").eq("id", cardId).maybeSingle();
+    if (!card || card.workspace_id !== id) throw new Error("O cartão selecionado pertence a outro ambiente.");
+  }
+  if (vehicleId) {
+    const { data: vehicle } = await supabase.from("vehicles").select("workspace_id").eq("id", vehicleId).maybeSingle();
+    if (!vehicle || vehicle.workspace_id !== id) throw new Error("O veículo selecionado pertence a outro ambiente.");
+  }
+
   const { error } = await supabase.from("transactions").insert({
     workspace_id: id,
-    account_id: textValue(formData, "account_id") || null,
-    vehicle_id: textValue(formData, "vehicle_id") || null,
+    account_id: accountId,
+    card_id: cardId,
+    vehicle_id: vehicleId,
     type,
-    amount: numberValue(formData, "amount"),
+    amount,
     occurred_at: occurred ? occurred + "T12:00:00-03:00" : new Date().toISOString(),
     description: textValue(formData, "description"),
     status: "posted",
