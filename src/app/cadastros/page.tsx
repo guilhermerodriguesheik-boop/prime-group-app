@@ -1,7 +1,7 @@
 import { Header, SectionTitle } from "@/components/ui";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, shortDate, workspaceLabel } from "@/lib/finance/format";
-import { createAccount, createPayable, createReceivable, createTransaction, createVehicle } from "./actions";
+import { createAccount, createCounterparty, createLoan, createPayable, createReceivable, createTransaction, createVehicle } from "./actions";
 
 const workspaceOptions = [
   ["prime", "Prime Group"],
@@ -11,6 +11,7 @@ const workspaceOptions = [
 
 export default async function Page() {
   const data = await getFinanceSnapshot();
+  const interestPeople = data.counterparties.filter((item) => data.workspaceMap.get(item.workspace_id)?.kind === "interest");
 
   return (
     <>
@@ -67,6 +68,33 @@ export default async function Page() {
           <input name="odometer_km" inputMode="decimal" placeholder="Hodômetro atual" />
           <input name="estimated_value" inputMode="decimal" placeholder="Valor estimado" />
           <button className="button primary" type="submit">Cadastrar veículo</button>
+        </form>
+
+        <form action={createCounterparty} className="card form-grid">
+          <h3>Pessoa ou empresa</h3>
+          <select name="workspace" required>{workspaceOptions.map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select>
+          <select name="kind"><option value="customer">Cliente</option><option value="supplier">Fornecedor</option><option value="borrower">Devedor / tomador</option><option value="lender">Credor</option><option value="driver">Motorista</option><option value="other">Outro</option></select>
+          <input name="name" placeholder="Nome" required />
+          <input name="document" placeholder="CPF/CNPJ" />
+          <input name="phone" placeholder="Telefone" />
+          <input name="email" type="email" placeholder="Email" />
+          <button className="button primary" type="submit">Cadastrar pessoa/empresa</button>
+        </form>
+
+        <form action={createLoan} className="card form-grid">
+          <h3>Contrato de juros a receber</h3>
+          <select name="counterparty_id" required><option value="">Selecione o devedor</option>{interestPeople.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+          <input name="principal" inputMode="decimal" placeholder="Capital principal" required />
+          <select name="interest_type"><option value="simple">Juros simples</option><option value="compound">Juros compostos</option><option value="fixed">Juros fixos</option><option value="manual">Manual</option></select>
+          <input name="periodic_rate" inputMode="decimal" placeholder="Taxa por período, ex.: 5 para 5%" />
+          <select name="rate_period"><option value="month">Ao mês</option><option value="week">Por semana</option><option value="day">Ao dia</option><option value="year">Ao ano</option></select>
+          <input name="fixed_interest" inputMode="decimal" placeholder="Juros fixos em R$ (se aplicável)" />
+          <input name="start_date" type="date" required />
+          <input name="maturity_date" type="date" />
+          <select name="installment_frequency"><option value="monthly">Mensal</option><option value="weekly">Semanal</option><option value="biweekly">Quinzenal</option><option value="custom">Personalizado</option></select>
+          <input name="notes" placeholder="Observações" />
+          <button className="button primary" type="submit" disabled={interestPeople.length === 0}>Cadastrar contrato</button>
+          {interestPeople.length === 0 && <div className="metric-foot">Cadastre primeiro a pessoa no ambiente Recebíveis / Juros.</div>}
         </form>
       </div>
 
