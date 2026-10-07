@@ -220,9 +220,14 @@ export async function createCard(formData: FormData) {
   const { supabase } = await context();
   const workspace = textValue(formData, "workspace") as "prime" | "personal" | "interest";
   const id = await workspaceId(workspace);
+  const accountId = textValue(formData, "account_id") || null;
+  if (accountId) {
+    const { data: account } = await supabase.from("accounts").select("workspace_id").eq("id", accountId).maybeSingle();
+    if (!account || account.workspace_id !== id) throw new Error("A conta de pagamento pertence a outro ambiente.");
+  }
   const { error } = await supabase.from("cards").insert({
     workspace_id: id,
-    account_id: textValue(formData, "account_id") || null,
+    account_id: accountId,
     name: textValue(formData, "name"),
     issuer: textValue(formData, "issuer") || null,
     last4: textValue(formData, "last4") || null,
