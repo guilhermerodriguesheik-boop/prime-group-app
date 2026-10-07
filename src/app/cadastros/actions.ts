@@ -166,3 +166,18 @@ export async function createLoan(formData: FormData) {
   if (error) throw error;
   refreshAll();
 }
+
+
+export async function settleReceivable(receivableId: string) {
+  const { supabase } = await context();
+  const { error } = await supabase.rpc("settle_receivable", { p_receivable_id: receivableId });
+  if (error) throw error;
+  refreshAll();
+}
+
+export async function settlePayable(payableId: string) {
+  const { supabase } = await context();
+  const { error } = await supabase.rpc("settle_payable", { p_payable_id: payableId });
+  if (error) throw error;
+  refreshAll();
+}
