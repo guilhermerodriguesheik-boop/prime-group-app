@@ -1816,6 +1816,8 @@ export type Database = {
         Args: { target_workspace: string }
         Returns: boolean
       }
+      settle_payable: { Args: { p_payable_id: string }; Returns: string }
+      settle_receivable: { Args: { p_receivable_id: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
