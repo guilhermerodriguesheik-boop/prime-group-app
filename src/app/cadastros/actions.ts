@@ -181,3 +181,43 @@ export async function settlePayable(payableId: string) {
   if (error) throw error;
   refreshAll();
 }
+
+
+export async function createCard(formData: FormData) {
+  const { supabase } = await context();
+  const workspace = textValue(formData, "workspace") as "prime" | "personal" | "interest";
+  const id = await workspaceId(workspace);
+  const { error } = await supabase.from("cards").insert({
+    workspace_id: id,
+    account_id: textValue(formData, "account_id") || null,
+    name: textValue(formData, "name"),
+    issuer: textValue(formData, "issuer") || null,
+    last4: textValue(formData, "last4") || null,
+    closing_day: numberValue(formData, "closing_day") || null,
+    due_day: numberValue(formData, "due_day") || null,
+    credit_limit: numberValue(formData, "credit_limit") || null,
+    active: true,
+  });
+  if (error) throw error;
+  refreshAll();
+}
+
+export async function createRecurringEntry(formData: FormData) {
+  const { supabase } = await context();
+  const workspace = textValue(formData, "workspace") as "prime" | "personal" | "interest";
+  const id = await workspaceId(workspace);
+  const { error } = await supabase.from("recurring_entries").insert({
+    workspace_id: id,
+    name: textValue(formData, "name"),
+    type: textValue(formData, "type") as "income" | "expense",
+    amount: numberValue(formData, "amount"),
+    frequency: textValue(formData, "frequency") || "monthly",
+    due_day: numberValue(formData, "due_day") || null,
+    starts_on: textValue(formData, "starts_on") || new Date().toISOString().slice(0, 10),
+    ends_on: textValue(formData, "ends_on") || null,
+    active: true,
+  });
+  if (error) throw error;
+  refreshAll();
+  revalidatePath("/planejamento");
+}
