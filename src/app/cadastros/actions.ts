@@ -125,3 +125,44 @@ export async function createPayable(formData: FormData) {
   if (error) throw error;
   refreshAll();
 }
+
+
+export async function createCounterparty(formData: FormData) {
+  const { supabase } = await context();
+  const workspace = textValue(formData, "workspace") as "prime" | "personal" | "interest";
+  const id = await workspaceId(workspace);
+  const { error } = await supabase.from("counterparties").insert({
+    workspace_id: id,
+    name: textValue(formData, "name"),
+    document: textValue(formData, "document") || null,
+    phone: textValue(formData, "phone") || null,
+    email: textValue(formData, "email") || null,
+    kind: textValue(formData, "kind") || "other",
+  });
+  if (error) throw error;
+  refreshAll();
+}
+
+export async function createLoan(formData: FormData) {
+  const { supabase } = await context();
+  const id = await workspaceId("interest");
+  const rate = numberValue(formData, "periodic_rate");
+  const fixedInterest = numberValue(formData, "fixed_interest");
+  const { error } = await supabase.from("loans").insert({
+    workspace_id: id,
+    counterparty_id: textValue(formData, "counterparty_id"),
+    direction: "receivable",
+    principal: numberValue(formData, "principal"),
+    periodic_rate: rate || null,
+    rate_period: rate ? (textValue(formData, "rate_period") || "month") : null,
+    interest_type: textValue(formData, "interest_type") || "simple",
+    fixed_interest: fixedInterest || null,
+    start_date: textValue(formData, "start_date"),
+    maturity_date: textValue(formData, "maturity_date") || null,
+    installment_frequency: textValue(formData, "installment_frequency") || "monthly",
+    status: "active",
+    notes: textValue(formData, "notes") || null,
+  });
+  if (error) throw error;
+  refreshAll();
+}
