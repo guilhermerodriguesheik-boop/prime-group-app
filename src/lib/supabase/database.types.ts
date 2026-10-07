@@ -1427,8 +1427,10 @@ export type Database = {
           source: string
           status: string
           transfer_pair_id: string | null
+          trip_id: string | null
           type: string
           updated_at: string
+          vehicle_id: string | null
           workspace_id: string
         }
         Insert: {
@@ -1449,8 +1451,10 @@ export type Database = {
           source?: string
           status?: string
           transfer_pair_id?: string | null
+          trip_id?: string | null
           type: string
           updated_at?: string
+          vehicle_id?: string | null
           workspace_id: string
         }
         Update: {
@@ -1471,8 +1475,10 @@ export type Database = {
           source?: string
           status?: string
           transfer_pair_id?: string | null
+          trip_id?: string | null
           type?: string
           updated_at?: string
+          vehicle_id?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -1516,6 +1522,20 @@ export type Database = {
             columns: ["transfer_pair_id"]
             isOneToOne: false
             referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
             referencedColumns: ["id"]
           },
           {
