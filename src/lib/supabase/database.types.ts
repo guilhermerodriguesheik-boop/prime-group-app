@@ -1271,6 +1271,7 @@ export type Database = {
           workspace_id: string | null
           subject: string
           original_text: string
+          source_external_id: string | null
           extracted_data: Json
           record_kind: string
           status: string
@@ -1295,6 +1296,7 @@ export type Database = {
           workspace_id?: string | null
           subject?: string
           original_text?: string
+          source_external_id?: string | null
           extracted_data?: Json
           record_kind?: string
           status?: string
@@ -1890,6 +1892,66 @@ export type Database = {
           },
         ]
       }
+      whatsapp_pairings: {
+        Row: {
+          user_id: string
+          phone_number: string | null
+          pending_code_hash: string | null
+          pending_until: string | null
+          connected_at: string | null
+          enabled: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          phone_number?: string | null
+          pending_code_hash?: string | null
+          pending_until?: string | null
+          connected_at?: string | null
+          enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          phone_number?: string | null
+          pending_code_hash?: string | null
+          pending_until?: string | null
+          connected_at?: string | null
+          enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      whatsapp_action_receipts: {
+        Row: {
+          id: string
+          external_id: string
+          event_id: string
+          kind: string
+          record_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          external_id: string
+          event_id: string
+          kind: string
+          record_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          external_id?: string
+          event_id?: string
+          kind?: string
+          record_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_events: {
         Row: {
           body: string | null
@@ -1901,6 +1963,13 @@ export type Database = {
           payload: Json
           provider_message_id: string
           status: string
+          linked_user_id: string | null
+          error_message: string | null
+          reply_text: string | null
+          reply_sent_at: string | null
+          processed_at: string | null
+          processing_started_at: string | null
+          attempts: number
           to_number: string | null
         }
         Insert: {
@@ -1913,6 +1982,13 @@ export type Database = {
           payload?: Json
           provider_message_id: string
           status?: string
+          linked_user_id?: string | null
+          error_message?: string | null
+          reply_text?: string | null
+          reply_sent_at?: string | null
+          processed_at?: string | null
+          processing_started_at?: string | null
+          attempts?: number
           to_number?: string | null
         }
         Update: {
@@ -1925,6 +2001,13 @@ export type Database = {
           payload?: Json
           provider_message_id?: string
           status?: string
+          linked_user_id?: string | null
+          error_message?: string | null
+          reply_text?: string | null
+          reply_sent_at?: string | null
+          processed_at?: string | null
+          processing_started_at?: string | null
+          attempts?: number
           to_number?: string | null
         }
         Relationships: []

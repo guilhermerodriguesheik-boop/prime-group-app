@@ -1,7 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { processWhatsAppQueue } from "@/lib/whatsapp/worker";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function validMetaSignature(rawBody: string, signatureHeader: string | null, appSecret: string) {
   if (!signatureHeader?.startsWith("sha256=")) return false;
@@ -47,13 +49,17 @@ export async function POST(request: Request) {
     );
   }
 
+  if (Number(request.headers.get("content-length") ?? 0) > 1_000_000) {
+    return NextResponse.json({ error: "Webhook too large" }, { status: 413 });
+  }
   const rawBody = await request.text();
+  if (rawBody.length > 1_000_000) return NextResponse.json({error:"Webhook too large"}, {status:413});
 
   if (!validMetaSignature(rawBody, request.headers.get("x-hub-signature-256"), appSecret)) {
     return NextResponse.json({ error: "Invalid signature." }, { status: 401 });
   }
 
-  const payload = JSON.parse(rawBody) as {
+  let payload: {
     entry?: Array<{
       changes?: Array<{
         value?: {
@@ -71,6 +77,11 @@ export async function POST(request: Request) {
       }>;
     }>;
   };
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ error: "Malformed webhook payload" }, { status: 400 });
+  }
 
   const writes: Promise<Response>[] = [];
 
@@ -120,5 +131,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Event persistence failed." }, { status: 502 });
   }
 
+  // Acknowledge promptly to Meta; process the durable queue afterwards.
+  // Meta setup can be pending; messages remain stored until credentials arrive.
+  if (results.length && process.env.META_WHATSAPP_ACCESS_TOKEN &&
+      process.env.META_WHATSAPP_PHONE_NUMBER_ID && process.env.OPENAI_API_KEY) {
+    after(async () => {
+      try { await processWhatsAppQueue(1); }
+      catch (error) { console.error("WhatsApp queue processing unavailable", error instanceof Error ? error.message : "error"); }
+    });
+  }
   return NextResponse.json({ received: true, messages: results.length });
 }
