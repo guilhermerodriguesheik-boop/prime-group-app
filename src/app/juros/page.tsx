@@ -15,6 +15,9 @@ export default async function Page() {
   const people = new Map(data.counterparties.map((item) => [item.id, item.name]));
   const loans = data.loans.filter((item) => item.direction === "receivable" && item.status !== "cancelled");
   const paymentsFor = (id: string) => data.loanPayments.filter((payment) => payment.loan_id === id);
+  const monthlyState = new Map(data.interestOnlyStatus.map((item) => [item.loan_id, item]));
+  const monthlyExpected = data.interestOnlyStatus.reduce((sum, item) => sum + Number(item.monthly_interest??0),0);
+  const interestOverdue = data.interestOnlyStatus.reduce((sum, item) => sum + Number(item.accrued_interest_due??0),0);
   const capitalOutstanding = loans.filter((loan) => loan.status === "active").reduce((sum, loan) => {
     const principalPaid = paymentsFor(loan.id).reduce((a, p) => a + Number(p.principal_amount), 0);
     return sum + Math.max(0, Number(loan.principal) - principalPaid);
@@ -36,9 +39,10 @@ export default async function Page() {
       </div>
 
       <div className="notice">
-        Pode escrever à IA: &ldquo;Emprestei 10 mil ao João a 5% ao mês, vencendo em 20/11&rdquo; ou &ldquo;João me pagou 500 só de juros hoje&rdquo;.
-        Capital emprestado e capital devolvido movimentam o caixa, mas não contam como lucro. Apenas juros e taxas recebidos entram no resultado.
-        Se a divisão entre juros e amortização não estiver clara, a IA perguntará.
+        O padrão de cobrança é de juros mensais calculados sobre o capital ainda devido, sem amortização automática.
+        Por exemplo, capital de R$ 1.000,00 com taxa de 30% ao mês gera R$ 300,00 por vencimento.
+        Se o devedor pagar apenas os juros, o capital continua R$ 1.000,00. A quitação soma o capital e os juros vencidos ainda não pagos.
+        Capital emprestado ou devolvido movimenta o caixa, mas não entra no resultado como receita ou despesa. Apenas os juros efetivamente recebidos entram no resultado.
       </div>
 
       <div className="grid grid-4">
@@ -48,18 +52,24 @@ export default async function Page() {
         <Metric label="Juros e taxas no mês" value={brl(data.interest.income)} tone="positive" />
       </div>
 
+      <div className="grid grid-4">
+        <Metric label="Cobrança mensal atual de juros" value={brl(monthlyExpected)} />
+        <Metric label="Juros vencidos e não pagos" value={brl(interestOverdue)} tone={interestOverdue > 0 ? "warning" : undefined} />
+      </div>
+
       <SectionTitle title="Empréstimos cadastrados" />
       <div className="table-wrap">
         <table>
           <thead>
             <tr><th>Devedor</th><th>Capital original</th><th>Capital devolvido</th>
-              <th>Capital devedor</th><th>Taxa combinada</th><th>Início</th>
-              <th>Vencimento</th><th>Situação</th></tr>
+              <th>Capital devedor</th><th>Taxa combinada</th><th>Juro mensal</th><th>Juro vencido</th><th>Próximo juro</th><th>Quitação hoje</th><th>Início</th>
+              <th>Devolução do capital</th><th>Situação</th></tr>
           </thead>
           <tbody>
             {loans.map((loan) => {
               const repaid = paymentsFor(loan.id).reduce((sum, p) => sum + Number(p.principal_amount), 0);
-              const outstanding = Math.max(0, Number(loan.principal) - repaid);
+              const state = monthlyState.get(loan.id);
+              const outstanding = state ? Number(state.principal_outstanding) : Math.max(0, Number(loan.principal) - repaid);
               const rate = loan.interest_type === "fixed"
                 ? brl(loan.fixed_interest) + " fixos"
                 : loan.periodic_rate !== null
@@ -72,7 +82,11 @@ export default async function Page() {
                   <td>{brl(loan.principal)}</td>
                   <td>{brl(repaid)}</td>
                   <td>{brl(outstanding)}</td>
-                  <td>{rate}</td>
+                  <td>{rate}{loan.interest_only ? " · só juros mensais" : ""}</td>
+                  <td>{state ? brl(state.monthly_interest) : "—"}</td>
+                  <td>{state ? brl(state.accrued_interest_due) : "—"}</td>
+                  <td>{state ? shortDate(state.next_interest_due_date) : "—"}</td>
+                  <td>{state ? brl(state.payoff_due) : "—"}</td>
                   <td>{shortDate(loan.start_date)}</td>
                   <td>{loan.maturity_date ? shortDate(loan.maturity_date) : "Não informado"}</td>
                   <td>
@@ -83,7 +97,7 @@ export default async function Page() {
                 </tr>
               );
             })}
-            {loans.length === 0 && <tr><td colSpan={8}>Nenhum empréstimo cadastrado. Inicie uma conversa com a IA ou use o formulário.</td></tr>}
+            {loans.length === 0 && <tr><td colSpan={12}>Nenhum empréstimo cadastrado. Inicie uma conversa com a IA ou use o formulário.</td></tr>}
           </tbody>
         </table>
       </div>

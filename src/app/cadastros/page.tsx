@@ -116,15 +116,19 @@ export default async function Page() {
         </form>
 
         <form action={createLoan} className="card form-grid">
-          <h3>Contrato de juros a receber</h3>
+          <h3>Empréstimo a juros</h3>
+          <div className="metric-foot">Padrão: juros mensais cobrados separadamente. O principal só diminui quando a pessoa amortiza capital.</div>
           <select name="counterparty_id" required><option value="">Selecione o devedor</option>{interestPeople.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
           <input name="principal" inputMode="decimal" placeholder="Capital principal" required />
           <select name="interest_type"><option value="simple">Juros simples</option><option value="compound">Juros compostos</option><option value="fixed">Juros fixos</option><option value="manual">Manual</option></select>
-          <input name="periodic_rate" inputMode="decimal" placeholder="Taxa por período, ex.: 5 para 5%" />
+          <input name="periodic_rate" inputMode="decimal" placeholder="Taxa ao mês, ex.: 10, 20 ou 30 (sem símbolo %)" />
           <select name="rate_period"><option value="month">Ao mês</option><option value="week">Por semana</option><option value="day">Ao dia</option><option value="year">Ao ano</option></select>
           <input name="fixed_interest" inputMode="decimal" placeholder="Juros fixos em R$ (se aplicável)" />
           <input name="start_date" type="date" required />
-          <input name="maturity_date" type="date" />
+          <input name="first_interest_due_date" type="date" aria-label="Primeiro vencimento dos juros" />
+          <div className="metric-foot">Primeiro vencimento dos juros: se deixar em branco, será um mês após o início.</div>
+          <input name="maturity_date" type="date" aria-label="Data final para devolver o capital" />
+          <label className="metric-foot"><input type="checkbox" name="interest_only" value="yes" defaultChecked /> Cobrar só os juros mensais, sem amortizar o capital automaticamente</label>
           <select name="account_id"><option value="">Sem conta vinculada</option>{data.accounts.filter((item) => data.workspaceMap.get(item.workspace_id)?.kind === "interest").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
           <label className="metric-foot"><input type="checkbox" name="disbursed" value="yes" /> O dinheiro já foi entregue ao devedor (registrar saída de caixa)</label>
           <input name="notes" placeholder="Observações / condições combinadas" />

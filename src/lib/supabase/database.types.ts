@@ -979,6 +979,8 @@ export type Database = {
           external_action_id: string | null
           fixed_interest: number | null
           id: string
+          first_interest_due_date: string | null
+          interest_only: boolean
           installment_frequency: string | null
           interest_type: string
           maturity_date: string | null
@@ -1000,6 +1002,8 @@ export type Database = {
           external_action_id?: string | null
           fixed_interest?: number | null
           id?: string
+          first_interest_due_date?: string | null
+          interest_only?: boolean
           installment_frequency?: string | null
           interest_type: string
           maturity_date?: string | null
@@ -1021,6 +1025,8 @@ export type Database = {
           external_action_id?: string | null
           fixed_interest?: number | null
           id?: string
+          first_interest_due_date?: string | null
+          interest_only?: boolean
           installment_frequency?: string | null
           interest_type?: string
           maturity_date?: string | null
@@ -1919,7 +1925,19 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      interest_only_loan_status: {
+        Row: {
+          loan_id: string | null
+          workspace_id: string | null
+          principal_outstanding: number | null
+          monthly_interest: number | null
+          accrued_interest_due: number | null
+          payoff_due: number | null
+          next_interest_due_date: string | null
+          last_interest_due_date: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       can_edit_workspace: {
@@ -1960,6 +1978,48 @@ export type Database = {
           p_account_id?: string | null
         }
         Returns: string
+      }
+      create_interest_only_loan: {
+        Args: {
+          p_workspace_id: string
+          p_borrower_name: string
+          p_principal: number
+          p_monthly_rate: number
+          p_start_date: string
+          p_first_due_date: string | null
+          p_action_id: string
+          p_record_disbursement?: boolean
+          p_account_id?: string | null
+          p_notes?: string | null
+          p_final_maturity_date?: string | null
+        }
+        Returns: string
+      }
+      interest_only_loan_state: {
+        Args: { p_loan_id: string, p_as_of?: string }
+        Returns: Array<{
+          principal_outstanding: number
+          monthly_interest: number
+          accrued_interest_due: number
+          payoff_due: number
+          next_interest_due_date: string | null
+          last_interest_due_date: string | null
+        }>
+      }
+      register_interest_only_payment: {
+        Args: {
+          p_loan_id: string
+          p_amount: number
+          p_mode: string
+          p_paid_on: string
+          p_action_id: string
+          p_account_id?: string | null
+          p_notes?: string | null
+          p_principal_part?: number | null
+          p_interest_part?: number | null
+          p_distinct_event?: boolean
+        }
+        Returns: Json
       }
       register_finance_loan_payment: {
         Args: {

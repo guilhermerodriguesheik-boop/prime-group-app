@@ -12,6 +12,10 @@ export default async function Home() {
   const payablesSoon = data.payables.filter((item) =>
     ["open", "partial", "overdue"].includes(item.status) && item.due_date <= weekEnd
   );
+  const interestToCollect = data.interestOnlyStatus.filter((item) =>
+    Number(item.accrued_interest_due) > 0 ||
+    (item.next_interest_due_date !== null && item.next_interest_due_date <= weekEnd)
+  );
 
   return (
     <>
@@ -35,6 +39,13 @@ export default async function Home() {
         <div className="notice attention">
           <b>Vencimentos:</b> {remindersDue.length} lembrete(s) para verificar e {payablesSoon.length} conta(s) vencendo ou atrasadas nos próximos 7 dias.{" "}
           <Link href="/planejamento">Ver avisos e vencimentos</Link>
+        </div>
+      )}
+
+      {interestToCollect.length > 0 && (
+        <div className="notice attention">
+          <b>Cobranças de juros:</b> {interestToCollect.length} empréstimo(s) com juros vencidos ou vencendo nos próximos 7 dias.{" "}
+          <Link href="/juros">Ver juros e saldo de quitação</Link>
         </div>
       )}
 
