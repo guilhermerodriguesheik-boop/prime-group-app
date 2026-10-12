@@ -62,6 +62,7 @@ function actionLabel(actionType: string) {
     create_transaction: "Lançamento financeiro",
     create_receivable: "Conta a receber",
     create_payable: "Conta a pagar",
+    create_reminder: "Lembrete",
     create_counterparty: "Pessoa/empresa",
     create_vehicle: "Veículo",
     create_account: "Conta bancária/carteira",
@@ -358,16 +359,30 @@ export function createAssistantTools(input: CreateToolsInput) {
     }),
 
     registrar_conta_pagar: tool({
-      description: "Cria uma conta a pagar futura. Não use para uma despesa que já foi paga; use registrar_movimento.",
+      description: "Cria uma conta/parcela/dívida a pagar futura quando o usuário disser informalmente 'tenho que pagar 1500 dia 20'. Para despesas já pagas use registrar_movimento. Se também pedir um lembrete antecipado, preencha remindOn.",
       inputSchema: z.object({
         workspaceKind: z.enum(["prime", "personal", "interest"]),
         description: z.string().min(2),
         amount: z.number().positive(),
         dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        remindOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Data de aviso no painel, somente quando o usuário pedir lembrete explícito."),
         counterpartyName: z.string().optional(),
       }),
       execute: async (args) => {
         const ws = workspace(args.workspaceKind);
+        const { data: existing, error: existingError } = await supabase
+          .from("payables")
+          .select("id,description")
+          .eq("workspace_id", ws.id)
+          .eq("amount", args.amount)
+          .eq("due_date", args.dueDate)
+          .in("status", ["open", "partial", "overdue"])
+          .limit(50);
+        if (existingError) throw existingError;
+        if ((existing ?? []).some((item) => normalize(item.description) === normalize(args.description))) {
+          return { ok: false, possibleDuplicate: true, message: "Essa conta já está cadastrada com o mesmo valor e vencimento. Não criei outra." };
+        }
+
         return runAction("create_payable", ws.id, args, async (actionId) => {
           const counterparty = resolveCounterparty(ws.id, args.counterpartyName);
           const { data, error } = await supabase
@@ -384,7 +399,69 @@ export function createAssistantTools(input: CreateToolsInput) {
             .select("id")
             .single();
           if (error) throw error;
-          return { ok: true, payableId: data.id, auditRef: actionId, amount: args.amount, dueDate: args.dueDate };
+
+          let reminderCreated = false;
+          let reminderWarning: string | null = null;
+          if (args.remindOn) {
+            const reminder = await supabase.from("payment_reminders").insert({
+              user_id: userId,
+              workspace_id: ws.id,
+              description: args.description,
+              amount: args.amount,
+              due_date: args.dueDate,
+              remind_on: args.remindOn,
+              payable_id: data.id,
+            });
+            if (reminder.error) {
+              reminderWarning = "A conta foi criada, mas o lembrete falhou. Peça o lembrete separadamente.";
+            } else reminderCreated = true;
+          }
+          return { ok: true, payableId: data.id, auditRef: actionId, amount: args.amount, dueDate: args.dueDate, reminderCreated, reminderWarning };
+        });
+      },
+    }),
+
+    criar_lembrete_pagamento: tool({
+      description: "Cria lembrete de pagamento visível DENTRO do Prime Finance, mesmo sem valor informado: 'me lembra do aluguel dia 20'. NÃO envia notificações no WhatsApp, e não cria despesa. Exige data de vencimento.",
+      inputSchema: z.object({
+        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        description: z.string().min(2),
+        dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        remindOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Data para mostrar o aviso no painel; omitida significa avisar no dia do vencimento."),
+        amount: z.number().positive().nullable().optional(),
+      }),
+      execute: async (args) => {
+        const ws = workspace(args.workspaceKind);
+        const remindOn = args.remindOn ?? args.dueDate;
+        const { data: existing, error: existingError } = await supabase
+          .from("payment_reminders")
+          .select("id,description,remind_on")
+          .eq("user_id", userId)
+          .eq("workspace_id", ws.id)
+          .eq("due_date", args.dueDate)
+          .eq("status", "pending")
+          .limit(100);
+        if (existingError) throw existingError;
+        const match = (existing ?? []).find(
+          (item) => normalize(item.description) === normalize(args.description) && item.remind_on === remindOn,
+        );
+        if (match) return { ok: true, alreadyExisted: true, reminderId: match.id, dueDate: args.dueDate, remindOn };
+
+        return runAction("create_reminder", ws.id, { ...args, remindOn }, async () => {
+          const { data, error } = await supabase
+            .from("payment_reminders")
+            .insert({
+              user_id: userId,
+              workspace_id: ws.id,
+              description: args.description,
+              amount: args.amount ?? null,
+              due_date: args.dueDate,
+              remind_on: remindOn,
+            })
+            .select("id")
+            .single();
+          if (error) throw error;
+          return { ok: true, reminderId: data.id, description: args.description, dueDate: args.dueDate, remindOn, delivery: "painel" };
         });
       },
     }),
