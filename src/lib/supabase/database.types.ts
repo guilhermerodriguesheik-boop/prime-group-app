@@ -1943,6 +1943,39 @@ export type Database = {
         Args: { target_workspace: string }
         Returns: boolean
       }
+      create_finance_loan: {
+        Args: {
+          p_workspace_id: string
+          p_borrower_name: string
+          p_principal: number
+          p_interest_type: string
+          p_periodic_rate: number | null
+          p_rate_period: string | null
+          p_fixed_interest: number | null
+          p_start_date: string
+          p_maturity_date: string | null
+          p_notes: string | null
+          p_action_id: string
+          p_record_disbursement?: boolean
+          p_account_id?: string | null
+        }
+        Returns: string
+      }
+      register_finance_loan_payment: {
+        Args: {
+          p_loan_id: string
+          p_amount: number
+          p_principal_amount: number
+          p_interest_amount: number
+          p_fees_amount: number
+          p_paid_on: string
+          p_action_id: string
+          p_account_id?: string | null
+          p_notes?: string | null
+          p_distinct_event?: boolean
+        }
+        Returns: string
+      }
       settle_payable: { Args: { p_payable_id: string }; Returns: string }
       settle_receivable: { Args: { p_receivable_id: string }; Returns: string }
     }
