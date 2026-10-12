@@ -234,7 +234,7 @@ export function createAssistantTools(input: CreateToolsInput) {
 
   const tools = {
     cadastrar_emprestimo: tool({
-      description: "Cadastra empréstimo no ambiente Juros. Padrão do usuário: juros simples MENSAIS sobre o capital que permanece devido, com pagamento de juros SEM amortização. Ex.: 'emprestei R$1000 a 30% ao mês' cria R$300 de juros mensais, capital R$1000 intacto quando o cliente paga só juros. Use juros compostos/amortização parcelada só se usuário pedir expressamente. O primeiro vencimento é um mês depois do início, salvo data combinada.",
+      description: "Cadastra empréstimo no ambiente Juros. Juros mensais em dia NÃO amortizam principal; se o cliente ATRASA, cobra R$10/dia e no próximo vencimento calcula a mesma taxa sobre capital + juros vencidos não pagos + multa diária acumulada. Cada empréstimo permite taxa mensal 10%, 20%, 30% etc. Condições de multa e capitalização devem ser exibidas claramente. Use contrato de outra modalidade somente quando solicitado expressamente.",
       inputSchema: z.object({
         borrowerName: z.string().trim().min(2),
         principal: z.number().positive(),
@@ -249,6 +249,8 @@ export function createAssistantTools(input: CreateToolsInput) {
         disbursed: z.boolean().describe("TRUE se dinheiro já foi entregue; FALSE se foi apenas combinado."),
         accountName: z.string().nullable(),
         notes: z.string().nullable(),
+        dailyLateFee: z.number().nonnegative().optional().describe("Multa contratual por dia de atraso. Padrão R$ 10,00 para esta modalidade."),
+        capitalizeOverdue: z.boolean().optional().describe("Padrão verdadeiro: no novo mês, juros atrasados e multas não pagas entram na base de cálculo."),
       }),
       execute: async (args) => {
         const ws = workspace("interest");
@@ -269,7 +271,7 @@ export function createAssistantTools(input: CreateToolsInput) {
         }
         return runAction("create_loan",ws.id,args,async(actionId)=>{
           const result = monthlyInterestOnly
-            ? await supabase.rpc("create_interest_only_loan",{
+            ? await supabase.rpc("create_interest_only_loan_v2",{
                 p_workspace_id:ws.id,
                 p_borrower_name:args.borrowerName,
                 p_principal:args.principal,
@@ -281,6 +283,8 @@ export function createAssistantTools(input: CreateToolsInput) {
                 p_account_id:account?.id??null,
                 p_notes:args.notes,
                 p_final_maturity_date:args.maturityDate,
+                p_late_fee_daily:args.dailyLateFee??10,
+                p_capitalize_overdue:args.capitalizeOverdue??true,
               })
             : await supabase.rpc("create_finance_loan",{
                 p_workspace_id:ws.id,
@@ -302,6 +306,8 @@ export function createAssistantTools(input: CreateToolsInput) {
             principal:args.principal,ratePercent:args.ratePercent,
             ratePeriod:args.ratePeriod,monthlyInterestOnly,
             monthlyCharge:monthlyInterestOnly?Math.round(args.principal*args.ratePercent!/100*100)/100:null,
+            dailyLateFee:monthlyInterestOnly?(args.dailyLateFee??10):null,
+            capitalizeOverdue:monthlyInterestOnly?(args.capitalizeOverdue??true):null,
             firstInterestDueDate:args.firstInterestDueDate??null,
             status:args.disbursed?"active":"draft",disbursementRecorded:args.disbursed};
         });
@@ -309,15 +315,15 @@ export function createAssistantTools(input: CreateToolsInput) {
     }),
 
     registrar_recebimento_emprestimo: tool({
-      description: "Registra recebimento real de empréstimo com juros mensais sem amortização: 'João pagou 300 do mês' => SOMENTE juros quando coincide com o juro mensal vencido, capital continua igual. 'João quitou os 1300' => capital pendente + juros vencidos, encerra. Pode também amortizar capital expressamente. Não adivinhe quando os valores não corresponderem.",
+      description: "Registra recebimento efetivo de juros mensais, capital, multa diária por atraso (R$10 por dia por padrão), ou quitação total. Pagamento de juros não reduz principal. Quitação inclui capital em aberto, juros vencidos e multa acumulada. Não adivinhe divisões quando houver ambiguidade.",
       inputSchema: z.object({
         borrowerName: z.string().trim().min(2),
         loanId: z.string().uuid().nullable(),
         amount: z.number().positive().describe("Total recebido em reais"),
-        paymentKind: z.enum(["interest","principal","settlement","split"]).nullable().optional().describe("Classificação de juros mensais, amortização, quitação ou misto; null para identificar pelo texto e valor."),
-        principalAmount: z.number().nonnegative().nullable().optional().describe("Somente quando usuário dividir capital/juros explicitamente."),
-        interestAmount: z.number().nonnegative().nullable().optional().describe("Somente quando usuário dividir capital/juros explicitamente."),
-        feesAmount: z.number().nonnegative().nullable().optional(),
+        paymentKind: z.enum(["interest","principal","fees","settlement","split"]).nullable().optional().describe("Juros, capital, multa, quitação ou misto. Identificar pelo texto e valor."),
+        principalAmount: z.number().nonnegative().nullable().optional().describe("Amortização do capital informada, ou null."),
+        interestAmount: z.number().nonnegative().nullable().optional().describe("Pagamento de juros vencidos, ou null."),
+        feesAmount: z.number().nonnegative().nullable().optional().describe("Multa diária quitada, ou 0 se nenhuma."),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         accountName: z.string().nullable(),
         notes: z.string().nullable(),
@@ -337,8 +343,7 @@ export function createAssistantTools(input: CreateToolsInput) {
         const distinctEvent=/\b(outro|outra|novo|nova|segundo|segunda|diferente|separado|separada)\b/i.test(originalMessage);
 
         if(selected.interest_only){
-          if((args.feesAmount??0)!==0)return {ok:false,needsClarification:true,message:"Esse contrato cobra apenas juros mensais. Informe separadamente qualquer taxa extraordinária."};
-          const {data:states,error:stateError}=await supabase.rpc("interest_only_loan_state",{
+          const {data:states,error:stateError}=await supabase.rpc("interest_only_loan_breakdown",{
             p_loan_id:selected.id,p_as_of:args.date
           });
           if(stateError||!states?.length)throw stateError??new Error("Falha ao calcular o empréstimo");
@@ -346,17 +351,19 @@ export function createAssistantTools(input: CreateToolsInput) {
           const hasPayoff=/(quit|liquid|encerra|pagar tudo|pagou tudo|devolveu tudo|saldo total)/i.test(originalMessage);
           const hasPrincipal=/(capital|principal|amortiz|abateu|abater|reduz.*d[ií]vid|devolveu.*capital)/i.test(originalMessage);
           const hasInterest=/(juro|mensalidade|mensal|do m[eê]s|s[oó] juros)/i.test(originalMessage);
+          const hasFees=/(multa|atraso|penalidade|acrescim|acréscim)/i.test(originalMessage);
           const matchesMonthly=Math.round(args.amount*100)===Math.round(Number(state.monthly_interest)*100) &&
-            args.amount<=Number(state.accrued_interest_due);
-          let mode: "interest"|"principal"|"settlement"|"split"|null=null;
+            args.amount<=Number(state.accrued_interest_due) && Number(state.late_fees_due)===0;
+          const categories=[hasPrincipal,hasInterest,hasFees].filter(Boolean).length;
+          let mode: "interest"|"principal"|"fees"|"settlement"|"split"|null=null;
           if(hasPayoff)mode="settlement";
-          else if(hasPrincipal&&hasInterest)mode="split";
+          else if(categories>1)mode="split";
           else if(hasPrincipal)mode="principal";
+          else if(hasFees)mode="fees";
           else if(hasInterest||matchesMonthly)mode="interest";
-          // PaymentKind cannot override the evidence of an ambiguous message.
           if(!mode&&args.paymentKind==="interest"&&matchesMonthly)mode="interest";
           if(!mode)return {ok:false,needsClarification:true,
-            message:"Esse valor foi só o juro mensal, uma amortização do capital ou quitação completa?"};
+            message:"Esse valor pagou juros, multa de atraso, capital, ou foi quitação completa?"};
           if(mode==="interest"&&args.amount>Number(state.accrued_interest_due))return {
             ok:false,needsClarification:true,
             message:"Há R$ "+Number(state.accrued_interest_due).toFixed(2)+" de juros vencidos nessa data. O próximo vencimento é "+(state.next_interest_due_date??"não informado")+". O valor recebido foi antecipação ou outra operação?"
@@ -365,14 +372,14 @@ export function createAssistantTools(input: CreateToolsInput) {
             return {ok:false,needsClarification:true,
               message:"O total para quitar na data informada é R$ "+Number(state.payoff_due).toFixed(2)+
                 " (R$ "+Number(state.principal_outstanding).toFixed(2)+" de capital e R$ "+Number(state.accrued_interest_due).toFixed(2)+
-                " de juros vencidos). Você confirma esse valor?"
+                " de juros vencidos e R$ "+Number(state.late_fees_due).toFixed(2)+" de multa por atraso). Você confirma esse valor?"
             };
           }
           if(mode==="split"&&(
             args.principalAmount===null||args.principalAmount===undefined||
             args.interestAmount===null||args.interestAmount===undefined||
-            Math.round((args.principalAmount+args.interestAmount)*100)!==Math.round(args.amount*100))){
-            return {ok:false,needsClarification:true,message:"Quanto desse pagamento abate capital e quanto corresponde aos juros?"};
+            Math.round((args.principalAmount+args.interestAmount+(args.feesAmount??0))*100)!==Math.round(args.amount*100))){
+            return {ok:false,needsClarification:true,message:"Quanto do pagamento é capital, quanto são juros e quanto é multa por atraso?"};
           }
           try {
             return await runAction("repay_loan",ws.id,{
@@ -390,6 +397,7 @@ export function createAssistantTools(input: CreateToolsInput) {
                 p_principal_part:mode==="split"?args.principalAmount??null:null,
                 p_interest_part:mode==="split"?args.interestAmount??null:null,
                 p_distinct_event:distinctEvent,
+                p_fee_part:mode==="split"?(args.feesAmount??0):null,
               });
               if(error)throw error;
               return {ok:true,borrower:borrower.name,date:args.date,received:args.amount,

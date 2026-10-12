@@ -88,7 +88,7 @@ export async function POST(request: Request) {
     supabase.from("payment_reminders").select("id,workspace_id,description,amount,due_date,remind_on,status").eq("user_id", user.id).eq("status", "pending").order("remind_on").limit(100),
     supabase.from("loans").select("id,workspace_id,counterparty_id,principal,start_date,maturity_date,status,periodic_rate,rate_period,interest_type,fixed_interest,direction,interest_only,first_interest_due_date").neq("status","cancelled").order("start_date", { ascending: false }).limit(200),
     supabase.from("loan_payments").select("id,loan_id,amount,principal_amount,interest_amount,fees_amount,paid_at").order("paid_at", { ascending: false }).limit(300),
-    supabase.from("interest_only_loan_status").select("loan_id,workspace_id,principal_outstanding,monthly_interest,accrued_interest_due,payoff_due,next_interest_due_date").limit(200),
+    supabase.from("interest_only_loan_status").select("loan_id,workspace_id,principal_outstanding,monthly_interest,accrued_interest_due,late_fees_due,compound_base,payoff_due,next_interest_due_date,overdue_fee_days").limit(200),
   ]);
 
   const dataError = [
@@ -293,11 +293,14 @@ REGRAS DE CONFIABILIDADE:
 25. Para taxa e vencimentos, os dados do contrato são condições declaradas e não prova de receita. Não gere previsão de juros compostos, calendário de parcelas ou multas sem acordos explícitos. O capital devedor deve ser calculado como capital original menos as amortizações efetivamente registradas.
 26. Contas Pessoal, Prime e Juros jamais devem se misturar em movimentações ou contratos. Se alguém transferir dinheiro de um ambiente a outro, não trate isso como rendimento da empresa; peça classificação correta antes de registrar.
 27. Confirme as operações informando tomador, valor, taxa, data e se o capital foi entregue. Ao receber, confirme separadamente amortização e juros. Não exponha dados de outra conta ou ambiente.
-28. Em Juros, o padrão é juros simples mensais sobre o capital ainda devido, sem amortização automática. Quando o tomador paga somente os juros do mês, o capital devedor NÃO diminui. Juros não são incorporados ao principal.
-29. O primeiro vencimento mensal dos juros é um mês após a entrega, salvo acordo em contrário. A devolução final do principal é independente do vencimento mensal dos juros. Pergunte se a data estiver ambígua.
-30. Para registrar um pagamento no valor exato do juro mensal vencido de um único contrato, classifique como juros recebidos, sem amortizar o principal, ainda que a mensagem não use a palavra juros. Em caso de ambiguidade, pergunte.
-31. A quitação total depende do capital ainda devido e de todos os juros efetivamente vencidos, descontados pagamentos anteriores desses juros. Consulte interestOnlyLoanStates e a função de pagamento para validar os valores. Não cobre juros antes do vencimento sem acordo explícito.
-32. Informe na confirmação o capital restante, juros recebidos, juros vencidos pendentes e próximo vencimento. Registre receita somente na data em que houve recebimento.`,
+28. Em Juros, o padrão é cobrança mensal de juros. Pagamento dos juros em dia NÃO amortiza o principal. O capital só diminui quando houver amortização explícita.
+29. REGRA DE ATRASO DESTE USUÁRIO: nos NOVOS contratos, o padrão é multa de R$ 10 por dia após o primeiro vencimento não pago. Ao próximo vencimento mensal, a taxa percentual é aplicada à soma do capital ainda devido, juros anteriores não pagos e multas já acumuladas. Se for pago no vencimento, os juros não são capitalizados e não há multa. Cada contrato guarda sua própria taxa e multa.
+30. Exemplo: R$ 1.000 a 30% gera R$ 300 no primeiro vencimento. Dez dias após, sem pagamento, o saldo da cobrança é R$ 1.400 (capital 1.000 + juros 300 + multa diária 100). Na virada seguinte, a taxa incide sobre a base atualizada pelos juros não pagos e multas acumuladas até aquele dia. Cálculos reais DEVEM usar interestOnlyLoanStates e interest_only_loan_breakdown, nunca estimativas livres.
+31. Os campos de interestOnlyLoanStates incluem capital original ainda devido, juros vencidos, multa acumulada e payoff_due. A cobrança mensal exibida depois de atraso é uma PROJEÇÃO para o próximo período e pode aumentar diariamente enquanto houver juros em aberto; explique isso.
+32. Se recebeu somente juros, não amortize o capital. Se recebeu multa, registre em fees; se quitou tudo, inclua principal + juros vencidos + multa diária não paga. Se faltarem valores, peça esclarecimento em uma pergunta curta. Não registre pagamento fictício.
+33. Para cadastrar empréstimo mensal use cadastrar_emprestimo com interestOnly=true, ratePeriod=month e dailyLateFee=10, capitalizeOverdue=true salvo se o usuário indicar condições diferentes. Confirme sempre essas condições ao registrar. Não altere contratos antigos retroativamente.
+34. Avise quando relevante que a exigibilidade jurídica de taxas e multas depende de acordo e legislação aplicável. O sistema registra e calcula condições informadas, mas não garante validade jurídica.
+35. Empréstimos, seus pagamentos e multa diária pertencem só ao ambiente Juros, nunca às contas da Prime Group ou de casa.`,
       messages: [{ role: "user", content: userContent }],
       tools,
       stopWhen: stepCountIs(8),

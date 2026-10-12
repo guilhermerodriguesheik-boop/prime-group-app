@@ -117,7 +117,7 @@ export default async function Page() {
 
         <form action={createLoan} className="card form-grid">
           <h3>Empréstimo a juros</h3>
-          <div className="metric-foot">Padrão: juros mensais cobrados separadamente. O principal só diminui quando a pessoa amortiza capital.</div>
+          <div className="metric-foot">Juros do mês são cobrados separadamente do capital. Em atraso, multa diária e juros não pagos podem aumentar a base do período seguinte.</div>
           <select name="counterparty_id" required><option value="">Selecione o devedor</option>{interestPeople.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
           <input name="principal" inputMode="decimal" placeholder="Capital principal" required />
           <select name="interest_type"><option value="simple">Juros simples</option><option value="compound">Juros compostos</option><option value="fixed">Juros fixos</option><option value="manual">Manual</option></select>
@@ -128,7 +128,11 @@ export default async function Page() {
           <input name="first_interest_due_date" type="date" aria-label="Primeiro vencimento dos juros" />
           <div className="metric-foot">Primeiro vencimento dos juros: se deixar em branco, será um mês após o início.</div>
           <input name="maturity_date" type="date" aria-label="Data final para devolver o capital" />
-          <label className="metric-foot"><input type="checkbox" name="interest_only" value="yes" defaultChecked /> Cobrar só os juros mensais, sem amortizar o capital automaticamente</label>
+          <label className="metric-foot"><input type="checkbox" name="interest_only" value="yes" defaultChecked /> Cobrar juros mensais sem amortização automática do capital</label>
+          <label className="metric-foot">Multa por dia de atraso (R$)</label>
+          <input name="late_fee_daily" type="number" min="0" step="0.01" defaultValue="10" aria-label="Multa por dia de atraso em reais" />
+          <label className="metric-foot"><input type="checkbox" name="capitalize_overdue" value="yes" defaultChecked /> Quando atrasar, incluir juros vencidos e multas não pagas na base de cálculo do próximo mês</label>
+          <div className="metric-foot">Padrão: juros pagos em dia não abatem capital. Após o vencimento, a multa diária começa no dia seguinte; se continuar sem pagar no mês seguinte, os juros incidem sobre o saldo acumulado. Estas condições devem estar previstas no acordo.</div>
           <select name="account_id"><option value="">Sem conta vinculada</option>{data.accounts.filter((item) => data.workspaceMap.get(item.workspace_id)?.kind === "interest").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
           <label className="metric-foot"><input type="checkbox" name="disbursed" value="yes" /> O dinheiro já foi entregue ao devedor (registrar saída de caixa)</label>
           <input name="notes" placeholder="Observações / condições combinadas" />
