@@ -241,7 +241,9 @@ export async function processWhatsAppQueue(maxMessages=1) {
         const allowedTransaction=action.kind==="transaction"&&action.certainty==="confirmed"&&
           action.workspace!==null&&action.direction!==null&&
           action.amount!==null&&action.amount>0&&validDate(action.date)&&
-          evidenceOfPayment(text);
+          evidenceOfPayment(text) &&
+          // Never mistake an invoice issue date for a payment date.
+          (!event.mediaId || /\b(hoje|ontem|anteontem|dia\s+\d{1,2}|em\s+\d{1,2}[\/.-]\d{1,2})\b/i.test(text));
         const safeAction = action.kind==="transaction"&&!allowedTransaction ?
           {...action,kind:"note",certainty:"unconfirmed"} : action;
         const saved=await rpc<{saved:boolean;kind:string;workspace?:string}>("whatsapp_apply_action",{
