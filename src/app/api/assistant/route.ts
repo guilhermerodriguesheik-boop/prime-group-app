@@ -1,4 +1,5 @@
 import { generateText, stepCountIs } from "ai";
+import { openai } from "@ai-sdk/openai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
@@ -30,6 +31,13 @@ export async function POST(request: Request) {
   }
 
   const { message, workspaceId, conversationId, documentIds } = parsed.data;
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    return NextResponse.json(
+      { error: "A integração OpenAI ainda não foi ativada. Configure OPENAI_API_KEY na Vercel e publique novamente." },
+      { status: 503 },
+    );
+  }
+
   if (!message && !documentIds.length) {
     return NextResponse.json({ error: "Envie uma mensagem ou pelo menos um arquivo." }, { status: 400 });
   }
@@ -192,9 +200,12 @@ export async function POST(request: Request) {
   });
 
   const hasImages = documents.some((item) => item.imageData);
-  const model = hasImages
-    ? process.env.PRIME_VISION_MODEL || "inclusionai/ling-3.0-flash-vl-free"
-    : process.env.PRIME_AGENT_MODEL || "inclusionai/ling-3.0-flash-fin-free";
+  // Modelos oficiais da OpenAI, sem dependência do Vercel AI Gateway.
+  // O modelo principal também entende imagens; PRIME_VISION_MODEL é opcional.
+  const modelName = hasImages
+    ? process.env.PRIME_VISION_MODEL?.trim() || process.env.PRIME_AGENT_MODEL?.trim() || "gpt-6-astra"
+    : process.env.PRIME_AGENT_MODEL?.trim() || "gpt-6-astra";
+  const model = openai(modelName);
 
   const textPart = `PEDIDO ATUAL:
 ${effectiveMessage}
@@ -222,6 +233,10 @@ ${documentText || "(nenhum conteúdo textual extraído)"}`;
   try {
     const result = await generateText({
       model,
+      providerOptions: { openai: { store: false, parallelToolCalls: false, reasoningEffort: "medium" } },
+      maxOutputTokens: 8192,
+      timeout: 120_000,
+      maxRetries: 1,
       system: `Você é o agente financeiro e operacional do Prime Finance.
 Responda em português do Brasil, com frases curtas e objetivas.
 Você tem ferramentas que podem gravar dados reais no sistema.
@@ -251,7 +266,7 @@ REGRAS DE EXECUÇÃO:
       role: "assistant",
       content: result.text || "Ação concluída.",
       metadata: {
-        model,
+        model: modelName,
         usage: result.usage ?? null,
         actions: actions.map((action) => ({
           type: action.type,
@@ -264,7 +279,7 @@ REGRAS DE EXECUÇÃO:
     return NextResponse.json({
       answer: result.text || (actions.length ? "Ações concluídas." : "Não foi necessário alterar nenhum dado."),
       conversationId: activeConversationId,
-      model,
+      model: modelName,
       actions,
       documents: documents.map((item) => ({
         id: item.id,
@@ -276,16 +291,20 @@ REGRAS DE EXECUÇÃO:
   } catch (error) {
     console.error("Prime Finance AI agent error", error);
 
-    const rawMessage = error instanceof Error ? error.message : "Falha desconhecida no AI Gateway.";
-    const safeMessage = rawMessage
-      .replace(/Bearer\s+[A-Za-z0-9._~+\/-]+/gi, "Bearer [redacted]")
-      .replace(/(?:sk|key|token)_[A-Za-z0-9_-]{12,}/gi, "[redacted]");
+    const rawMessage = error instanceof Error ? error.message : "Falha desconhecida no serviço OpenAI.";
+    const safeMessage = /(?:invalid_api_key|Incorrect API key|401 Unauthorized)/i.test(rawMessage)
+      ? "Chave da API OpenAI inválida. Atualize OPENAI_API_KEY na Vercel."
+      : /(?:insufficient_quota|billing|credit balance|quota exceeded)/i.test(rawMessage)
+        ? "A conta da API OpenAI está sem créditos ou com limite de faturamento. Verifique o faturamento na OpenAI Platform."
+        : /(?:rate limit|429)/i.test(rawMessage)
+          ? "Limite temporário de requisições à OpenAI. Aguarde e tente novamente."
+          : "Falha na comunicação com a OpenAI. Verifique os registros do servidor para detalhes.";
 
     return NextResponse.json(
       {
         error: "A IA não conseguiu concluir a solicitação.",
         detail: safeMessage.slice(0, 500),
-        model,
+        model: modelName,
         actions,
       },
       { status: 502 },
