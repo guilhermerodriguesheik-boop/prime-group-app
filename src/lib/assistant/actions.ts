@@ -283,12 +283,16 @@ export function createAssistantTools(input: CreateToolsInput) {
           return ((sameVehicle && (sameDescription || bothFuel)) ||
             (sameDescription && (sameLinkedAccount || sameLinkedCard || (!vehicle && !account && !card))));
         });
-        const explicitNewOperation = /\\b(outr[oa]|nov[oa]|diferente|separad[oa]|segund[oa])\\b/i.test(originalMessage);
+        const explicitNewOperation = /\b(outr[oa]|nov[oa]|diferente|separad[oa]|segund[oa])\b/i.test(originalMessage);
         if (duplicate && !explicitNewOperation) {
           return { ok: false, possibleDuplicate: true, message: "Já há um lançamento semelhante, no mesmo dia e valor. Não registrei novamente. Pergunte se é outra operação diferente." };
         }
 
-        return runAction("create_transaction", ws.id, args, async (actionId) => {
+        return runAction(
+          "create_transaction",
+          ws.id,
+          { ...args, distinctEventMessage: explicitNewOperation ? originalMessage.trim() : null },
+          async (actionId) => {
           const counterparty = resolveCounterparty(ws.id, args.counterpartyName);
           const occurredAt = args.date ? `${args.date}T12:00:00-03:00` : new Date().toISOString();
 
