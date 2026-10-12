@@ -53,6 +53,8 @@ export async function POST(request: Request) {
     tripsResult,
     counterpartiesResult,
     remindersResult,
+    loansResult,
+    loanPaymentsResult,
   ] = await Promise.all([
     supabase.from("workspaces").select("id,name,kind,currency").order("kind"),
     supabase.from("accounts").select("id,workspace_id,name,institution,account_type,opening_balance,active").eq("active", true).order("name"),
@@ -83,6 +85,8 @@ export async function POST(request: Request) {
       .limit(80),
     supabase.from("counterparties").select("id,workspace_id,name,document,kind,phone,email").order("name").limit(160),
     supabase.from("payment_reminders").select("id,workspace_id,description,amount,due_date,remind_on,status").eq("user_id", user.id).eq("status", "pending").order("remind_on").limit(100),
+    supabase.from("loans").select("id,workspace_id,counterparty_id,principal,start_date,maturity_date,status,periodic_rate,rate_period,interest_type,fixed_interest,direction").neq("status","cancelled").order("start_date", { ascending: false }).limit(200),
+    supabase.from("loan_payments").select("id,loan_id,amount,principal_amount,interest_amount,fees_amount,paid_at").order("paid_at", { ascending: false }).limit(300),
   ]);
 
   const dataError = [
@@ -96,6 +100,8 @@ export async function POST(request: Request) {
     tripsResult.error,
     counterpartiesResult.error,
     remindersResult.error,
+    loansResult.error,
+    loanPaymentsResult.error,
   ].find(Boolean);
 
   if (dataError) {
@@ -174,6 +180,8 @@ export async function POST(request: Request) {
     trips: (tripsResult.data ?? []).filter((item) => inScope(item.workspace_id)),
     counterparties: (counterpartiesResult.data ?? []).filter((item) => inScope(item.workspace_id)),
     paymentReminders: (remindersResult.data ?? []).filter((item) => inScope(item.workspace_id)),
+    loans: (loansResult.data ?? []).filter((item) => inScope(item.workspace_id)),
+    loanPayments: (loanPaymentsResult.data ?? []).filter((item) => (loansResult.data ?? []).some((loan) => loan.id === item.loan_id && inScope(loan.workspace_id))),
   };
 
   const recentHistory = (historyResult.data ?? [])
@@ -201,6 +209,7 @@ export async function POST(request: Request) {
     cards: cardsResult.data ?? [],
     vehicles: vehiclesResult.data ?? [],
     counterparties: counterpartiesResult.data ?? [],
+    loans: loansResult.data ?? [],
   });
 
   const hasImages = documents.some((item) => item.imageData);
@@ -271,7 +280,15 @@ REGRAS DE CONFIABILIDADE:
 16. Se o usuário informar conta a pagar COM valor, vencimento e data para lembrar, use registrar_conta_pagar com remindOn para cadastrar tanto a obrigação quanto o lembrete. Não crie um segundo lembrete separado para a mesma obrigação.
 17. Pagamentos já efetuados: só dê baixa em obrigação existente quando ela corresponder inequivocamente e o usuário relatar claramente que a pagou. Para pagamentos parciais, nunca dê baixa total; peça esclarecimento ou registre somente o pagamento efetuado, explicando que o saldo da conta ainda precisará ser ajustado corretamente.
 18. Recorrências como "todo dia 20" podem ser cadastradas em cadastrar_recorrencia quando houver valores e parâmetros necessários, mas não diga que alertas externos recorrentes estão ativos. Consulte os vencimentos e lembretes existentes e jamais duplique cobranças.
-19. Quando o usuário disser apenas "me lembre", sem data identificável, faça uma pergunta curta pedindo o dia. Não invente uma data. O ano/mês de "dia 20" deve ser inferido com cautela pela data atual e pelo contexto. Se puder ser mês atual ou seguinte, peça esclarecimento.`,
+19. Quando o usuário disser apenas "me lembre", sem data identificável, faça uma pergunta curta pedindo o dia. Não invente uma data. O ano/mês de "dia 20" deve ser inferido com cautela pela data atual e pelo contexto. Se puder ser mês atual ou seguinte, peça esclarecimento.
+20. EMPRÉSTIMOS A JUROS: o ambiente é exclusivamente Juros. Se a pessoa disser "emprestei 10 mil ao João a 5% ao mês", use cadastrar_emprestimo (disbursed=true). Se disser "vou emprestar" use disbursed=false, deixando como rascunho; nunca registre uma saída de caixa futura como já paga.
+21. Capital emprestado não é despesa nem lucro. Retorno do capital não é receita/lucro. Somente juros e eventuais taxas efetivamente recebidas compõem resultado. Nunca use registrar_movimento nem registrar_conta_receber para representar capital emprestado ou suas amortizações: use exclusivamente cadastrar_emprestimo e registrar_recebimento_emprestimo.
+22. Empréstimo com juros simples/compostos precisa de taxa e período; não assuma juros compostos. Se usuário não esclarecer condições essenciais, pergunte em uma frase. Registre percentual como 5 (não 0,05) quando o usuário disser 5%. Se não informou vencimento, deixe null.
+23. Se disser "João me pagou 500 de juros", use registrar_recebimento_emprestimo com juros=500, principal=0 e taxas=0, identificando o empréstimo corretamente. "João devolveu 2 mil do capital" => amortização=2000, juros=0. Se disser apenas "João me pagou 500" sem contexto suficiente para distinguir juros/capital, pergunte como dividir. Não classifique arbitrariamente.
+24. Para receber pagamento de empréstimo, identifique uma única operação pelo tomador e pelos contratos visíveis. Caso haja mais de uma, peça qual. Nunca dê baixa no capital de outro tomador. Taxa percentual contratual não é comprovação de juros pagos.
+25. Para taxa e vencimentos, os dados do contrato são condições declaradas e não prova de receita. Não gere previsão de juros compostos, calendário de parcelas ou multas sem acordos explícitos. O capital devedor deve ser calculado como capital original menos as amortizações efetivamente registradas.
+26. Contas Pessoal, Prime e Juros jamais devem se misturar em movimentações ou contratos. Se alguém transferir dinheiro de um ambiente a outro, não trate isso como rendimento da empresa; peça classificação correta antes de registrar.
+27. Confirme as operações informando tomador, valor, taxa, data e se o capital foi entregue. Ao receber, confirme separadamente amortização e juros. Não exponha dados de outra conta ou ambiente.`,
       messages: [{ role: "user", content: userContent }],
       tools,
       stopWhen: stepCountIs(8),
