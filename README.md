@@ -96,7 +96,7 @@ O backend suporta assinatura HMAC da Meta, persistência idempotente, fila, tran
 - Notas fiscais não provam pagamentos. Ações têm identificador único derivado do ID Meta para reduzir duplicidade.
 - A Vercel executa o processamento após confirmação do webhook (Next.js after); um cron diário protegido por CRON_SECRET recupera itens pendentes. Em plano Hobby, cron com mais frequência não é suportado.
 - Token da Meta, App Secret, verify token e ingress secret nunca são variáveis NEXT_PUBLIC_ e nunca entram no GitHub.
-- Cobranças da Meta/WhatsApp Business Platform e da OpenAI são independentes. Mensagens proativas fora da janela permitida pela Meta exigem templates aprovados.
+- O worker limita por padrão a 60 mensagens de um número vinculado em 24 horas (WHATSAPP_DAILY_LIMIT) para proteger o consumo da API. Cobranças da Meta/WhatsApp Business Platform e da OpenAI são independentes. Mensagens proativas fora da janela permitida pela Meta exigem templates aprovados.
 
 ### Outros conectores
 
