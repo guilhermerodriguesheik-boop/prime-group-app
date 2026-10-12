@@ -55,6 +55,7 @@ export async function POST(request: Request) {
     remindersResult,
     loansResult,
     loanPaymentsResult,
+    monthlyStatesResult,
   ] = await Promise.all([
     supabase.from("workspaces").select("id,name,kind,currency").order("kind"),
     supabase.from("accounts").select("id,workspace_id,name,institution,account_type,opening_balance,active").eq("active", true).order("name"),
@@ -85,8 +86,9 @@ export async function POST(request: Request) {
       .limit(80),
     supabase.from("counterparties").select("id,workspace_id,name,document,kind,phone,email").order("name").limit(160),
     supabase.from("payment_reminders").select("id,workspace_id,description,amount,due_date,remind_on,status").eq("user_id", user.id).eq("status", "pending").order("remind_on").limit(100),
-    supabase.from("loans").select("id,workspace_id,counterparty_id,principal,start_date,maturity_date,status,periodic_rate,rate_period,interest_type,fixed_interest,direction").neq("status","cancelled").order("start_date", { ascending: false }).limit(200),
+    supabase.from("loans").select("id,workspace_id,counterparty_id,principal,start_date,maturity_date,status,periodic_rate,rate_period,interest_type,fixed_interest,direction,interest_only,first_interest_due_date").neq("status","cancelled").order("start_date", { ascending: false }).limit(200),
     supabase.from("loan_payments").select("id,loan_id,amount,principal_amount,interest_amount,fees_amount,paid_at").order("paid_at", { ascending: false }).limit(300),
+    supabase.from("interest_only_loan_status").select("loan_id,workspace_id,principal_outstanding,monthly_interest,accrued_interest_due,payoff_due,next_interest_due_date").limit(200),
   ]);
 
   const dataError = [
@@ -102,6 +104,7 @@ export async function POST(request: Request) {
     remindersResult.error,
     loansResult.error,
     loanPaymentsResult.error,
+    monthlyStatesResult.error,
   ].find(Boolean);
 
   if (dataError) {
@@ -182,6 +185,7 @@ export async function POST(request: Request) {
     paymentReminders: (remindersResult.data ?? []).filter((item) => inScope(item.workspace_id)),
     loans: (loansResult.data ?? []).filter((item) => inScope(item.workspace_id)),
     loanPayments: (loanPaymentsResult.data ?? []).filter((item) => (loansResult.data ?? []).some((loan) => loan.id === item.loan_id && inScope(loan.workspace_id))),
+    interestOnlyLoanStates: (monthlyStatesResult.data ?? []).filter((item) => item.workspace_id && inScope(item.workspace_id)),
   };
 
   const recentHistory = (historyResult.data ?? [])
