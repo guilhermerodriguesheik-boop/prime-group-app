@@ -46,7 +46,7 @@ as $$
   select exists (
     select 1 from private.app_secrets
     where name='whatsapp_ingress'
-      and secret_hash=encode(digest(coalesce(p_secret,''),'sha256'),'hex')
+      and secret_hash=encode(extensions.digest(coalesce(p_secret,''),'sha256'),'hex')
       and length(coalesce(p_secret,''))>=24
   );
 $$;
@@ -97,7 +97,7 @@ begin
   select (regexp_match(upper(btrim(coalesce(e.body,''))),'^VINCULAR[[:space:]]+([0-9]{8})$'))[1] into code;
   if code is null then return jsonb_build_object('paired',false); end if;
   select user_id into paired from public.whatsapp_pairings
-    where pending_code_hash = encode(digest(code||':'||p_secret,'sha256'),'hex')
+    where pending_code_hash = encode(extensions.digest(code||':'||p_secret,'sha256'),'hex')
       and pending_until>now() and enabled
     for update;
   if paired is null then return jsonb_build_object('paired',false,'invalidCode',true); end if;
