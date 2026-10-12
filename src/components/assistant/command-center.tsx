@@ -2,6 +2,7 @@
 
 import { FormEvent, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import { AudioControls } from "./audio-controls";
 
 type Workspace = {
   id: string;
@@ -62,6 +63,7 @@ export function CommandCenter({
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [audioBusy, setAudioBusy] = useState(false);
   const [status, setStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,7 +119,7 @@ export function CommandCenter({
 
   async function send(event: FormEvent) {
     event.preventDefault();
-    if (sendingRef.current || (!message.trim() && files.length === 0)) return;
+    if (sendingRef.current || audioBusy || (!message.trim() && files.length === 0)) return;
 
     const clean = message.trim();
     const selectedFiles = [...files];
@@ -130,16 +132,8 @@ export function CommandCenter({
       ? attachmentWorkspace(workspaces, clean, fileNames)
       : null;
     if (selectedFiles.length && !fileWorkspace) {
-      setChat((current) => [
-        ...current,
-        { id: crypto.randomUUID(), role: "user", text: userText, files: fileNames },
-        {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          text: "Esse arquivo é da Prime Group, das suas contas pessoais ou de Empréstimos/Juros? Me diga em uma frase e envie com o anexo. Ainda não gravei o arquivo nem fiz lançamentos.",
-        },
-      ]);
-      setMessage("");
+      // Keep the draft and attached files so the user can add context once.
+      setStatus("Para classificar o anexo, escreva na mensagem se é da Prime Group, Pessoal ou Empréstimos/Juros. Nenhum lançamento foi feito.");
       return;
     }
 
@@ -202,6 +196,7 @@ export function CommandCenter({
       ]);
       setStatus("");
     } catch (error) {
+      setMessage((current) => current.trim() ? current : clean);
       const errorText = error instanceof Error ? error.message : "Falha ao processar a solicitação.";
       setChat((current) => [
         ...current,
@@ -236,7 +231,7 @@ export function CommandCenter({
           <div className="command-kicker">IA OPERACIONAL</div>
           <h2>O que você quer fazer?</h2>
           <p>
-            Escreva normalmente. A IA identifica se é Pessoal, Prime Group ou Empréstimos/Juros e pergunta quando houver dúvida.
+            Digite, grave um áudio ou envie nota fiscal (foto, PDF ou XML). A IA interpreta e pergunta se houver dúvida.
           </p>
         </div>
 
@@ -311,12 +306,20 @@ export function CommandCenter({
             >
               + Foto / PDF / XML
             </button>
-            <span className="metric-foot">até 6 arquivos · 20 MB por arquivo</span>
+            <span className="metric-foot">até 6 documentos · 20 MB por arquivo</span>
+            <AudioControls
+              disabled={busy}
+              onTranscript={(text) => setMessage((current) =>
+                current.trim() ? current.trim() + "\n" + text : text
+              )}
+              onStatus={setStatus}
+              onBusyChange={setAudioBusy}
+            />
           </div>
 
           <button
             className="button primary command-send"
-            disabled={busy || (!message.trim() && files.length === 0)}
+            disabled={busy || audioBusy || (!message.trim() && files.length === 0)}
             type="submit"
           >
             {busy ? "Processando..." : "Enviar"}
@@ -339,7 +342,7 @@ export function CommandCenter({
       </div>
 
       <div className="command-safety">
-        Não precisa selecionar o ambiente. Se não estiver claro onde registrar, a IA pergunta antes. Para anexos, informe o contexto na mensagem.
+        Ao gravar áudio, confira a transcrição antes de enviar. Se não estiver claro onde classificar uma nota fiscal, indique Prime Group, Pessoal ou Juros.
       </div>
     </section>
   );

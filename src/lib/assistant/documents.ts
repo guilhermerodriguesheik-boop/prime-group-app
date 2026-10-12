@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import { summarizeFiscalXml } from "./fiscal-xml";
 
 export type AssistantDocument = {
   id: string;
@@ -10,10 +11,13 @@ export type AssistantDocument = {
   documentType: string | null;
   extractedText: string;
   imageData: Uint8Array | null;
+  pdfData: Uint8Array | null;
 };
 
 const MAX_TEXT_CHARS = 60000;
 const MAX_PDF_PAGES = 40;
+// Limit visual PDF payloads to protect response time, memory and API usage.
+const MAX_VISUAL_PDF_BYTES = 12 * 1024 * 1024;
 
 function decodeText(data: Uint8Array) {
   return new TextDecoder("utf-8", { fatal: false }).decode(data);
@@ -83,6 +87,7 @@ export async function loadAssistantDocuments(
         documentType: row.document_type,
         extractedText: "[Arquivo não pôde ser lido do armazenamento.]",
         imageData: null,
+        pdfData: null,
       });
       continue;
     }
@@ -92,22 +97,39 @@ export async function loadAssistantDocuments(
 
     let extractedText = "";
     let imageData: Uint8Array | null = null;
+    let pdfData: Uint8Array | null = null;
 
     if (mimeType.startsWith("image/")) {
       imageData = bytes;
     } else if (mimeType === "application/pdf" || row.filename.toLowerCase().endsWith(".pdf")) {
+      // Give OpenAI the actual PDF file so it can visually inspect scanned pages,
+      // tables and invoice layouts even when text extraction is empty.
+      if (bytes.byteLength <= MAX_VISUAL_PDF_BYTES &&
+          decodeText(bytes.subarray(0, 5)) === "%PDF-") {
+        pdfData = bytes;
+      }
       try {
         extractedText = await extractPdfText(bytes);
         if (!extractedText.trim()) {
-          extractedText = "[PDF sem camada de texto detectável. Pode ser um PDF escaneado.]";
+          extractedText = pdfData
+            ? "[PDF sem texto: documento enviado para leitura visual de páginas pela IA.]"
+            : "[PDF sem texto não pôde ser lido visualmente (arquivo maior que 12 MB ou inválido). Envie foto legível ou PDF menor.]";
         }
       } catch {
-        extractedText = "[Não foi possível extrair texto deste PDF.]";
+        extractedText = pdfData
+          ? "[Texto do PDF indisponível: PDF enviado para leitura visual pela IA.]"
+          : "[Não foi possível extrair texto ou conteúdo visual desse PDF. Envie imagem legível.]";
       }
+    } else if (mimeType.includes("xml") || /\.xml$/i.test(row.filename)) {
+      const raw = decodeText(bytes);
+      const summary = summarizeFiscalXml(raw);
+      extractedText = (
+        (summary ? "RESUMO FISCAL EXTRAÍDO (não comprova pagamento):\n" + summary + "\n\n" : "") +
+        "XML ORIGINAL:\n" + raw
+      ).slice(0, MAX_TEXT_CHARS);
     } else if (
-      mimeType.includes("xml") ||
       mimeType.startsWith("text/") ||
-      /\.(xml|txt|csv|json)$/i.test(row.filename)
+      /\.(txt|csv|json)$/i.test(row.filename)
     ) {
       extractedText = decodeText(bytes).slice(0, MAX_TEXT_CHARS);
     } else {
@@ -123,6 +145,7 @@ export async function loadAssistantDocuments(
       documentType: row.document_type,
       extractedText,
       imageData,
+      pdfData,
     });
   }
 
