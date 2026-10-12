@@ -229,7 +229,7 @@ export function createAssistantTools(input: CreateToolsInput) {
   const tools = {
     registrar_movimento: tool({
       description:
-        "Registra uma receita ou despesa já realizada. Use somente quando o usuário pedir para lançar/registrar uma movimentação ou quando um comprovante enviado deixar o gasto/receita inequívoco.",
+        "Registra uma receita ou despesa que o usuário relata já ter ocorrido, mesmo em português informal sem dizer 'registre': 'abasteci 970 no 12.170 dia 7', 'gastei 50 na farmácia'. Não use para simulações, consultas ou menções hipotéticas. Verifique vínculos e possíveis duplicidades antes de registrar.",
       inputSchema: z.object({
         workspaceKind: z.enum(["prime", "personal", "interest"]),
         type: z.enum(["income", "expense"]),
@@ -243,10 +243,52 @@ export function createAssistantTools(input: CreateToolsInput) {
       }),
       execute: async (args) => {
         const ws = workspace(args.workspaceKind);
+        const account = resolveAccount(ws.id, args.accountName);
+        const card = resolveCard(ws.id, args.cardName);
+        const vehicle = resolveVehicle(ws.id, args.vehicleNameOrPlate);
+
+        // Nunca registre um gasto sem o vínculo mencionado na conversa.
+        if (args.vehicleNameOrPlate && !vehicle) {
+          return { ok: false, needsClarification: true, message: "Não identifiquei com segurança o veículo informado. Pergunte qual veículo cadastrado devo usar." };
+        }
+        if (args.cardName && !card) {
+          return { ok: false, needsClarification: true, message: "O cartão mencionado não foi identificado no cadastro. Pergunte qual cartão utilizar." };
+        }
+        if (args.accountName && !account) {
+          return { ok: false, needsClarification: true, message: "A conta mencionada não foi identificada no cadastro. Pergunte qual conta utilizar." };
+        }
+
+        // Evita registrar novamente o mesmo gasto informado em outra conversa.
+        // Uma segunda operação realmente distinta ainda pode ser registrada se o usuário assim indicar.
+        const localDate = args.date ?? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        const nextDate = new Date(Date.parse(`${localDate}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+        const { data: similar, error: similarError } = await supabase
+          .from("transactions")
+          .select("id,description,vehicle_id,account_id,card_id")
+          .eq("workspace_id", ws.id)
+          .eq("type", args.type)
+          .eq("amount", args.amount)
+          .neq("status", "cancelled")
+          .gte("occurred_at", `${localDate}T00:00:00-03:00`)
+          .lt("occurred_at", `${nextDate}T00:00:00-03:00`)
+          .limit(40);
+        if (similarError) throw similarError;
+        const duplicate = (similar ?? []).some((item) => {
+          const sameVehicle = Boolean(vehicle && item.vehicle_id === vehicle.id);
+          const sameDescription = normalize(item.description) === normalize(args.description);
+          const bothFuel = /diesel|abastec|combustivel/i.test(normalize(item.description)) &&
+            /diesel|abastec|combustivel/i.test(normalize(args.description));
+          const sameLinkedAccount = Boolean(account && item.account_id === account.id);
+          const sameLinkedCard = Boolean(card && item.card_id === card.id);
+          return ((sameVehicle && (sameDescription || bothFuel)) ||
+            (sameDescription && (sameLinkedAccount || sameLinkedCard || (!vehicle && !account && !card))));
+        });
+        const explicitNewOperation = /\\b(outr[oa]|nov[oa]|diferente|separad[oa]|segund[oa])\\b/i.test(originalMessage);
+        if (duplicate && !explicitNewOperation) {
+          return { ok: false, possibleDuplicate: true, message: "Já há um lançamento semelhante, no mesmo dia e valor. Não registrei novamente. Pergunte se é outra operação diferente." };
+        }
+
         return runAction("create_transaction", ws.id, args, async (actionId) => {
-          const account = resolveAccount(ws.id, args.accountName);
-          const card = resolveCard(ws.id, args.cardName);
-          const vehicle = resolveVehicle(ws.id, args.vehicleNameOrPlate);
           const counterparty = resolveCounterparty(ws.id, args.counterpartyName);
           const occurredAt = args.date ? `${args.date}T12:00:00-03:00` : new Date().toISOString();
 
