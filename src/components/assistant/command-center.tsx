@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
 type Workspace = {
@@ -23,6 +23,24 @@ type ChatItem = {
   actions?: ActionSummary[];
 };
 
+
+// Document files must be placed in an identified environment before uploading.
+// The chat itself never preselects a workspace for the financial actions.
+function attachmentWorkspace(workspaces: Workspace[], message: string, fileNames: string[]) {
+  const text = [message, ...fileNames].join(" ")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const markers: Record<string, RegExp> = {
+    prime: /\b(prime( group)?|empresa|empresarial|frete|frota|caminhao|sprinter|worker|ortobom|motorista|pedagio|diesel|ct-?e|combustivel do caminhao)\b/,
+    personal: /\b(pessoal|pessoais|casa|familia|supermercado|mercado|ifood|carrefour|academia|plano de saude|escola|despesa domestica)\b/,
+    interest: /\b(emprestimo|emprestimos|emprestei|juros|devedor|devedores|capital emprestado|cobranca de juros)\b/,
+  };
+  const matches = Object.entries(markers)
+    .filter(([, regex]) => regex.test(text))
+    .map(([kind]) => kind);
+  if (matches.length !== 1) return null;
+  return workspaces.find((workspace) => workspace.kind === matches[0]) ?? null;
+}
+
 function documentType(file: File) {
   const name = file.name.toLowerCase();
   if (name.endsWith(".xml") || file.type.includes("xml")) return "xml";
@@ -38,12 +56,7 @@ export function CommandCenter({
   workspaces: Workspace[];
   compact?: boolean;
 }) {
-  const primeWorkspace = useMemo(
-    () => workspaces.find((workspace) => workspace.kind === "prime") ?? workspaces[0],
-    [workspaces],
-  );
-
-  const [workspaceId, setWorkspaceId] = useState(primeWorkspace?.id ?? "");
+  const sendingRef = useRef(false);
   const [message, setMessage] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -52,13 +65,13 @@ export function CommandCenter({
   const [status, setStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function uploadFiles() {
-    if (!files.length) return [] as string[];
+  async function uploadFiles(attachments: File[], workspaceId: string) {
+    if (!attachments.length) return [] as string[];
 
     const supabase = createClient();
     const ids: string[] = [];
 
-    for (const file of files) {
+    for (const file of attachments) {
       if (file.size > 20 * 1024 * 1024) {
         throw new Error(`${file.name} excede 20 MB. Envie um arquivo menor.`);
       }
@@ -104,14 +117,35 @@ export function CommandCenter({
 
   async function send(event: FormEvent) {
     event.preventDefault();
-    if (busy || (!message.trim() && files.length === 0) || !workspaceId) return;
+    if (sendingRef.current || (!message.trim() && files.length === 0)) return;
 
     const clean = message.trim();
-    const fileNames = files.map((file) => file.name);
-    const userText = clean || "Analisar e registrar os arquivos enviados.";
+    const selectedFiles = [...files];
+    const fileNames = selectedFiles.map((file) => file.name);
+    const userText = clean || "Analisar os arquivos enviados.";
 
+    // If the file's context is unknown, keep it local and ask rather than
+    // silently storing a personal file inside the business environment.
+    const fileWorkspace = selectedFiles.length
+      ? attachmentWorkspace(workspaces, clean, fileNames)
+      : null;
+    if (selectedFiles.length && !fileWorkspace) {
+      setChat((current) => [
+        ...current,
+        { id: crypto.randomUUID(), role: "user", text: userText, files: fileNames },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: "Esse arquivo é da Prime Group, das suas contas pessoais ou de Empréstimos/Juros? Me diga em uma frase e envie com o anexo. Ainda não gravei o arquivo nem fiz lançamentos.",
+        },
+      ]);
+      setMessage("");
+      return;
+    }
+
+    sendingRef.current = true;
     setBusy(true);
-    setStatus(files.length ? "Enviando arquivos..." : "Analisando...");
+    setStatus(selectedFiles.length ? "Enviando arquivos..." : "Analisando...");
     setChat((current) => [
       ...current,
       {
@@ -122,8 +156,16 @@ export function CommandCenter({
       },
     ]);
 
+    // Clear immediately, not after waiting for the AI response.
+    // In particular, don't delete a new draft typed during the request.
+    setMessage("");
+    setFiles([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
     try {
-      const documentIds = await uploadFiles();
+      const documentIds = fileWorkspace
+        ? await uploadFiles(selectedFiles, fileWorkspace.id)
+        : [];
       setStatus(documentIds.length ? "Lendo arquivos e executando..." : "Executando...");
 
       const response = await fetch("/api/assistant", {
@@ -131,7 +173,6 @@ export function CommandCenter({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: clean,
-          workspaceId,
           conversationId: conversationId ?? undefined,
           documentIds,
         }),
@@ -159,22 +200,20 @@ export function CommandCenter({
           actions: data.actions ?? [],
         },
       ]);
-      setMessage("");
-      setFiles([]);
-      if (fileInputRef.current) fileInputRef.current.value = "";
       setStatus("");
     } catch (error) {
-      const text = error instanceof Error ? error.message : "Falha ao processar a solicitação.";
+      const errorText = error instanceof Error ? error.message : "Falha ao processar a solicitação.";
       setChat((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: `Não consegui concluir: ${text}`,
+          text: `Não consegui concluir: ${errorText}. Você pode reenviar a mensagem.`,
         },
       ]);
       setStatus("");
     } finally {
+      sendingRef.current = false;
       setBusy(false);
     }
   }
@@ -197,21 +236,10 @@ export function CommandCenter({
           <div className="command-kicker">IA OPERACIONAL</div>
           <h2>O que você quer fazer?</h2>
           <p>
-            Converse normalmente: conte o que pagou, recebeu ou quer saber. Também pode enviar foto, PDF ou CT-e.
+            Escreva normalmente. A IA identifica se é Pessoal, Prime Group ou Empréstimos/Juros e pergunta quando houver dúvida.
           </p>
         </div>
-        <select
-          className="command-workspace"
-          value={workspaceId}
-          onChange={(event) => setWorkspaceId(event.target.value)}
-          aria-label="Ambiente financeiro"
-        >
-          {workspaces.map((workspace) => (
-            <option key={workspace.id} value={workspace.id}>
-              {workspace.name}
-            </option>
-          ))}
-        </select>
+
       </div>
 
       {chat.length > 0 && (
@@ -311,7 +339,7 @@ export function CommandCenter({
       </div>
 
       <div className="command-safety">
-        Fale naturalmente. A IA registra fatos claros, pergunta quando houver dúvidas e não dá baixa em contas sem confirmação de pagamento.
+        Não precisa selecionar o ambiente. Se não estiver claro onde registrar, a IA pergunta antes. Para anexos, informe o contexto na mensagem.
       </div>
     </section>
   );

@@ -42,6 +42,19 @@ function normalize(value: string) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+// Secondary safety check for clearly named financial environments. Ambiguous
+// statements are resolved conversationally; a conflicting action is not saved.
+function explicitWorkspaceKind(message: string): "prime" | "personal" | "interest" | null {
+  const text = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const markers: Array<{ kind: "prime" | "personal" | "interest"; pattern: RegExp }> = [
+    { kind: "prime", pattern: /\b(prime( group)?|frete|caminhao|sprinter|worker|ortobom|ct-?e|frota|pedagio|motorista|empresa|empresarial)\b/ },
+    { kind: "personal", pattern: /\b(pessoal|minha casa|despesa de casa|supermercado|mercado|ifood|carrefour|academia|plano de saude|familia)\b/ },
+    { kind: "interest", pattern: /\b(emprestimo|emprestimos|emprestei|devedor|devedores|dinheiro a juros|ambiente juros|recebiveis\/juros)\b/ },
+  ];
+  const matches = markers.filter(({ pattern }) => pattern.test(text));
+  return matches.length === 1 ? matches[0].kind : null;
+}
+
 function jsonValue(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
 }
@@ -110,6 +123,15 @@ export function createAssistantTools(input: CreateToolsInput) {
     actionInput: Record<string, unknown>,
     execute: (actionId: string) => Promise<T>,
   ): Promise<T & { reused?: boolean }> {
+    const chosen = workspaces.find((item) => item.id === workspaceId);
+    const explicit = explicitWorkspaceKind(originalMessage);
+    if (explicit && chosen && chosen.kind !== explicit) {
+      return {
+        ok: false,
+        needsClarification: true,
+        message: "A mensagem indica outro ambiente financeiro. Confirme se é Prime Group, Pessoal ou Empréstimos/Juros antes de registrar.",
+      } as unknown as T & { reused?: boolean };
+    }
     const key = createHash("sha256")
       .update(
         JSON.stringify({
@@ -447,7 +469,7 @@ export function createAssistantTools(input: CreateToolsInput) {
       description:
         "Registra uma receita ou despesa comum, NÃO desembolso de empréstimo nem recebimento de juros/capital de empréstimo. O usuário relata o fato mesmo em português informal sem dizer 'registre': 'abasteci 970 no 12.170 dia 7', 'gastei 50 na farmácia'. Não use para simulações, consultas ou menções hipotéticas. Verifique vínculos e possíveis duplicidades antes de registrar.",
       inputSchema: z.object({
-        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        workspaceKind: z.enum(["prime", "personal", "interest"]).describe("Detecte o ambiente automaticamente nesta mensagem: prime=empresa/fretes/frota; personal=casa/família; interest=empréstimos a juros. Se houver dúvida, pergunte ao usuário em vez de gravar."),
         type: z.enum(["income", "expense"]),
         amount: z.number().positive(),
         description: z.string().min(2),
@@ -542,7 +564,7 @@ export function createAssistantTools(input: CreateToolsInput) {
     registrar_conta_receber: tool({
       description: "Cria uma conta a receber futura. Não use para receita já recebida; nesse caso use registrar_movimento.",
       inputSchema: z.object({
-        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        workspaceKind: z.enum(["prime", "personal", "interest"]).describe("Detecte o ambiente automaticamente nesta mensagem: prime=empresa/fretes/frota; personal=casa/família; interest=empréstimos a juros. Se houver dúvida, pergunte ao usuário em vez de gravar."),
         description: z.string().min(2),
         amount: z.number().positive(),
         dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -576,7 +598,7 @@ export function createAssistantTools(input: CreateToolsInput) {
     registrar_conta_pagar: tool({
       description: "Cria uma conta/parcela/dívida a pagar futura quando o usuário disser informalmente 'tenho que pagar 1500 dia 20'. Para despesas já pagas use registrar_movimento. Se também pedir um lembrete antecipado, preencha remindOn.",
       inputSchema: z.object({
-        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        workspaceKind: z.enum(["prime", "personal", "interest"]).describe("Detecte o ambiente automaticamente nesta mensagem: prime=empresa/fretes/frota; personal=casa/família; interest=empréstimos a juros. Se houver dúvida, pergunte ao usuário em vez de gravar."),
         description: z.string().min(2),
         amount: z.number().positive(),
         dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -639,7 +661,7 @@ export function createAssistantTools(input: CreateToolsInput) {
     criar_lembrete_pagamento: tool({
       description: "Cria lembrete de pagamento visível DENTRO do Prime Finance, mesmo sem valor informado: 'me lembra do aluguel dia 20'. NÃO envia notificações no WhatsApp, e não cria despesa. Exige data de vencimento.",
       inputSchema: z.object({
-        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        workspaceKind: z.enum(["prime", "personal", "interest"]).describe("Detecte o ambiente automaticamente nesta mensagem: prime=empresa/fretes/frota; personal=casa/família; interest=empréstimos a juros. Se houver dúvida, pergunte ao usuário em vez de gravar."),
         description: z.string().min(2),
         dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         remindOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Data para mostrar o aviso no painel; omitida significa avisar no dia do vencimento."),
@@ -684,7 +706,7 @@ export function createAssistantTools(input: CreateToolsInput) {
     cadastrar_pessoa_empresa: tool({
       description: "Cadastra cliente, fornecedor, devedor, credor, motorista ou outra pessoa/empresa.",
       inputSchema: z.object({
-        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        workspaceKind: z.enum(["prime", "personal", "interest"]).describe("Detecte o ambiente automaticamente nesta mensagem: prime=empresa/fretes/frota; personal=casa/família; interest=empréstimos a juros. Se houver dúvida, pergunte ao usuário em vez de gravar."),
         name: z.string().min(2),
         kind: z.enum(["customer", "supplier", "borrower", "lender", "driver", "other"]),
         document: z.string().optional(),
@@ -758,7 +780,7 @@ export function createAssistantTools(input: CreateToolsInput) {
     cadastrar_conta: tool({
       description: "Cadastra uma conta bancária, carteira, investimento ou caixa.",
       inputSchema: z.object({
-        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        workspaceKind: z.enum(["prime", "personal", "interest"]).describe("Detecte o ambiente automaticamente nesta mensagem: prime=empresa/fretes/frota; personal=casa/família; interest=empréstimos a juros. Se houver dúvida, pergunte ao usuário em vez de gravar."),
         name: z.string().min(2),
         institution: z.string().optional(),
         accountType: z.enum(["checking", "savings", "cash", "wallet", "investment", "other"]).optional(),
@@ -790,7 +812,7 @@ export function createAssistantTools(input: CreateToolsInput) {
     cadastrar_cartao: tool({
       description: "Cadastra um cartão de crédito.",
       inputSchema: z.object({
-        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        workspaceKind: z.enum(["prime", "personal", "interest"]).describe("Detecte o ambiente automaticamente nesta mensagem: prime=empresa/fretes/frota; personal=casa/família; interest=empréstimos a juros. Se houver dúvida, pergunte ao usuário em vez de gravar."),
         name: z.string().min(2),
         issuer: z.string().optional(),
         last4: z.string().max(4).optional(),
@@ -987,7 +1009,7 @@ export function createAssistantTools(input: CreateToolsInput) {
     cadastrar_recorrencia: tool({
       description: "Cadastra uma receita ou despesa recorrente/fixa.",
       inputSchema: z.object({
-        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        workspaceKind: z.enum(["prime", "personal", "interest"]).describe("Detecte o ambiente automaticamente nesta mensagem: prime=empresa/fretes/frota; personal=casa/família; interest=empréstimos a juros. Se houver dúvida, pergunte ao usuário em vez de gravar."),
         name: z.string().min(2),
         type: z.enum(["income", "expense"]),
         amount: z.number().positive(),
