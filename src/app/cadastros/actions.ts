@@ -178,28 +178,40 @@ export async function createCounterparty(formData: FormData) {
 
 export async function createLoan(formData: FormData) {
   const { supabase } = await context();
-  const id = await workspaceId("interest");
-  const rate = numberValue(formData, "periodic_rate");
-  const fixedInterest = numberValue(formData, "fixed_interest");
-  const { error } = await supabase.from("loans").insert({
-    workspace_id: id,
-    counterparty_id: textValue(formData, "counterparty_id"),
-    direction: "receivable",
-    principal: numberValue(formData, "principal"),
-    periodic_rate: rate || null,
-    rate_period: rate ? (textValue(formData, "rate_period") || "month") : null,
-    interest_type: textValue(formData, "interest_type") || "simple",
-    fixed_interest: fixedInterest || null,
-    start_date: textValue(formData, "start_date"),
-    maturity_date: textValue(formData, "maturity_date") || null,
-    installment_frequency: textValue(formData, "installment_frequency") || "monthly",
-    status: "active",
-    notes: textValue(formData, "notes") || null,
+  const workspace = await workspaceId("interest");
+  const borrowerId = textValue(formData, "counterparty_id");
+  const { data: borrower, error: borrowerError } = await supabase
+    .from("counterparties")
+    .select("id,name,workspace_id")
+    .eq("id", borrowerId)
+    .eq("workspace_id", workspace)
+    .single();
+  if (borrowerError || !borrower) throw new Error("Selecione um devedor cadastrado em Juros.");
+  const interestType = textValue(formData,"interest_type") || "simple";
+  const rate = textValue(formData,"periodic_rate");
+  const fixed = textValue(formData,"fixed_interest");
+  const amount = numberValue(formData,"principal");
+  if (amount <= 0) throw new Error("Informe capital maior que zero.");
+  const disbursed = formData.get("disbursed") === "yes";
+  const accountId = textValue(formData,"account_id") || null;
+  const { error } = await supabase.rpc("create_finance_loan", {
+    p_workspace_id: workspace,
+    p_borrower_name: borrower.name,
+    p_principal: amount,
+    p_interest_type: interestType,
+    p_periodic_rate: rate ? numberValue(formData,"periodic_rate") : null,
+    p_rate_period: interestType === "simple" || interestType === "compound" ? (textValue(formData,"rate_period") || "month") : null,
+    p_fixed_interest: fixed ? numberValue(formData,"fixed_interest") : null,
+    p_start_date: textValue(formData,"start_date"),
+    p_maturity_date: textValue(formData,"maturity_date") || null,
+    p_notes: textValue(formData,"notes") || null,
+    p_action_id: crypto.randomUUID(),
+    p_record_disbursement: disbursed,
+    p_account_id: accountId,
   });
   if (error) throw error;
   refreshAll();
 }
-
 
 export async function settleReceivable(receivableId: string) {
   const { supabase } = await context();
