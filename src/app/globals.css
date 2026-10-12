@@ -15,3 +15,9 @@
 .attachment-list{display:flex;gap:7px;flex-wrap:wrap}.attachment-chip{display:flex;align-items:center;gap:7px;border:1px solid var(--line);background:#101a2f;border-radius:999px;padding:6px 9px 6px 11px;font-size:11px}.attachment-chip button{border:0;background:transparent;color:#aebbd0;font-size:16px;cursor:pointer;line-height:1}
 .command-hints{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.command-hints button{border:1px solid var(--line);background:transparent;color:#b8c5db;border-radius:999px;padding:7px 10px;font-size:11px;cursor:pointer}.command-hints button:hover{border-color:#506284;color:#fff}.command-safety{margin-top:11px;color:#72829f;font-size:10px;line-height:1.45}
 @media(max-width:650px){.command-center{padding:14px;border-radius:16px}.command-head{flex-direction:column}.command-workspace{width:100%}.chat-bubble{max-width:96%}.command-footer{align-items:stretch;flex-direction:column}.command-send{width:100%}.command-tools{justify-content:space-between}.command-form textarea{min-height:110px}}
+
+/* Conversational voice entry and fiscal-document attachments. */
+.button.voice,.button.attach{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.button.voice.recording{border-color:#db7581;background:#49212a;color:#ffd8dd}
+.button.voice.recording:hover{filter:brightness(1.1)}
+@media(max-width:650px){.button.voice,.button.attach{flex:1 1 auto}.command-tools .metric-foot{flex-basis:100%}}
