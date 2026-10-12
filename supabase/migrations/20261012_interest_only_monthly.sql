@@ -248,13 +248,15 @@ end;
 $function$;
 
 create or replace view public.interest_only_loan_status with (security_invoker=true) as
+with relevant as materialized (
+  select id,workspace_id from public.loans where interest_only and status in ('active','settled')
+)
 select
   l.id as loan_id, l.workspace_id,
   s.principal_outstanding,s.monthly_interest,s.accrued_interest_due,s.payoff_due,
   s.next_interest_due_date,s.last_interest_due_date
-from public.loans l
-cross join lateral public.interest_only_loan_state(l.id,(timezone('America/Sao_Paulo',now()))::date) s
-where l.interest_only and l.status in ('active','settled');
+from relevant l
+cross join lateral public.interest_only_loan_state(l.id,(timezone('America/Sao_Paulo',now()))::date) s;
 
 -- Disallow bypassing interest-only accounting via the generic loan-payment RPC.
 -- Reuse the previous generic function implementation unchanged except for guard.
