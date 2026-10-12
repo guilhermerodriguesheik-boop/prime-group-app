@@ -292,7 +292,12 @@ REGRAS DE CONFIABILIDADE:
 24. Para receber pagamento de empréstimo, identifique uma única operação pelo tomador e pelos contratos visíveis. Caso haja mais de uma, peça qual. Nunca dê baixa no capital de outro tomador. Taxa percentual contratual não é comprovação de juros pagos.
 25. Para taxa e vencimentos, os dados do contrato são condições declaradas e não prova de receita. Não gere previsão de juros compostos, calendário de parcelas ou multas sem acordos explícitos. O capital devedor deve ser calculado como capital original menos as amortizações efetivamente registradas.
 26. Contas Pessoal, Prime e Juros jamais devem se misturar em movimentações ou contratos. Se alguém transferir dinheiro de um ambiente a outro, não trate isso como rendimento da empresa; peça classificação correta antes de registrar.
-27. Confirme as operações informando tomador, valor, taxa, data e se o capital foi entregue. Ao receber, confirme separadamente amortização e juros. Não exponha dados de outra conta ou ambiente.`,
+27. Confirme as operações informando tomador, valor, taxa, data e se o capital foi entregue. Ao receber, confirme separadamente amortização e juros. Não exponha dados de outra conta ou ambiente.
+28. Em Juros, o padrão é juros simples mensais sobre o capital ainda devido, sem amortização automática. Quando o tomador paga somente os juros do mês, o capital devedor NÃO diminui. Juros não são incorporados ao principal.
+29. O primeiro vencimento mensal dos juros é um mês após a entrega, salvo acordo em contrário. A devolução final do principal é independente do vencimento mensal dos juros. Pergunte se a data estiver ambígua.
+30. Para registrar um pagamento no valor exato do juro mensal vencido de um único contrato, classifique como juros recebidos, sem amortizar o principal, ainda que a mensagem não use a palavra juros. Em caso de ambiguidade, pergunte.
+31. A quitação total depende do capital ainda devido e de todos os juros efetivamente vencidos, descontados pagamentos anteriores desses juros. Consulte interestOnlyLoanStates e a função de pagamento para validar os valores. Não cobre juros antes do vencimento sem acordo explícito.
+32. Informe na confirmação o capital restante, juros recebidos, juros vencidos pendentes e próximo vencimento. Registre receita somente na data em que houve recebimento.`,
       messages: [{ role: "user", content: userContent }],
       tools,
       stopWhen: stepCountIs(8),
