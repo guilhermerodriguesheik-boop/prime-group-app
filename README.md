@@ -48,6 +48,17 @@ Sem essas variáveis, a interface continua em modo de demonstração.
 
 **Segurança:** a chave é lida somente no servidor; chamadas usam `store: false` e desabilitam chamadas paralelas de ferramentas. Controle os limites e o consumo na OpenAI Platform. Sem `OPENAI_API_KEY`, a API retorna erro de configuração, sem tentar o antigo modelo gratuito.
 
+## 2.2. Áudios e documentos fiscais no chat
+
+- **Gravar áudio:** abra o chat e clique em `Gravar áudio`, fale e clique em `Parar gravação`. O servidor autenticado envia o áudio diretamente para a transcrição da OpenAI. O resultado entra no campo como texto editável; revise datas, valores e nomes **antes** de clicar em Enviar. O arquivo de áudio não fica armazenado no Supabase.
+- **Enviar áudio:** também aceita MP3, M4A, WAV, OGG, WebM e mensagens de voz exportadas em OPUS. Limite de até 4 MB por gravação/arquivo (limite de payload da Vercel).
+- **Fotos e PDF:** imagens são enviadas para análise visual. O PDF é repassado ao modelo multimodal para leitura de documentos escaneados, tabelas e notas fiscais quando tiver até 12 MB; no máximo 3 PDFs visuais por solicitação, para controlar custo e consumo de tokens.
+- **XML fiscal:** extração estruturada dos campos principais de NF-e e CT-e (chave, fornecedor, destinatário, data e valores), preservando o XML original para verificação.
+- **Controle contábil:** nota fiscal emitida não é comprovante de pagamento. Se o arquivo isolado não provar que foi quitado, a IA pergunta antes de contabilizar como pago. Se o arquivo não indicar com segurança o ambiente Prime/Pessoal/Juros, acrescente uma frase curta identificando o destino; o anexo permanece selecionado.
+- **WhatsApp:** enviar e receber áudios pelo WhatsApp ainda requer a ativação da WhatsApp Cloud API na Meta. Essas funcionalidades são do chat web do Prime Finance.
+
+O áudio transcrito envolve uma chamada adicional à API da OpenAI e pode gerar cobrança de uso. Configure `PRIME_TRANSCRIPTION_MODEL` somente se quiser substituir o padrão `gpt-4o-mini-transcribe`.
+
 ## 3. Instalar e rodar
 
 ```bash
