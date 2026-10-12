@@ -906,6 +906,7 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          external_action_id: string | null
           fees_amount: number
           id: string
           installment_id: string | null
@@ -919,6 +920,7 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          external_action_id?: string | null
           fees_amount?: number
           id?: string
           installment_id?: string | null
@@ -932,6 +934,7 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          external_action_id?: string | null
           fees_amount?: number
           id?: string
           installment_id?: string | null
@@ -972,6 +975,8 @@ export type Database = {
           counterparty_id: string
           created_at: string
           direction: string
+          disbursement_transaction_id: string | null
+          external_action_id: string | null
           fixed_interest: number | null
           id: string
           installment_frequency: string | null
@@ -991,6 +996,8 @@ export type Database = {
           counterparty_id: string
           created_at?: string
           direction?: string
+          disbursement_transaction_id?: string | null
+          external_action_id?: string | null
           fixed_interest?: number | null
           id?: string
           installment_frequency?: string | null
@@ -1010,6 +1017,8 @@ export type Database = {
           counterparty_id?: string
           created_at?: string
           direction?: string
+          disbursement_transaction_id?: string | null
+          external_action_id?: string | null
           fixed_interest?: number | null
           id?: string
           installment_frequency?: string | null
@@ -1025,6 +1034,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "loans_disbursement_transaction_id_fkey"
+            columns: ["disbursement_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "loans_counterparty_id_fkey"
             columns: ["counterparty_id"]
@@ -1926,6 +1942,39 @@ export type Database = {
       is_workspace_member: {
         Args: { target_workspace: string }
         Returns: boolean
+      }
+      create_finance_loan: {
+        Args: {
+          p_workspace_id: string
+          p_borrower_name: string
+          p_principal: number
+          p_interest_type: string
+          p_periodic_rate: number | null
+          p_rate_period: string | null
+          p_fixed_interest: number | null
+          p_start_date: string
+          p_maturity_date: string | null
+          p_notes: string | null
+          p_action_id: string
+          p_record_disbursement?: boolean
+          p_account_id?: string | null
+        }
+        Returns: string
+      }
+      register_finance_loan_payment: {
+        Args: {
+          p_loan_id: string
+          p_amount: number
+          p_principal_amount: number
+          p_interest_amount: number
+          p_fees_amount: number
+          p_paid_on: string
+          p_action_id: string
+          p_account_id?: string | null
+          p_notes?: string | null
+          p_distinct_event?: boolean
+        }
+        Returns: string
       }
       settle_payable: { Args: { p_payable_id: string }; Returns: string }
       settle_receivable: { Args: { p_receivable_id: string }; Returns: string }
