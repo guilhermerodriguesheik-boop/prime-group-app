@@ -309,50 +309,128 @@ export function createAssistantTools(input: CreateToolsInput) {
     }),
 
     registrar_recebimento_emprestimo: tool({
-      description: "Registra pagamentos de empréstimos de terceiros, separando amortização do capital de juros/taxas: 'João me pagou 500 só de juros', 'recebi 800 sendo 300 do principal e 500 de juros'. Não lance como receita genérica. Se o usuário não discriminar o que é juros e capital, pergunte em vez de adivinhar. Empréstimos sempre no ambiente Juros.",
+      description: "Registra recebimento real de empréstimo com juros mensais sem amortização: 'João pagou 300 do mês' => SOMENTE juros quando coincide com o juro mensal vencido, capital continua igual. 'João quitou os 1300' => capital pendente + juros vencidos, encerra. Pode também amortizar capital expressamente. Não adivinhe quando os valores não corresponderem.",
       inputSchema: z.object({
         borrowerName: z.string().trim().min(2),
-        loanId: z.string().uuid().nullable().describe("ID do empréstimo se conhecido; null para localizar devedor."),
-        amount: z.number().positive().describe("Total recebido em reais."),
-        principalAmount: z.number().nonnegative().describe("Parcela de amortização de capital (0 se só recebeu juros)."),
-        interestAmount: z.number().nonnegative().describe("Parcela de juros efetivamente recebidos (0 se só recebeu capital)."),
-        feesAmount: z.number().nonnegative().describe("Taxas extras recebidas, 0 se nenhuma."),
+        loanId: z.string().uuid().nullable(),
+        amount: z.number().positive().describe("Total recebido em reais"),
+        paymentKind: z.enum(["interest","principal","settlement","split"]).nullable().optional().describe("Classificação de juros mensais, amortização, quitação ou misto; null para identificar pelo texto e valor."),
+        principalAmount: z.number().nonnegative().nullable().optional().describe("Somente quando usuário dividir capital/juros explicitamente."),
+        interestAmount: z.number().nonnegative().nullable().optional().describe("Somente quando usuário dividir capital/juros explicitamente."),
+        feesAmount: z.number().nonnegative().nullable().optional(),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        accountName: z.string().nullable().describe("Conta do ambiente Juros que recebeu o depósito, null se não informada."),
+        accountName: z.string().nullable(),
         notes: z.string().nullable(),
       }),
       execute: async (args) => {
         const ws=workspace("interest");
         const borrower=resolveCounterparty(ws.id,args.borrowerName);
-        if (!borrower) return {ok:false,needsClarification:true,message:"Não encontrei um devedor cadastrado com esse nome em Juros. Qual é o nome completo?"};
-        const possible=loans.filter(loan=>loan.workspace_id===ws.id &&
-          loan.counterparty_id===borrower.id &&
-          ["active","settled"].includes(loan.status));
+        if(!borrower)return {ok:false,needsClarification:true,message:"Não encontrei o devedor cadastrado no ambiente Juros. Qual é o nome completo?"};
+        const candidates=loans.filter(loan=>loan.workspace_id===ws.id &&
+          loan.counterparty_id===borrower.id && loan.status==="active");
         const selected=args.loanId
-          ? possible.find(loan=>loan.id===args.loanId)
-          : possible.length===1 ? possible[0] : undefined;
-        if (!selected) return {ok:false,needsClarification:true,message:"Não identifiquei um único empréstimo ativo desse devedor. Informe qual empréstimo recebeu o pagamento."};
+          ? candidates.find(loan=>loan.id===args.loanId)
+          : candidates.length===1?candidates[0]:undefined;
+        if(!selected)return {ok:false,needsClarification:true,message:"Não identifiquei um único empréstimo ativo desse devedor. Qual contrato recebeu o pagamento?"};
         const account=args.accountName?resolveAccount(ws.id,args.accountName):null;
-        if(args.accountName && !account) return {ok:false,needsClarification:true,message:"Não encontrei essa conta bancária no ambiente Juros. Indique outra conta ou registre sem conta."};
-        const total= Math.round(args.amount*100);
-        const parts=Math.round(args.principalAmount*100)+Math.round(args.interestAmount*100)+Math.round(args.feesAmount*100);
-        if(total!==parts) return {ok:false,needsClarification:true,message:"Preciso saber quanto foi amortização do capital e quanto foi juros. Os valores não somaram o total recebido."};
-        // User statements of an unspecified receipt must not be silently split.
+        if(args.accountName&&!account)return {ok:false,needsClarification:true,message:"Essa conta bancária não foi encontrada no ambiente Juros."};
+        const distinctEvent=/\b(outro|outra|novo|nova|segundo|segunda|diferente|separado|separada)\b/i.test(originalMessage);
+
+        if(selected.interest_only){
+          if((args.feesAmount??0)!==0)return {ok:false,needsClarification:true,message:"Esse contrato cobra apenas juros mensais. Informe separadamente qualquer taxa extraordinária."};
+          const {data:states,error:stateError}=await supabase.rpc("interest_only_loan_state",{
+            p_loan_id:selected.id,p_as_of:args.date
+          });
+          if(stateError||!states?.length)throw stateError??new Error("Falha ao calcular o empréstimo");
+          const state=states[0];
+          const hasPayoff=/(quit|liquid|encerra|pagar tudo|pagou tudo|devolveu tudo|saldo total)/i.test(originalMessage);
+          const hasPrincipal=/(capital|principal|amortiz|abateu|abater|reduz.*d[ií]vid|devolveu.*capital)/i.test(originalMessage);
+          const hasInterest=/(juro|mensalidade|mensal|do m[eê]s|s[oó] juros)/i.test(originalMessage);
+          const matchesMonthly=Math.round(args.amount*100)===Math.round(Number(state.monthly_interest)*100) &&
+            args.amount<=Number(state.accrued_interest_due);
+          let mode: "interest"|"principal"|"settlement"|"split"|null=null;
+          if(hasPayoff)mode="settlement";
+          else if(hasPrincipal&&hasInterest)mode="split";
+          else if(hasPrincipal)mode="principal";
+          else if(hasInterest||matchesMonthly)mode="interest";
+          // PaymentKind cannot override the evidence of an ambiguous message.
+          if(!mode&&args.paymentKind==="interest"&&matchesMonthly)mode="interest";
+          if(!mode)return {ok:false,needsClarification:true,
+            message:"Esse valor foi só o juro mensal, uma amortização do capital ou quitação completa?"};
+          if(mode==="interest"&&args.amount>Number(state.accrued_interest_due))return {
+            ok:false,needsClarification:true,
+            message:"Há R$ "+Number(state.accrued_interest_due).toFixed(2)+" de juros vencidos nessa data. O próximo vencimento é "+(state.next_interest_due_date??"não informado")+". O valor recebido foi antecipação ou outra operação?"
+          };
+          if(mode==="settlement"&&Math.round(args.amount*100)!==Math.round(Number(state.payoff_due)*100)){
+            return {ok:false,needsClarification:true,
+              message:"O total para quitar na data informada é R$ "+Number(state.payoff_due).toFixed(2)+
+                " (R$ "+Number(state.principal_outstanding).toFixed(2)+" de capital e R$ "+Number(state.accrued_interest_due).toFixed(2)+
+                " de juros vencidos). Você confirma esse valor?"
+            };
+          }
+          if(mode==="split"&&(
+            args.principalAmount===null||args.principalAmount===undefined||
+            args.interestAmount===null||args.interestAmount===undefined||
+            Math.round((args.principalAmount+args.interestAmount)*100)!==Math.round(args.amount*100))){
+            return {ok:false,needsClarification:true,message:"Quanto desse pagamento abate capital e quanto corresponde aos juros?"};
+          }
+          try {
+            return await runAction("repay_loan",ws.id,{
+              ...args,loanId:selected.id,paymentKind:mode,
+              distinctEventMessage:distinctEvent?originalMessage:null,
+            },async(actionId)=>{
+              const {data,error}=await supabase.rpc("register_interest_only_payment",{
+                p_loan_id:selected.id,
+                p_amount:args.amount,
+                p_mode:mode!,
+                p_paid_on:args.date,
+                p_action_id:actionId,
+                p_account_id:account?.id??null,
+                p_notes:args.notes,
+                p_principal_part:mode==="split"?args.principalAmount??null:null,
+                p_interest_part:mode==="split"?args.interestAmount??null:null,
+                p_distinct_event:distinctEvent,
+              });
+              if(error)throw error;
+              return {ok:true,borrower:borrower.name,date:args.date,received:args.amount,
+                receipt:data,interestOnly:true};
+            });
+          }catch(error){
+            const msg=error instanceof Error?error.message:"";
+            if(/POSSIBLE_DUPLICATE_PAYMENT/.test(msg))return {
+              ok:false,possibleDuplicate:true,message:"Já existe pagamento igual desse empréstimo na mesma data. Não registrei de novo."};
+            return {ok:false,needsClarification:true,message:"Não registrei o recebimento. "+(
+              /JUROS_AINDA_NAO_VENCIDOS/.test(msg)?"Os juros desse período ainda não venceram.":
+              /Amortização maior/.test(msg)?"O valor supera o saldo do capital.":
+              /TOTAL_QUITACAO_DIVERGENTE/.test(msg)?"O valor informado é diferente do saldo de quitação.":
+              "Verifique valor, data e saldo do empréstimo."
+            )};
+          }
+        }
+
+        const principal=args.principalAmount;
+        const interest=args.interestAmount;
+        const fees=args.feesAmount??0;
+        if(principal===null||principal===undefined||interest===null||interest===undefined||
+          Math.round((principal+interest+fees)*100)!==Math.round(args.amount*100)){
+          return {ok:false,needsClarification:true,message:"Quanto do pagamento foi amortização do capital e quanto foi juros?"};
+        }
         if(!/(juros|capital|principal|amortiz|somente|só|so\b|quit|saldo)/i.test(originalMessage)){
           return {ok:false,needsClarification:true,message:"Esse pagamento foi de juros, amortização do capital ou parte de cada?"};
         }
-        const distinctEvent=/\b(outro|outra|novo|nova|segundo|segunda|diferente|separado|separada)\b/i.test(originalMessage);
-        return runAction("repay_loan",ws.id,{...args,loanId:selected.id,distinctEventMessage:distinctEvent?originalMessage:null},async(actionId)=>{
+        return runAction("repay_loan",ws.id,{
+          ...args,loanId:selected.id,distinctEventMessage:distinctEvent?originalMessage:null
+        },async(actionId)=>{
           const {data,error}=await supabase.rpc("register_finance_loan_payment",{
             p_loan_id:selected.id,p_amount:args.amount,
-            p_principal_amount:args.principalAmount,p_interest_amount:args.interestAmount,
-            p_fees_amount:args.feesAmount,p_paid_on:args.date,
+            p_principal_amount:principal,p_interest_amount:interest,
+            p_fees_amount:fees,p_paid_on:args.date,
             p_action_id:actionId,p_account_id:account?.id??null,
             p_notes:args.notes,p_distinct_event:distinctEvent,
           });
           if(error)throw error;
-          return {ok:true,paymentId:data,loanId:selected.id,borrower:borrower.name,total:args.amount,
-            principal:args.principalAmount,interest:args.interestAmount,fees:args.feesAmount,date:args.date};
+          return {ok:true,paymentId:data,loanId:selected.id,borrower:borrower.name,
+            total:args.amount,principal,interest,fees,date:args.date};
         });
       },
     }),
