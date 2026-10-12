@@ -1,6 +1,6 @@
 # Prime Finance
 
-Painel financeiro e operacional para **Prime Group + finanças pessoais + recebíveis/juros**, com integração preparada para **Cargozilla, WhatsApp, Open Finance/Pluggy, Supabase e Vercel AI Gateway**.
+Painel financeiro e operacional para **Prime Group + finanças pessoais + recebíveis/juros**, com integração preparada para **Cargozilla, WhatsApp, Open Finance/Pluggy, Supabase e API oficial da OpenAI**.
 
 ## O que já existe neste starter
 
@@ -14,7 +14,7 @@ Painel financeiro e operacional para **Prime Group + finanças pessoais + receb�
 - motor inicial de conciliação;
 - parser de XML de CT-e;
 - webhook WhatsApp com validação HMAC quando `WHATSAPP_APP_SECRET` estiver configurado;
-- endpoint de interpretação financeira com Vercel AI Gateway / AI SDK;
+- agente financeiro com API oficial OpenAI Responses / AI SDK, ferramentas de registro e leitura de imagens;
 - adaptadores de Cargozilla e Pluggy desacoplados do domínio;
 - CI de build no GitHub.
 
@@ -33,6 +33,20 @@ Painel financeiro e operacional para **Prime Group + finanças pessoais + receb�
 Copie `.env.example` para `.env.local` e preencha somente o que for usar.
 
 Sem essas variáveis, a interface continua em modo de demonstração.
+
+## 2.1. Ativar a IA OpenAI em produção
+
+1. Acesse https://platform.openai.com e crie um projeto de API com faturamento habilitado. A assinatura do ChatGPT não inclui créditos de API.
+2. Crie uma chave de API em https://platform.openai.com/api-keys. Não coloque a chave no GitHub nem a envie por chat.
+3. No projeto `prime-finance` da Vercel, em **Settings > Environment Variables**, adicione:
+   - `OPENAI_API_KEY` (sensitive/encrypted, produção/preview/desenvolvimento conforme necessário);
+   - `PRIME_AGENT_MODEL=gpt-6-astra` (opcional: esse já é o padrão da aplicação);
+   - `PRIME_VISION_MODEL` somente se quiser outro modelo para imagens.
+4. Faça um novo deploy em produção para aplicar a chave.
+5. Após login, envie a mensagem `Quais funções você pode executar? Não registre nada.` para confirmar a resposta sem alterar dados.
+6. Teste um lançamento fictício, confira o painel e só depois registre valores reais.
+
+**Segurança:** a chave é lida somente no servidor; chamadas usam `store: false` e desabilitam chamadas paralelas de ferramentas. Controle os limites e o consumo na OpenAI Platform. Sem `OPENAI_API_KEY`, a API retorna erro de configuração, sem tentar o antigo modelo gratuito.
 
 ## 3. Instalar e rodar
 
