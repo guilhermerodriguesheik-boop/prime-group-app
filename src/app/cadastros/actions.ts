@@ -194,21 +194,34 @@ export async function createLoan(formData: FormData) {
   if (amount <= 0) throw new Error("Informe capital maior que zero.");
   const disbursed = formData.get("disbursed") === "yes";
   const accountId = textValue(formData,"account_id") || null;
-  const { error } = await supabase.rpc("create_finance_loan", {
+  const ratePeriod = textValue(formData,"rate_period") || "month";
+  const interestOnly = formData.get("interest_only") === "yes" && interestType === "simple" && ratePeriod === "month";
+  const loanArgs = {
     p_workspace_id: workspace,
     p_borrower_name: borrower.name,
     p_principal: amount,
-    p_interest_type: interestType,
-    p_periodic_rate: rate ? numberValue(formData,"periodic_rate") : null,
-    p_rate_period: interestType === "simple" || interestType === "compound" ? (textValue(formData,"rate_period") || "month") : null,
-    p_fixed_interest: fixed ? numberValue(formData,"fixed_interest") : null,
     p_start_date: textValue(formData,"start_date"),
-    p_maturity_date: textValue(formData,"maturity_date") || null,
-    p_notes: textValue(formData,"notes") || null,
     p_action_id: crypto.randomUUID(),
     p_record_disbursement: disbursed,
     p_account_id: accountId,
-  });
+  };
+  const { error } = interestOnly
+    ? await supabase.rpc("create_interest_only_loan",{
+        ...loanArgs,
+        p_monthly_rate:rate?numberValue(formData,"periodic_rate"):0,
+        p_first_due_date:textValue(formData,"first_interest_due_date")||null,
+        p_notes:textValue(formData,"notes")||null,
+        p_final_maturity_date:textValue(formData,"maturity_date")||null,
+      })
+    : await supabase.rpc("create_finance_loan",{
+        ...loanArgs,
+        p_interest_type:interestType,
+        p_periodic_rate:rate?numberValue(formData,"periodic_rate"):null,
+        p_rate_period:interestType==="simple"||interestType==="compound"?ratePeriod:null,
+        p_fixed_interest:fixed?numberValue(formData,"fixed_interest"):null,
+        p_maturity_date:textValue(formData,"maturity_date")||null,
+        p_notes:textValue(formData,"notes")||null,
+      });
   if (error) throw error;
   refreshAll();
 }
