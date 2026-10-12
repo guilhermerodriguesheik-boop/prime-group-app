@@ -380,15 +380,15 @@ export function createAssistantTools(input: CreateToolsInput) {
     }),
 
     cadastrar_veiculo: tool({
-      description: "Cadastra um veículo da Prime Group.",
+      description: "Cadastra um veículo da Prime Group mesmo que a quilometragem e o valor de mercado sejam desconhecidos. Os únicos dados obrigatórios são apelido e ambiente Prime Group. Para odometerKm e estimatedValue desconhecidos, envie null explicitamente, nunca invente e nunca use zero como preenchimento.",
       inputSchema: z.object({
         nickname: z.string().min(2),
-        plate: z.string().optional(),
+        plate: z.string().optional().describe("Placa somente se informada pelo usuário."),
         make: z.string().optional(),
         model: z.string().optional(),
         year: z.number().int().min(1950).max(2100).optional(),
-        odometerKm: z.number().nonnegative().optional(),
-        estimatedValue: z.number().nonnegative().optional(),
+        odometerKm: z.number().nonnegative().nullable().describe("Quilometragem: envie null quando não informada. O banco permite null."),
+        estimatedValue: z.number().nonnegative().nullable().describe("Valor de mercado em reais: envie null quando não informado. O banco permite null."),
       }),
       execute: async (args) => {
         const ws = workspace("prime");
