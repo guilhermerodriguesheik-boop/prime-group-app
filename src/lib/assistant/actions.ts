@@ -10,6 +10,7 @@ type Account = { id: string; workspace_id: string; name: string; institution: st
 type Card = { id: string; workspace_id: string; name: string; issuer: string | null; last4: string | null };
 type Vehicle = { id: string; workspace_id: string; nickname: string; plate: string | null; model: string | null };
 type Counterparty = { id: string; workspace_id: string; name: string; document: string | null; kind: string };
+type Loan = { id: string; workspace_id: string; counterparty_id: string; principal: number; status: string; start_date: string; maturity_date: string | null; periodic_rate: number | null; interest_type: string };
 
 export type ExecutedAssistantAction = {
   type: string;
@@ -30,6 +31,7 @@ type CreateToolsInput = {
   cards: Card[];
   vehicles: Vehicle[];
   counterparties: Counterparty[];
+  loans: Loan[];
 };
 
 function normalize(value: string) {
@@ -72,6 +74,8 @@ function actionLabel(actionType: string) {
     create_recurring: "Recorrência",
     settle_receivable: "Baixa de recebível",
     settle_payable: "Baixa de conta a pagar",
+    create_loan: "Empréstimo a juros",
+    repay_loan: "Recebimento de empréstimo",
   };
   return labels[actionType] ?? actionType;
 }
@@ -89,6 +93,7 @@ export function createAssistantTools(input: CreateToolsInput) {
     cards,
     vehicles,
     counterparties,
+    loans,
   } = input;
 
   const actions: ExecutedAssistantAction[] = [];
@@ -228,9 +233,115 @@ export function createAssistantTools(input: CreateToolsInput) {
   }
 
   const tools = {
+    cadastrar_emprestimo: tool({
+      description: "Cadastra um empréstimo em dinheiro concedido a outra pessoa no ambiente exclusivo Juros. Use para 'emprestei 10 mil ao João a 5% ao mês'. Cria contrato, tomador e, se o capital JÁ FOI entregue, registra a saída de capital sem classificar como despesa operacional. Taxa e juros não são renda recebida. Nunca use a ferramenta genérica de movimento no lugar.",
+      inputSchema: z.object({
+        borrowerName: z.string().trim().min(2),
+        principal: z.number().positive(),
+        interestType: z.enum(["simple","compound","fixed","manual"]).describe("simple: juros simples; compound: compostos; fixed: valor fixo; manual: sem taxa definida ainda."),
+        ratePercent: z.number().min(0).max(100).nullable().describe("Percentual POR PERÍODO, como 5 para 5%. Null só com interesse fixo ou manual."),
+        ratePeriod: z.enum(["day","week","month","year"]).nullable().describe("Período da taxa, normalmente month para ao mês."),
+        fixedInterest: z.number().nonnegative().nullable().describe("Valor total dos juros fixos em reais; null para taxas percentuais."),
+        startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        maturityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().describe("Vencimento final, ou null se não houver data."),
+        disbursed: z.boolean().describe("TRUE somente quando usuário afirmar que efetivamente já emprestou o capital; FALSE para empréstimo planejado."),
+        accountName: z.string().nullable().describe("Conta do ambiente Juros de onde saiu dinheiro, ou null quando não citada."),
+        notes: z.string().nullable().describe("Termos relevantes declarados pelo usuário, sem prometer cálculos, ou null."),
+      }),
+      execute: async (args) => {
+        const ws = workspace("interest");
+        const account = args.accountName ? resolveAccount(ws.id,args.accountName) : null;
+        if (args.accountName && !account) return {
+          ok: false, needsClarification: true,
+          message: "A conta informada não pertence ao ambiente Juros; informe uma conta cadastrada nele ou faça sem vinculação bancária.",
+        };
+        if (args.interestType === "manual" && !/sem juros|taxa ainda|a combinar|indefinid|nao sei|não sei/i.test(originalMessage)) return {
+          ok: false, needsClarification: true,
+          message: "Faltou definir a taxa de juros. Qual percentual e período (ex.: 5% ao mês)?",
+        };
+        if (args.interestType === "compound" && !/compost[oa]s?|juros sobre juros/i.test(originalMessage)) return {
+          ok: false, needsClarification: true,
+          message: "Não vou assumir juros compostos. Os juros são simples ou compostos?",
+        };
+        return runAction("create_loan",ws.id,args,async(actionId)=>{
+          const {data,error}=await supabase.rpc("create_finance_loan",{
+            p_workspace_id:ws.id,
+            p_borrower_name:args.borrowerName,
+            p_principal:args.principal,
+            p_interest_type:args.interestType,
+            p_periodic_rate:args.ratePercent,
+            p_rate_period:args.ratePeriod,
+            p_fixed_interest:args.fixedInterest,
+            p_start_date:args.startDate,
+            p_maturity_date:args.maturityDate,
+            p_notes:args.notes,
+            p_action_id:actionId,
+            p_record_disbursement:args.disbursed,
+            p_account_id:account?.id??null,
+          });
+          if(error) throw error;
+          return {
+            ok:true,loanId:data,borrower:args.borrowerName,principal:args.principal,
+            ratePercent:args.ratePercent,ratePeriod:args.ratePeriod,
+            status:args.disbursed?"active":"draft",
+            disbursementRecorded:args.disbursed,
+          };
+        });
+      },
+    }),
+
+    registrar_recebimento_emprestimo: tool({
+      description: "Registra pagamentos de empréstimos de terceiros, separando amortização do capital de juros/taxas: 'João me pagou 500 só de juros', 'recebi 800 sendo 300 do principal e 500 de juros'. Não lance como receita genérica. Se o usuário não discriminar o que é juros e capital, pergunte em vez de adivinhar. Empréstimos sempre no ambiente Juros.",
+      inputSchema: z.object({
+        borrowerName: z.string().trim().min(2),
+        loanId: z.string().uuid().nullable().describe("ID do empréstimo se conhecido; null para localizar devedor."),
+        amount: z.number().positive().describe("Total recebido em reais."),
+        principalAmount: z.number().nonnegative().describe("Parcela de amortização de capital (0 se só recebeu juros)."),
+        interestAmount: z.number().nonnegative().describe("Parcela de juros efetivamente recebidos (0 se só recebeu capital)."),
+        feesAmount: z.number().nonnegative().describe("Taxas extras recebidas, 0 se nenhuma."),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        accountName: z.string().nullable().describe("Conta do ambiente Juros que recebeu o depósito, null se não informada."),
+        notes: z.string().nullable(),
+      }),
+      execute: async (args) => {
+        const ws=workspace("interest");
+        const borrower=resolveCounterparty(ws.id,args.borrowerName);
+        if (!borrower) return {ok:false,needsClarification:true,message:"Não encontrei um devedor cadastrado com esse nome em Juros. Qual é o nome completo?"};
+        const possible=loans.filter(loan=>loan.workspace_id===ws.id &&
+          loan.counterparty_id===borrower.id &&
+          ["active","settled"].includes(loan.status));
+        const selected=args.loanId
+          ? possible.find(loan=>loan.id===args.loanId)
+          : possible.length===1 ? possible[0] : undefined;
+        if (!selected) return {ok:false,needsClarification:true,message:"Não identifiquei um único empréstimo ativo desse devedor. Informe qual empréstimo recebeu o pagamento."};
+        const account=args.accountName?resolveAccount(ws.id,args.accountName):null;
+        if(args.accountName && !account) return {ok:false,needsClarification:true,message:"Não encontrei essa conta bancária no ambiente Juros. Indique outra conta ou registre sem conta."};
+        const total= Math.round(args.amount*100);
+        const parts=Math.round(args.principalAmount*100)+Math.round(args.interestAmount*100)+Math.round(args.feesAmount*100);
+        if(total!==parts) return {ok:false,needsClarification:true,message:"Preciso saber quanto foi amortização do capital e quanto foi juros. Os valores não somaram o total recebido."};
+        // User statements of an unspecified receipt must not be silently split.
+        if(!/(juros|capital|principal|amortiz|somente|só|so\b|quit|saldo)/i.test(originalMessage)){
+          return {ok:false,needsClarification:true,message:"Esse pagamento foi de juros, amortização do capital ou parte de cada?"};
+        }
+        const distinctEvent=/\b(outro|outra|novo|nova|segundo|segunda|diferente|separado|separada)\b/i.test(originalMessage);
+        return runAction("repay_loan",ws.id,{...args,loanId:selected.id,distinctEventMessage:distinctEvent?originalMessage:null},async(actionId)=>{
+          const {data,error}=await supabase.rpc("register_finance_loan_payment",{
+            p_loan_id:selected.id,p_amount:args.amount,
+            p_principal_amount:args.principalAmount,p_interest_amount:args.interestAmount,
+            p_fees_amount:args.feesAmount,p_paid_on:args.date,
+            p_action_id:actionId,p_account_id:account?.id??null,
+            p_notes:args.notes,p_distinct_event:distinctEvent,
+          });
+          if(error)throw error;
+          return {ok:true,paymentId:data,loanId:selected.id,borrower:borrower.name,total:args.amount,
+            principal:args.principalAmount,interest:args.interestAmount,fees:args.feesAmount,date:args.date};
+        });
+      },
+    }),
+
     registrar_movimento: tool({
       description:
-        "Registra uma receita ou despesa que o usuário relata já ter ocorrido, mesmo em português informal sem dizer 'registre': 'abasteci 970 no 12.170 dia 7', 'gastei 50 na farmácia'. Não use para simulações, consultas ou menções hipotéticas. Verifique vínculos e possíveis duplicidades antes de registrar.",
+        "Registra uma receita ou despesa comum, NÃO desembolso de empréstimo nem recebimento de juros/capital de empréstimo. O usuário relata o fato mesmo em português informal sem dizer 'registre': 'abasteci 970 no 12.170 dia 7', 'gastei 50 na farmácia'. Não use para simulações, consultas ou menções hipotéticas. Verifique vínculos e possíveis duplicidades antes de registrar.",
       inputSchema: z.object({
         workspaceKind: z.enum(["prime", "personal", "interest"]),
         type: z.enum(["income", "expense"]),
