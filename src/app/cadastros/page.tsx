@@ -125,8 +125,10 @@ export default async function Page() {
           <input name="fixed_interest" inputMode="decimal" placeholder="Juros fixos em R$ (se aplicável)" />
           <input name="start_date" type="date" required />
           <input name="maturity_date" type="date" />
-          <select name="installment_frequency"><option value="monthly">Mensal</option><option value="weekly">Semanal</option><option value="biweekly">Quinzenal</option><option value="custom">Personalizado</option></select>
-          <input name="notes" placeholder="Observações" />
+          <select name="account_id"><option value="">Sem conta vinculada</option>{data.accounts.filter((item) => data.workspaceMap.get(item.workspace_id)?.kind === "interest").map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+          <label className="metric-foot"><input type="checkbox" name="disbursed" value="yes" /> O dinheiro já foi entregue ao devedor (registrar saída de caixa)</label>
+          <input name="notes" placeholder="Observações / condições combinadas" />
+          <div className="metric-foot">Sem marcar a confirmação, o empréstimo fica planejado. Capital emprestado não entra como despesa operacional.</div>
           <button className="button primary" type="submit" disabled={interestPeople.length === 0}>Cadastrar contrato</button>
           {interestPeople.length === 0 && <div className="metric-foot">Cadastre primeiro a pessoa no ambiente Recebíveis / Juros.</div>}
         </form>
@@ -142,7 +144,7 @@ export default async function Page() {
                 <td>{shortDate(item.occurred_at)}</td>
                 <td>{workspaceLabel(data.workspaceMap.get(item.workspace_id)?.kind ?? "")}</td>
                 <td>{item.description}</td>
-                <td>{item.type === "income" ? "Receita" : item.type === "expense" ? "Despesa" : item.type}</td>
+                <td>{item.source === "loan" ? (item.type === "expense" ? "Capital emprestado" : "Empréstimo recebido") : item.type === "income" ? "Receita" : item.type === "expense" ? "Despesa" : item.type}</td>
                 <td className={item.type === "income" ? "positive" : undefined}>{item.type === "expense" ? "− " : ""}{brl(item.amount)}</td>
               </tr>
             ))}
