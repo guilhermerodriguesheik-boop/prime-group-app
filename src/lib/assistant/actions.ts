@@ -130,7 +130,7 @@ export function createAssistantTools(input: CreateToolsInput) {
         ok: false,
         needsClarification: true,
         message: "A mensagem indica outro ambiente financeiro. Confirme se é Prime Group, Pessoal ou Empréstimos/Juros antes de registrar.",
-      } as T & { reused?: boolean };
+      } as unknown as T & { reused?: boolean };
     }
     const key = createHash("sha256")
       .update(
