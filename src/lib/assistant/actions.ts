@@ -261,7 +261,7 @@ export function createAssistantTools(input: CreateToolsInput) {
 
         // Evita registrar novamente o mesmo gasto informado em outra conversa.
         // Uma segunda operação realmente distinta ainda pode ser registrada se o usuário assim indicar.
-        const localDate = args.date ?? new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        const localDate = args.date ?? new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
         const nextDate = new Date(Date.parse(`${localDate}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
         const { data: similar, error: similarError } = await supabase
           .from("transactions")
