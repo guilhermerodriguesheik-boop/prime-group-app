@@ -198,6 +198,18 @@ export async function processWhatsAppQueue(maxMessages=1) {
         await rpc("whatsapp_finish_event",{p_secret:secret,p_event_id:event.id,p_state:"ignored"});
         continue;
       }
+      const limit = Math.min(500,Math.max(5,Number(process.env.WHATSAPP_DAILY_LIMIT||60)||60));
+      const withinLimit = await rpc<boolean>("whatsapp_usage_within_limit",{
+        p_secret:secret,p_event_id:event.id,p_daily_limit:limit,
+      });
+      if (!withinLimit) {
+        const answer="O limite diário de uso da IA pelo WhatsApp foi atingido. Use o aplicativo Prime Finance e tente novamente amanhã.";
+        await sendText(event.from||"",answer);
+        await rpc("whatsapp_finish_event",{p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:answer});
+        await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
+        processed++;
+        continue;
+      }
       let text = (event.body||"").trim();
       let visual: {bytes:Uint8Array;mime:string;filename:string}|undefined;
       if (event.mediaId) {
