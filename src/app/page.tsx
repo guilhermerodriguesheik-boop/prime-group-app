@@ -102,6 +102,7 @@ export default async function Home() {
       <SectionTitle title="Ações rápidas" />
       <div className="quick">
         <Link href="/cadastros">Novo lançamento / conta / veículo</Link>
+        <Link href="/registros">Registros parciais salvos pela IA</Link>
         <Link href="/assistente">Consultar com IA</Link>
         <Link href="/documentos">Enviar nota, XML ou comprovante</Link>
         <Link href="/integracoes">Integrações</Link>
