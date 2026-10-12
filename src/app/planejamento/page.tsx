@@ -59,7 +59,7 @@ export default async function Page() {
                 </td>
               </tr>
             ))}
-            {pendingReminders.length === 0 && <tr><td colSpan={7}>Nenhum lembrete cadastrado. Você pode pedir à IA: "Me lembra do aluguel dia 20".</td></tr>}
+            {pendingReminders.length === 0 && <tr><td colSpan={7}>Nenhum lembrete cadastrado. Você pode pedir à IA: &ldquo;Me lembra do aluguel dia 20&rdquo;.</td></tr>}
           </tbody>
         </table>
       </div>
