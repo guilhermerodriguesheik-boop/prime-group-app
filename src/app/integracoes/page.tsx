@@ -16,10 +16,10 @@ export default function Page() {
       tone: "green",
     },
     {
-      name: "Vercel AI Gateway",
-      description: "Assistente financeiro com GPT 5.6 Luna por padrão",
-      status: "Online",
-      tone: "green",
+      name: "OpenAI API",
+      description: "Assistente financeiro com GPT-6 Astra e ferramentas de lançamentos",
+      status: process.env.OPENAI_API_KEY ? "Configurada" : "Não configurada",
+      tone: process.env.OPENAI_API_KEY ? "green" : "orange",
     },
     {
       name: "WhatsApp Cloud API",
