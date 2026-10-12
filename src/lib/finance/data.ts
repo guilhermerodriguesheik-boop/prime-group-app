@@ -28,6 +28,7 @@ export async function getFinanceSnapshot() {
     reminderResult,
     loanPaymentsResult,
     loanInstallmentsResult,
+    interestOnlyResult,
   ] = await Promise.all([
     supabase.from("workspaces").select("id,name,kind,currency").order("kind"),
     supabase.from("accounts").select("id,workspace_id,name,institution,account_type,opening_balance,active").eq("active", true).order("name"),
@@ -36,13 +37,14 @@ export async function getFinanceSnapshot() {
     supabase.from("receivables").select("id,workspace_id,description,amount,received_amount,due_date,status").neq("status", "cancelled").order("due_date").limit(300),
     supabase.from("vehicles").select("id,workspace_id,nickname,plate,make,model,year,status,odometer_km,estimated_value").order("nickname"),
     supabase.from("trips").select("id,workspace_id,vehicle_id,reference,origin,destination,started_at,ended_at,distance_km,freight_revenue,status").order("started_at", { ascending: false }).limit(200),
-    supabase.from("loans").select("id,workspace_id,counterparty_id,principal,periodic_rate,rate_period,interest_type,fixed_interest,start_date,status,maturity_date,direction").neq("status", "cancelled").limit(200),
+    supabase.from("loans").select("id,workspace_id,counterparty_id,principal,periodic_rate,rate_period,interest_type,fixed_interest,start_date,status,maturity_date,direction,interest_only,first_interest_due_date").neq("status", "cancelled").limit(200),
     supabase.from("counterparties").select("id,workspace_id,name,document,phone,email,kind").order("name").limit(300),
     supabase.from("cards").select("id,workspace_id,account_id,name,issuer,last4,closing_day,due_day,credit_limit,active").eq("active",true).order("name"),
     supabase.from("recurring_entries").select("id,workspace_id,name,type,amount,frequency,due_day,starts_on,ends_on,active").eq("active",true).order("due_day"),
     supabase.from("payment_reminders").select("id,workspace_id,user_id,description,amount,due_date,remind_on,status,payable_id").eq("user_id", user.id).eq("status","pending").order("remind_on").limit(200),
     supabase.from("loan_payments").select("id,loan_id,amount,principal_amount,interest_amount,fees_amount,paid_at,notes").order("paid_at", { ascending: false }).limit(500),
     supabase.from("loan_installments").select("id,loan_id,installment_number,due_date,principal_due,interest_due,fees_due,paid_amount,status").order("due_date").limit(500),
+    supabase.from("interest_only_loan_status").select("loan_id,workspace_id,principal_outstanding,monthly_interest,accrued_interest_due,payoff_due,next_interest_due_date,last_interest_due_date").limit(300),
   ]);
 
   const error = [
@@ -60,6 +62,7 @@ export async function getFinanceSnapshot() {
     reminderResult.error,
     loanPaymentsResult.error,
     loanInstallmentsResult.error,
+    interestOnlyResult.error,
   ].find(Boolean);
 
   if (error) throw error;
@@ -78,6 +81,7 @@ export async function getFinanceSnapshot() {
   const paymentReminders = reminderResult.data ?? [];
   const loanPayments = loanPaymentsResult.data ?? [];
   const loanInstallments = loanInstallmentsResult.data ?? [];
+  const interestOnlyStatus = interestOnlyResult.data ?? [];
 
   const workspaceMap = new Map(workspaces.map((item) => [item.id, item]));
   const now = new Date();
@@ -173,6 +177,7 @@ export async function getFinanceSnapshot() {
     paymentReminders,
     loanPayments,
     loanInstallments,
+    interestOnlyStatus,
     monthly,
     cash,
     receivable30,
