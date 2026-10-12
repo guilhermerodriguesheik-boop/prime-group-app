@@ -906,6 +906,7 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          external_action_id: string | null
           fees_amount: number
           id: string
           installment_id: string | null
@@ -919,6 +920,7 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          external_action_id?: string | null
           fees_amount?: number
           id?: string
           installment_id?: string | null
@@ -932,6 +934,7 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          external_action_id?: string | null
           fees_amount?: number
           id?: string
           installment_id?: string | null
@@ -972,6 +975,8 @@ export type Database = {
           counterparty_id: string
           created_at: string
           direction: string
+          disbursement_transaction_id: string | null
+          external_action_id: string | null
           fixed_interest: number | null
           id: string
           installment_frequency: string | null
@@ -991,6 +996,8 @@ export type Database = {
           counterparty_id: string
           created_at?: string
           direction?: string
+          disbursement_transaction_id?: string | null
+          external_action_id?: string | null
           fixed_interest?: number | null
           id?: string
           installment_frequency?: string | null
@@ -1010,6 +1017,8 @@ export type Database = {
           counterparty_id?: string
           created_at?: string
           direction?: string
+          disbursement_transaction_id?: string | null
+          external_action_id?: string | null
           fixed_interest?: number | null
           id?: string
           installment_frequency?: string | null
@@ -1025,6 +1034,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "loans_disbursement_transaction_id_fkey"
+            columns: ["disbursement_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "loans_counterparty_id_fkey"
             columns: ["counterparty_id"]
