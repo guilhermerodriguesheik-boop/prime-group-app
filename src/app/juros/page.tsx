@@ -18,6 +18,8 @@ export default async function Page() {
   const monthlyState = new Map(data.interestOnlyStatus.map((item) => [item.loan_id, item]));
   const monthlyExpected = data.interestOnlyStatus.reduce((sum, item) => sum + Number(item.monthly_interest??0),0);
   const interestOverdue = data.interestOnlyStatus.reduce((sum, item) => sum + Number(item.accrued_interest_due??0),0);
+  const dailyPenaltiesOutstanding = data.interestOnlyStatus.reduce((sum, item) => sum + Number(item.late_fees_due??0),0);
+  const collectedPenalties = data.loanPayments.reduce((sum, item) => sum + Number(item.fees_amount??0),0);
   const capitalOutstanding = loans.filter((loan) => loan.status === "active").reduce((sum, loan) => {
     const principalPaid = paymentsFor(loan.id).reduce((a, p) => a + Number(p.principal_amount), 0);
     return sum + Math.max(0, Number(loan.principal) - principalPaid);
@@ -39,10 +41,11 @@ export default async function Page() {
       </div>
 
       <div className="notice">
-        O padrão de cobrança é de juros mensais calculados sobre o capital ainda devido, sem amortização automática.
-        Por exemplo, capital de R$ 1.000,00 com taxa de 30% ao mês gera R$ 300,00 por vencimento.
-        Se o devedor pagar apenas os juros, o capital continua R$ 1.000,00. A quitação soma o capital e os juros vencidos ainda não pagos.
-        Capital emprestado ou devolvido movimenta o caixa, mas não entra no resultado como receita ou despesa. Apenas os juros efetivamente recebidos entram no resultado.
+        Juros pagos em dia não reduzem o capital. Exemplo: R$ 1.000,00 a 30% ao mês gera R$ 300,00 de juros.
+        Após o vencimento não pago, novos contratos podem cobrar R$ 10,00 por dia em atraso.
+        No mês seguinte, a taxa incide sobre o capital original mais juros vencidos e multa diária ainda não pagos.
+        A quitação mostra capital, juros e multas separadamente. O valor dos juros do próximo mês é uma estimativa que pode crescer enquanto houver atraso.
+        Multas e juros dependem das condições acordadas e de sua validade jurídica.
       </div>
 
       <div className="grid grid-4">
@@ -53,8 +56,10 @@ export default async function Page() {
       </div>
 
       <div className="grid grid-4">
-        <Metric label="Cobrança mensal atual de juros" value={brl(monthlyExpected)} />
+        <Metric label="Juros estimados do próximo mês" value={brl(monthlyExpected)} />
         <Metric label="Juros vencidos e não pagos" value={brl(interestOverdue)} tone={interestOverdue > 0 ? "warning" : undefined} />
+        <Metric label="Multas por atraso em aberto" value={brl(dailyPenaltiesOutstanding)} tone={dailyPenaltiesOutstanding > 0 ? "warning" : undefined} />
+        <Metric label="Multas já recebidas" value={brl(collectedPenalties)} tone="positive" />
       </div>
 
       <SectionTitle title="Empréstimos cadastrados" />
@@ -62,7 +67,7 @@ export default async function Page() {
         <table>
           <thead>
             <tr><th>Devedor</th><th>Capital original</th><th>Capital devolvido</th>
-              <th>Capital devedor</th><th>Taxa combinada</th><th>Juro mensal</th><th>Juro vencido</th><th>Próximo juro</th><th>Quitação hoje</th><th>Início</th>
+              <th>Capital devedor</th><th>Taxa combinada</th><th>Próximo juro previsto</th><th>Juro vencido</th><th>Multa acumulada</th><th>Próximo vencimento</th><th>Quitação hoje</th><th>Início</th>
               <th>Devolução do capital</th><th>Situação</th></tr>
           </thead>
           <tbody>
@@ -82,9 +87,10 @@ export default async function Page() {
                   <td>{brl(loan.principal)}</td>
                   <td>{brl(repaid)}</td>
                   <td>{brl(outstanding)}</td>
-                  <td>{rate}{loan.interest_only ? " · só juros mensais" : ""}</td>
+                  <td>{rate}{loan.interest_only ? " · só juros mensais; atraso R$ " + Number(loan.late_fee_daily).toLocaleString("pt-BR") + "/dia" + (loan.capitalize_overdue ? " · capitaliza atraso" : "") : ""}</td>
                   <td>{state ? brl(state.monthly_interest) : "—"}</td>
                   <td>{state ? brl(state.accrued_interest_due) : "—"}</td>
+                  <td>{state ? brl(state.late_fees_due) : "—"}</td>
                   <td>{state ? shortDate(state.next_interest_due_date) : "—"}</td>
                   <td>{state ? brl(state.payoff_due) : "—"}</td>
                   <td>{shortDate(loan.start_date)}</td>
@@ -97,7 +103,7 @@ export default async function Page() {
                 </tr>
               );
             })}
-            {loans.length === 0 && <tr><td colSpan={12}>Nenhum empréstimo cadastrado. Inicie uma conversa com a IA ou use o formulário.</td></tr>}
+            {loans.length === 0 && <tr><td colSpan={13}>Nenhum empréstimo cadastrado. Inicie uma conversa com a IA ou use o formulário.</td></tr>}
           </tbody>
         </table>
       </div>
