@@ -74,13 +74,35 @@ select * from public.bootstrap_my_finance();
 
 A função cria os workspaces Prime Group, Pessoal e Recebíveis e Juros.
 
-## 5. Integrações
+## 5. WhatsApp Cloud API: ativação e limites
 
-- Cargozilla: `src/lib/integrations/cargozilla.ts`
-- WhatsApp: `/api/whatsapp/webhook`
-- Open Finance/Pluggy: adaptador desacoplado
-- CT-e XML fallback: `POST /api/cte/import`
+O backend suporta assinatura HMAC da Meta, persistência idempotente, fila, transcrição de áudio, fotos, PDFs e leitura de XML. O canal só opera com token/telefone aprovados pela Meta e configurados na Vercel.
 
+### Ativar pela Meta
+
+1. No Meta for Developers, selecionar o aplicativo Business/WhatsApp e confirmar uma conta WhatsApp Business e um número comercial. Verificações/recuperação do Business Manager exigem o administrador autenticado; não enviar senha ou token no chat.
+2. Na Vercel, projeto prime-finance, criar variáveis production META_WHATSAPP_APP_SECRET, META_WHATSAPP_ACCESS_TOKEN e META_WHATSAPP_PHONE_NUMBER_ID como privadas/sensitive. Adicionar NEXT_PUBLIC_WHATSAPP_NUMBER apenas quando número ativo.
+3. Em Webhooks da Meta, usar callback https://prime-finance-ochre.vercel.app/api/webhooks/whatsapp e o valor do WHATSAPP_VERIFY_TOKEN já configurado na Vercel. Selecionar objeto whatsapp_business_account, campo messages.
+4. Inscrever o aplicativo na WhatsApp Business Account (WABA) pelo endpoint Meta POST /{WABA-ID}/subscribed_apps com token autorizado. Fazer redeploy e testar envio e recebimento.
+5. No Prime Finance -> Integrações, gerar código de vínculo e enviar do WhatsApp pessoal a mensagem VINCULAR seguida dos oito dígitos para o número comercial ativo. O código dura 15 minutos.
+
+### Segurança e funcionamento
+
+- Apenas números vinculados por código de posse do aparelho podem acessar finanças. Outros remetentes são ignorados. O vínculo é revogável no painel.
+- Mensagens chegam em webhook assinado X-Hub-Signature-256; um processamento posterior consulta apenas dados do usuário vinculado. As funções do banco conferem segredo de ingresso e propriedade dos workspaces.
+- Textos, áudios (com transcrição OpenAI), fotos, PDFs e XML podem ser analisados. Consultas não registram operações.
+- Fretes podem ser gravados com dados parciais, sem quilometragem. Transações comuns só são executadas se estiverem claros ambiente, valor, data e pagamento/recebimento efetivo.
+- Juros, liquidações de empréstimos e baixas mais complexas pelo WhatsApp ficam em Registros parciais, sem movimentar o caixa, até que o fluxo tenha validação específica no app.
+- Notas fiscais não provam pagamentos. Ações têm identificador único derivado do ID Meta para reduzir duplicidade.
+- A Vercel executa o processamento após confirmação do webhook (Next.js after); um cron diário protegido por CRON_SECRET recupera itens pendentes. Em plano Hobby, cron com mais frequência não é suportado.
+- Token da Meta, App Secret, verify token e ingress secret nunca são variáveis NEXT_PUBLIC_ e nunca entram no GitHub.
+- Cobranças da Meta/WhatsApp Business Platform e da OpenAI são independentes. Mensagens proativas fora da janela permitida pela Meta exigem templates aprovados.
+
+### Outros conectores
+
+- Cargozilla: src/lib/integrations/cargozilla.ts
+- Open Finance/Pluggy: adaptador futuro
+- CT-e XML: POST /api/cte/import
 ## 6. Deploy
 
 GitHub → Vercel → env vars → preview por branch → produção após checks.
