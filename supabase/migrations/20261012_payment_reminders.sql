@@ -28,3 +28,5 @@ create policy payment_reminders_owner_update on public.payment_reminders
   for update to authenticated
   using (user_id = (select auth.uid()) and public.can_edit_workspace(workspace_id))
   with check (user_id = (select auth.uid()) and public.can_edit_workspace(workspace_id));
+
+grant select, insert, update on public.payment_reminders to authenticated;
