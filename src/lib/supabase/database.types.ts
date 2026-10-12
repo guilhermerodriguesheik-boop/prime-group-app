@@ -1179,6 +1179,63 @@ export type Database = {
           },
         ]
       }
+      payment_reminders: {
+        Row: {
+          amount: number | null
+          created_at: string
+          description: string
+          due_date: string
+          id: string
+          payable_id: string | null
+          remind_on: string
+          status: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          description: string
+          due_date: string
+          id?: string
+          payable_id?: string | null
+          remind_on: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          description?: string
+          due_date?: string
+          id?: string
+          payable_id?: string | null
+          remind_on?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_reminders_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_reminders_payable_id_fkey"
+            columns: ["payable_id"]
+            isOneToOne: false
+            referencedRelation: "payables"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string

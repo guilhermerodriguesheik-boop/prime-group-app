@@ -197,7 +197,7 @@ export function CommandCenter({
           <div className="command-kicker">IA OPERACIONAL</div>
           <h2>O que você quer fazer?</h2>
           <p>
-            Digite um comando ou envie foto, PDF, XML ou CT-e. A IA pode analisar e registrar dados no Prime Finance.
+            Converse normalmente: conte o que pagou, recebeu ou quer saber. Também pode enviar foto, PDF ou CT-e.
           </p>
         </div>
         <select
@@ -243,7 +243,13 @@ export function CommandCenter({
         <textarea
           value={message}
           onChange={(event) => setMessage(event.target.value)}
-          placeholder="Ex.: Lança R$ 480 de diesel no VW 12.170 hoje e vincula à conta Itaú."
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+          placeholder="Ex.: abasteci 970 no 12.170 dia 7"
           rows={compact ? 3 : 4}
           maxLength={8000}
         />
@@ -285,7 +291,7 @@ export function CommandCenter({
             disabled={busy || (!message.trim() && files.length === 0)}
             type="submit"
           >
-            {busy ? "Processando..." : "Enviar para a IA"}
+            {busy ? "Processando..." : "Enviar"}
           </button>
         </div>
 
@@ -305,7 +311,7 @@ export function CommandCenter({
       </div>
 
       <div className="command-safety">
-        Ações são registradas no histórico da IA. Baixas de contas e recebíveis só são feitas quando você pedir explicitamente.
+        Fale naturalmente. A IA registra fatos claros, pergunta quando houver dúvidas e não dá baixa em contas sem confirmação de pagamento.
       </div>
     </section>
   );

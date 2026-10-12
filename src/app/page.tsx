@@ -6,6 +6,12 @@ import { brl, pct, shortDate, workspaceLabel } from "@/lib/finance/format";
 
 export default async function Home() {
   const data = await getFinanceSnapshot();
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const weekEnd = new Date(Date.parse(`${today}T12:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
+  const remindersDue = data.paymentReminders.filter((item) => item.status === "pending" && item.remind_on <= today);
+  const payablesSoon = data.payables.filter((item) =>
+    ["open", "partial", "overdue"].includes(item.status) && item.due_date <= weekEnd
+  );
 
   return (
     <>
@@ -22,6 +28,13 @@ export default async function Home() {
         <div className="notice attention">
           <b>Atenção:</b> {data.overdueReceivables > 0 ? `${brl(data.overdueReceivables)} a receber em atraso. ` : ""}
           {data.overduePayables > 0 ? `${brl(data.overduePayables)} a pagar em atraso.` : ""}
+        </div>
+      )}
+
+      {(remindersDue.length > 0 || payablesSoon.length > 0) && (
+        <div className="notice attention">
+          <b>Vencimentos:</b> {remindersDue.length} lembrete(s) para verificar e {payablesSoon.length} conta(s) vencendo ou atrasadas nos próximos 7 dias.{" "}
+          <Link href="/planejamento">Ver avisos e vencimentos</Link>
         </div>
       )}
 

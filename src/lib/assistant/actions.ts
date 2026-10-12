@@ -62,6 +62,7 @@ function actionLabel(actionType: string) {
     create_transaction: "Lançamento financeiro",
     create_receivable: "Conta a receber",
     create_payable: "Conta a pagar",
+    create_reminder: "Lembrete",
     create_counterparty: "Pessoa/empresa",
     create_vehicle: "Veículo",
     create_account: "Conta bancária/carteira",
@@ -229,7 +230,7 @@ export function createAssistantTools(input: CreateToolsInput) {
   const tools = {
     registrar_movimento: tool({
       description:
-        "Registra uma receita ou despesa já realizada. Use somente quando o usuário pedir para lançar/registrar uma movimentação ou quando um comprovante enviado deixar o gasto/receita inequívoco.",
+        "Registra uma receita ou despesa que o usuário relata já ter ocorrido, mesmo em português informal sem dizer 'registre': 'abasteci 970 no 12.170 dia 7', 'gastei 50 na farmácia'. Não use para simulações, consultas ou menções hipotéticas. Verifique vínculos e possíveis duplicidades antes de registrar.",
       inputSchema: z.object({
         workspaceKind: z.enum(["prime", "personal", "interest"]),
         type: z.enum(["income", "expense"]),
@@ -243,10 +244,56 @@ export function createAssistantTools(input: CreateToolsInput) {
       }),
       execute: async (args) => {
         const ws = workspace(args.workspaceKind);
-        return runAction("create_transaction", ws.id, args, async (actionId) => {
-          const account = resolveAccount(ws.id, args.accountName);
-          const card = resolveCard(ws.id, args.cardName);
-          const vehicle = resolveVehicle(ws.id, args.vehicleNameOrPlate);
+        const account = resolveAccount(ws.id, args.accountName);
+        const card = resolveCard(ws.id, args.cardName);
+        const vehicle = resolveVehicle(ws.id, args.vehicleNameOrPlate);
+
+        // Nunca registre um gasto sem o vínculo mencionado na conversa.
+        if (args.vehicleNameOrPlate && !vehicle) {
+          return { ok: false, needsClarification: true, message: "Não identifiquei com segurança o veículo informado. Pergunte qual veículo cadastrado devo usar." };
+        }
+        if (args.cardName && !card) {
+          return { ok: false, needsClarification: true, message: "O cartão mencionado não foi identificado no cadastro. Pergunte qual cartão utilizar." };
+        }
+        if (args.accountName && !account) {
+          return { ok: false, needsClarification: true, message: "A conta mencionada não foi identificada no cadastro. Pergunte qual conta utilizar." };
+        }
+
+        // Evita registrar novamente o mesmo gasto informado em outra conversa.
+        // Uma segunda operação realmente distinta ainda pode ser registrada se o usuário assim indicar.
+        const localDate = args.date ?? new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        const nextDate = new Date(Date.parse(`${localDate}T12:00:00Z`) + 86400000).toISOString().slice(0, 10);
+        const { data: similar, error: similarError } = await supabase
+          .from("transactions")
+          .select("id,description,vehicle_id,account_id,card_id")
+          .eq("workspace_id", ws.id)
+          .eq("type", args.type)
+          .eq("amount", args.amount)
+          .neq("status", "cancelled")
+          .gte("occurred_at", `${localDate}T00:00:00-03:00`)
+          .lt("occurred_at", `${nextDate}T00:00:00-03:00`)
+          .limit(40);
+        if (similarError) throw similarError;
+        const duplicate = (similar ?? []).some((item) => {
+          const sameVehicle = Boolean(vehicle && item.vehicle_id === vehicle.id);
+          const sameDescription = normalize(item.description) === normalize(args.description);
+          const bothFuel = /diesel|abastec|combustivel/i.test(normalize(item.description)) &&
+            /diesel|abastec|combustivel/i.test(normalize(args.description));
+          const sameLinkedAccount = Boolean(account && item.account_id === account.id);
+          const sameLinkedCard = Boolean(card && item.card_id === card.id);
+          return ((sameVehicle && (sameDescription || bothFuel)) ||
+            (sameDescription && (sameLinkedAccount || sameLinkedCard || (!vehicle && !account && !card))));
+        });
+        const explicitNewOperation = /\b(outr[oa]|nov[oa]|diferente|separad[oa]|segund[oa])\b/i.test(originalMessage);
+        if (duplicate && !explicitNewOperation) {
+          return { ok: false, possibleDuplicate: true, message: "Já há um lançamento semelhante, no mesmo dia e valor. Não registrei novamente. Pergunte se é outra operação diferente." };
+        }
+
+        return runAction(
+          "create_transaction",
+          ws.id,
+          { ...args, distinctEventMessage: explicitNewOperation ? originalMessage.trim() : null },
+          async (actionId) => {
           const counterparty = resolveCounterparty(ws.id, args.counterpartyName);
           const occurredAt = args.date ? `${args.date}T12:00:00-03:00` : new Date().toISOString();
 
@@ -312,16 +359,30 @@ export function createAssistantTools(input: CreateToolsInput) {
     }),
 
     registrar_conta_pagar: tool({
-      description: "Cria uma conta a pagar futura. Não use para uma despesa que já foi paga; use registrar_movimento.",
+      description: "Cria uma conta/parcela/dívida a pagar futura quando o usuário disser informalmente 'tenho que pagar 1500 dia 20'. Para despesas já pagas use registrar_movimento. Se também pedir um lembrete antecipado, preencha remindOn.",
       inputSchema: z.object({
         workspaceKind: z.enum(["prime", "personal", "interest"]),
         description: z.string().min(2),
         amount: z.number().positive(),
         dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        remindOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Data de aviso no painel, somente quando o usuário pedir lembrete explícito."),
         counterpartyName: z.string().optional(),
       }),
       execute: async (args) => {
         const ws = workspace(args.workspaceKind);
+        const { data: existing, error: existingError } = await supabase
+          .from("payables")
+          .select("id,description")
+          .eq("workspace_id", ws.id)
+          .eq("amount", args.amount)
+          .eq("due_date", args.dueDate)
+          .in("status", ["open", "partial", "overdue"])
+          .limit(50);
+        if (existingError) throw existingError;
+        if ((existing ?? []).some((item) => normalize(item.description) === normalize(args.description))) {
+          return { ok: false, possibleDuplicate: true, message: "Essa conta já está cadastrada com o mesmo valor e vencimento. Não criei outra." };
+        }
+
         return runAction("create_payable", ws.id, args, async (actionId) => {
           const counterparty = resolveCounterparty(ws.id, args.counterpartyName);
           const { data, error } = await supabase
@@ -338,7 +399,69 @@ export function createAssistantTools(input: CreateToolsInput) {
             .select("id")
             .single();
           if (error) throw error;
-          return { ok: true, payableId: data.id, auditRef: actionId, amount: args.amount, dueDate: args.dueDate };
+
+          let reminderCreated = false;
+          let reminderWarning: string | null = null;
+          if (args.remindOn) {
+            const reminder = await supabase.from("payment_reminders").insert({
+              user_id: userId,
+              workspace_id: ws.id,
+              description: args.description,
+              amount: args.amount,
+              due_date: args.dueDate,
+              remind_on: args.remindOn,
+              payable_id: data.id,
+            });
+            if (reminder.error) {
+              reminderWarning = "A conta foi criada, mas o lembrete falhou. Peça o lembrete separadamente.";
+            } else reminderCreated = true;
+          }
+          return { ok: true, payableId: data.id, auditRef: actionId, amount: args.amount, dueDate: args.dueDate, reminderCreated, reminderWarning };
+        });
+      },
+    }),
+
+    criar_lembrete_pagamento: tool({
+      description: "Cria lembrete de pagamento visível DENTRO do Prime Finance, mesmo sem valor informado: 'me lembra do aluguel dia 20'. NÃO envia notificações no WhatsApp, e não cria despesa. Exige data de vencimento.",
+      inputSchema: z.object({
+        workspaceKind: z.enum(["prime", "personal", "interest"]),
+        description: z.string().min(2),
+        dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        remindOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Data para mostrar o aviso no painel; omitida significa avisar no dia do vencimento."),
+        amount: z.number().positive().nullable().optional(),
+      }),
+      execute: async (args) => {
+        const ws = workspace(args.workspaceKind);
+        const remindOn = args.remindOn ?? args.dueDate;
+        const { data: existing, error: existingError } = await supabase
+          .from("payment_reminders")
+          .select("id,description,remind_on")
+          .eq("user_id", userId)
+          .eq("workspace_id", ws.id)
+          .eq("due_date", args.dueDate)
+          .eq("status", "pending")
+          .limit(100);
+        if (existingError) throw existingError;
+        const match = (existing ?? []).find(
+          (item) => normalize(item.description) === normalize(args.description) && item.remind_on === remindOn,
+        );
+        if (match) return { ok: true, alreadyExisted: true, reminderId: match.id, dueDate: args.dueDate, remindOn };
+
+        return runAction("create_reminder", ws.id, { ...args, remindOn }, async () => {
+          const { data, error } = await supabase
+            .from("payment_reminders")
+            .insert({
+              user_id: userId,
+              workspace_id: ws.id,
+              description: args.description,
+              amount: args.amount ?? null,
+              due_date: args.dueDate,
+              remind_on: remindOn,
+            })
+            .select("id")
+            .single();
+          if (error) throw error;
+          return { ok: true, reminderId: data.id, description: args.description, dueDate: args.dueDate, remindOn, delivery: "painel" };
         });
       },
     }),
@@ -761,7 +884,18 @@ export function createAssistantTools(input: CreateToolsInput) {
         return runAction("settle_payable", row.workspace_id, { payableId }, async () => {
           const { data, error } = await supabase.rpc("settle_payable", { p_payable_id: payableId });
           if (error) throw error;
-          return { ok: true, payableId, transactionId: data, description: row.description };
+          const { error: reminderError } = await supabase
+            .from("payment_reminders")
+            .update({ status: "done", updated_at: new Date().toISOString() })
+            .eq("payable_id", payableId)
+            .eq("user_id", userId);
+          return {
+            ok: true,
+            payableId,
+            transactionId: data,
+            description: row.description,
+            reminderWarning: reminderError ? "Baixa efetuada, mas o lembrete associado não foi concluído." : null,
+          };
         });
       },
     }),
