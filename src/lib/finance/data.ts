@@ -25,6 +25,7 @@ export async function getFinanceSnapshot() {
     counterpartyResult,
     cardResult,
     recurringResult,
+    reminderResult,
   ] = await Promise.all([
     supabase.from("workspaces").select("id,name,kind,currency").order("kind"),
     supabase.from("accounts").select("id,workspace_id,name,institution,account_type,opening_balance,active").eq("active", true).order("name"),
@@ -37,6 +38,7 @@ export async function getFinanceSnapshot() {
     supabase.from("counterparties").select("id,workspace_id,name,document,phone,email,kind").order("name").limit(300),
     supabase.from("cards").select("id,workspace_id,account_id,name,issuer,last4,closing_day,due_day,credit_limit,active").eq("active",true).order("name"),
     supabase.from("recurring_entries").select("id,workspace_id,name,type,amount,frequency,due_day,starts_on,ends_on,active").eq("active",true).order("due_day"),
+    supabase.from("payment_reminders").select("id,workspace_id,user_id,description,amount,due_date,remind_on,status,payable_id").eq("user_id", user.id).eq("status","pending").order("remind_on").limit(200),
   ]);
 
   const error = [
@@ -51,6 +53,7 @@ export async function getFinanceSnapshot() {
     counterpartyResult.error,
     cardResult.error,
     recurringResult.error,
+    reminderResult.error,
   ].find(Boolean);
 
   if (error) throw error;
@@ -66,6 +69,7 @@ export async function getFinanceSnapshot() {
   const counterparties = counterpartyResult.data ?? [];
   const cards = cardResult.data ?? [];
   const recurringEntries = recurringResult.data ?? [];
+  const paymentReminders = reminderResult.data ?? [];
 
   const workspaceMap = new Map(workspaces.map((item) => [item.id, item]));
   const now = new Date();
@@ -149,6 +153,7 @@ export async function getFinanceSnapshot() {
     counterparties,
     cards,
     recurringEntries,
+    paymentReminders,
     monthly,
     cash,
     receivable30,
