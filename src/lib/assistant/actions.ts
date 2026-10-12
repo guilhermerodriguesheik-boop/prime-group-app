@@ -884,7 +884,18 @@ export function createAssistantTools(input: CreateToolsInput) {
         return runAction("settle_payable", row.workspace_id, { payableId }, async () => {
           const { data, error } = await supabase.rpc("settle_payable", { p_payable_id: payableId });
           if (error) throw error;
-          return { ok: true, payableId, transactionId: data, description: row.description };
+          const { error: reminderError } = await supabase
+            .from("payment_reminders")
+            .update({ status: "done", updated_at: new Date().toISOString() })
+            .eq("payable_id", payableId)
+            .eq("user_id", userId);
+          return {
+            ok: true,
+            payableId,
+            transactionId: data,
+            description: row.description,
+            reminderWarning: reminderError ? "Baixa efetuada, mas o lembrete associado não foi concluído." : null,
+          };
         });
       },
     }),
