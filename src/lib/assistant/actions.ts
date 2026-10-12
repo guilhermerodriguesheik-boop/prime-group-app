@@ -234,7 +234,7 @@ export function createAssistantTools(input: CreateToolsInput) {
 
   const tools = {
     cadastrar_emprestimo: tool({
-      description: "Cadastra empréstimo no ambiente Juros. Padrão do usuário: juros simples MENSAIS sobre o capital que permanece devido, com pagamento de juros SEM amortização. Ex.: 'emprestei R$1000 a 30% ao mês' cria R$300 de juros mensais, capital R$1000 intacto quando o cliente paga só juros. Use juros compostos/amortização parcelada só se usuário pedir expressamente. O primeiro vencimento é um mês depois do início, salvo data combinada.",
+      description: "Cadastra empréstimo no ambiente Juros. Juros mensais em dia NÃO amortizam principal; se o cliente ATRASA, cobra R$10/dia e no próximo vencimento calcula a mesma taxa sobre capital + juros vencidos não pagos + multa diária acumulada. Cada empréstimo permite taxa mensal 10%, 20%, 30% etc. Condições de multa e capitalização devem ser exibidas claramente. Use contrato de outra modalidade somente quando solicitado expressamente.",
       inputSchema: z.object({
         borrowerName: z.string().trim().min(2),
         principal: z.number().positive(),
@@ -249,6 +249,8 @@ export function createAssistantTools(input: CreateToolsInput) {
         disbursed: z.boolean().describe("TRUE se dinheiro já foi entregue; FALSE se foi apenas combinado."),
         accountName: z.string().nullable(),
         notes: z.string().nullable(),
+        dailyLateFee: z.number().nonnegative().optional().describe("Multa contratual por dia de atraso. Padrão R$ 10,00 para esta modalidade."),
+        capitalizeOverdue: z.boolean().optional().describe("Padrão verdadeiro: no novo mês, juros atrasados e multas não pagas entram na base de cálculo."),
       }),
       execute: async (args) => {
         const ws = workspace("interest");
@@ -269,7 +271,7 @@ export function createAssistantTools(input: CreateToolsInput) {
         }
         return runAction("create_loan",ws.id,args,async(actionId)=>{
           const result = monthlyInterestOnly
-            ? await supabase.rpc("create_interest_only_loan",{
+            ? await supabase.rpc("create_interest_only_loan_v2",{
                 p_workspace_id:ws.id,
                 p_borrower_name:args.borrowerName,
                 p_principal:args.principal,
@@ -281,6 +283,8 @@ export function createAssistantTools(input: CreateToolsInput) {
                 p_account_id:account?.id??null,
                 p_notes:args.notes,
                 p_final_maturity_date:args.maturityDate,
+                p_late_fee_daily:args.dailyLateFee??10,
+                p_capitalize_overdue:args.capitalizeOverdue??true,
               })
             : await supabase.rpc("create_finance_loan",{
                 p_workspace_id:ws.id,
@@ -302,6 +306,8 @@ export function createAssistantTools(input: CreateToolsInput) {
             principal:args.principal,ratePercent:args.ratePercent,
             ratePeriod:args.ratePeriod,monthlyInterestOnly,
             monthlyCharge:monthlyInterestOnly?Math.round(args.principal*args.ratePercent!/100*100)/100:null,
+            dailyLateFee:monthlyInterestOnly?(args.dailyLateFee??10):null,
+            capitalizeOverdue:monthlyInterestOnly?(args.capitalizeOverdue??true):null,
             firstInterestDueDate:args.firstInterestDueDate??null,
             status:args.disbursed?"active":"draft",disbursementRecorded:args.disbursed};
         });
