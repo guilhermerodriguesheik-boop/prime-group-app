@@ -26,10 +26,12 @@ export async function getFinanceSnapshot() {
     cardResult,
     recurringResult,
     reminderResult,
+    loanPaymentsResult,
+    loanInstallmentsResult,
   ] = await Promise.all([
     supabase.from("workspaces").select("id,name,kind,currency").order("kind"),
     supabase.from("accounts").select("id,workspace_id,name,institution,account_type,opening_balance,active").eq("active", true).order("name"),
-    supabase.from("transactions").select("id,workspace_id,account_id,card_id,vehicle_id,trip_id,type,amount,occurred_at,due_date,description,status,source").neq("status", "cancelled").order("occurred_at", { ascending: false }).limit(500),
+    supabase.from("transactions").select("id,workspace_id,account_id,card_id,vehicle_id,trip_id,type,amount,occurred_at,due_date,description,status,source,metadata").neq("status", "cancelled").order("occurred_at", { ascending: false }).limit(500),
     supabase.from("payables").select("id,workspace_id,description,amount,paid_amount,due_date,status").neq("status", "cancelled").order("due_date").limit(300),
     supabase.from("receivables").select("id,workspace_id,description,amount,received_amount,due_date,status").neq("status", "cancelled").order("due_date").limit(300),
     supabase.from("vehicles").select("id,workspace_id,nickname,plate,make,model,year,status,odometer_km,estimated_value").order("nickname"),
@@ -39,6 +41,8 @@ export async function getFinanceSnapshot() {
     supabase.from("cards").select("id,workspace_id,account_id,name,issuer,last4,closing_day,due_day,credit_limit,active").eq("active",true).order("name"),
     supabase.from("recurring_entries").select("id,workspace_id,name,type,amount,frequency,due_day,starts_on,ends_on,active").eq("active",true).order("due_day"),
     supabase.from("payment_reminders").select("id,workspace_id,user_id,description,amount,due_date,remind_on,status,payable_id").eq("user_id", user.id).eq("status","pending").order("remind_on").limit(200),
+    supabase.from("loan_payments").select("id,loan_id,amount,principal_amount,interest_amount,fees_amount,paid_at,notes").order("paid_at", { ascending: false }).limit(500),
+    supabase.from("loan_installments").select("id,loan_id,installment_number,due_date,principal_due,interest_due,fees_due,paid_amount,status").order("due_date").limit(500),
   ]);
 
   const error = [
@@ -54,6 +58,8 @@ export async function getFinanceSnapshot() {
     cardResult.error,
     recurringResult.error,
     reminderResult.error,
+    loanPaymentsResult.error,
+    loanInstallmentsResult.error,
   ].find(Boolean);
 
   if (error) throw error;
@@ -70,6 +76,8 @@ export async function getFinanceSnapshot() {
   const cards = cardResult.data ?? [];
   const recurringEntries = recurringResult.data ?? [];
   const paymentReminders = reminderResult.data ?? [];
+  const loanPayments = loanPaymentsResult.data ?? [];
+  const loanInstallments = loanInstallmentsResult.data ?? [];
 
   const workspaceMap = new Map(workspaces.map((item) => [item.id, item]));
   const now = new Date();
@@ -123,8 +131,17 @@ export async function getFinanceSnapshot() {
   function totalsFor(kind: "prime" | "personal" | "interest") {
     const ids = new Set(workspaces.filter((item) => item.kind === kind).map((item) => item.id));
     const items = monthly.filter((item) => ids.has(item.workspace_id));
-    const income = items.filter((item) => item.type === "income").reduce((sum, item) => sum + number(item.amount), 0);
-    const expense = items.filter((item) => item.type === "expense").reduce((sum, item) => sum + number(item.amount), 0);
+    // Loan principal affects cash, never P&L. Interest/fees count only when received.
+    const income = items.filter((item) => item.type === "income").reduce((sum, item) => {
+      if (item.source === "loan") {
+        const metadata = item.metadata && typeof item.metadata === "object" && !Array.isArray(item.metadata) ? item.metadata : {};
+        return sum + number(metadata.loan_interest) + number(metadata.loan_fees);
+      }
+      return sum + number(item.amount);
+    }, 0);
+    const expense = items.filter((item) => item.type === "expense")
+      .filter((item) => item.source !== "loan")
+      .reduce((sum, item) => sum + number(item.amount), 0);
     const openIn = openReceivables.filter((item) => ids.has(item.workspace_id)).reduce((sum, item) => sum + receivableBalance(item), 0);
     const openOut = openPayables.filter((item) => ids.has(item.workspace_id)).reduce((sum, item) => sum + payableBalance(item), 0);
     return { income, expense, result: income - expense, openIn, openOut };
@@ -154,6 +171,8 @@ export async function getFinanceSnapshot() {
     cards,
     recurringEntries,
     paymentReminders,
+    loanPayments,
+    loanInstallments,
     monthly,
     cash,
     receivable30,
