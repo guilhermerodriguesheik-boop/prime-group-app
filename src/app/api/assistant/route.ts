@@ -52,6 +52,7 @@ export async function POST(request: Request) {
     vehiclesResult,
     tripsResult,
     counterpartiesResult,
+    remindersResult,
   ] = await Promise.all([
     supabase.from("workspaces").select("id,name,kind,currency").order("kind"),
     supabase.from("accounts").select("id,workspace_id,name,institution,account_type,opening_balance,active").eq("active", true).order("name"),
@@ -81,6 +82,7 @@ export async function POST(request: Request) {
       .order("started_at", { ascending: false })
       .limit(80),
     supabase.from("counterparties").select("id,workspace_id,name,document,kind,phone,email").order("name").limit(160),
+    supabase.from("payment_reminders").select("id,workspace_id,description,amount,due_date,remind_on,status").eq("user_id", user.id).eq("status", "pending").order("remind_on").limit(100),
   ]);
 
   const dataError = [
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
     vehiclesResult.error,
     tripsResult.error,
     counterpartiesResult.error,
+    remindersResult.error,
   ].find(Boolean);
 
   if (dataError) {
@@ -170,6 +173,7 @@ export async function POST(request: Request) {
     vehicles: (vehiclesResult.data ?? []).filter((item) => inScope(item.workspace_id)),
     trips: (tripsResult.data ?? []).filter((item) => inScope(item.workspace_id)),
     counterparties: (counterpartiesResult.data ?? []).filter((item) => inScope(item.workspace_id)),
+    paymentReminders: (remindersResult.data ?? []).filter((item) => inScope(item.workspace_id)),
   };
 
   const recentHistory = (historyResult.data ?? [])
@@ -261,7 +265,13 @@ REGRAS DE CONFIABILIDADE:
 10. Se executar ferramentas, confirme apenas o que elas REALMENTE registraram (resultado ok:true ou ação executada) e informe valor, data, descrição e vínculo. Se o retorno for ok:false, needsClarification ou possibleDuplicate, NÃO diga que cadastrou: explique a dúvida em uma pergunta curta. Não use Markdown nem asteriscos.
 11. CADASTRO DE VEÍCULOS: quilometragem e valor estimado podem ser null. Cadastre se houver identificação suficiente, sem exigir esses campos.
 12. Não pergunte informações que já estejam no pedido atual, no histórico relevante ou nos dados carregados do Prime Finance.
-13. Ao ser questionado sobre o que pode fazer, converse normalmente, sem executar nenhuma ferramenta.`,
+13. Ao ser questionado sobre o que pode fazer, converse normalmente, sem executar nenhuma ferramenta.
+14. CONTAS FUTURAS: frases como "tenho que pagar", "vence dia", "boleto do aluguel 3000 dia 20" significam criar conta a pagar, não despesa realizada. Use registrar_conta_pagar quando houver valor e vencimento claros; se faltar apenas valor, pode criar lembrete simples pelo pedido de lembrete, ou pergunte qual valor caso o usuário peça conta financeira.
+15. LEMBRETES: frases como "me lembra do aluguel dia 20", "me avisa dia 18 do cartão que vence dia 20" são pedidos de lembrete e devem usar criar_lembrete_pagamento, mesmo sem valor. O sistema exibe o lembrete no painel Planejamento quando o usuário abrir o Prime Finance, mas NÃO envia notificações externas, por WhatsApp, email ou push. Deixe isso explícito na primeira confirmação de lembrete. Se o usuário pedir WhatsApp, informe que ainda depende da ativação do canal e ofereça lembrete no painel.
+16. Se o usuário informar conta a pagar COM valor, vencimento e data para lembrar, use registrar_conta_pagar com remindOn para cadastrar tanto a obrigação quanto o lembrete. Não crie um segundo lembrete separado para a mesma obrigação.
+17. Pagamentos já efetuados: só dê baixa em obrigação existente quando ela corresponder inequivocamente e o usuário relatar claramente que a pagou. Para pagamentos parciais, nunca dê baixa total; peça esclarecimento ou registre somente o pagamento efetuado, explicando que o saldo da conta ainda precisará ser ajustado corretamente.
+18. Recorrências como "todo dia 20" podem ser cadastradas em cadastrar_recorrencia quando houver valores e parâmetros necessários, mas não diga que alertas externos recorrentes estão ativos. Consulte os vencimentos e lembretes existentes e jamais duplique cobranças.
+19. Quando o usuário disser apenas "me lembre", sem data identificável, faça uma pergunta curta pedindo o dia. Não invente uma data. O ano/mês de "dia 20" deve ser inferido com cautela pela data atual e pelo contexto. Se puder ser mês atual ou seguinte, peça esclarecimento.`,
       messages: [{ role: "user", content: userContent }],
       tools,
       stopWhen: stepCountIs(8),
