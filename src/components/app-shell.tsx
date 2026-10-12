@@ -13,6 +13,7 @@ const nav = [
   ["◴", "Planejamento", "/planejamento"],
   ["▥", "Relatórios", "/relatorios"],
   ["↔", "Viagens", "/viagens"],
+  ["▧", "Registros parciais", "/registros"],
   ["▰", "Frota", "/frota"],
   ["▱", "Documentos", "/documentos"],
   ["✦", "Assistente", "/assistente"],
