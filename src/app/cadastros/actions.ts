@@ -206,12 +206,14 @@ export async function createLoan(formData: FormData) {
     p_account_id: accountId,
   };
   const { error } = interestOnly
-    ? await supabase.rpc("create_interest_only_loan",{
+    ? await supabase.rpc("create_interest_only_loan_v2",{
         ...loanArgs,
         p_monthly_rate:rate?numberValue(formData,"periodic_rate"):0,
         p_first_due_date:textValue(formData,"first_interest_due_date")||null,
         p_notes:textValue(formData,"notes")||null,
         p_final_maturity_date:textValue(formData,"maturity_date")||null,
+        p_late_fee_daily:numberValue(formData,"late_fee_daily"),
+        p_capitalize_overdue:formData.get("capitalize_overdue")==="yes",
       })
     : await supabase.rpc("create_finance_loan",{
         ...loanArgs,
