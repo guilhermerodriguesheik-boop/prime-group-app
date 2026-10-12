@@ -83,6 +83,7 @@ function actionLabel(actionType: string) {
     create_account: "Conta bancária/carteira",
     create_card: "Cartão",
     create_trip: "Viagem",
+    save_partial: "Registro parcial",
     create_cte: "CT-e",
     create_recurring: "Recorrência",
     settle_receivable: "Baixa de recebível",
@@ -849,41 +850,143 @@ export function createAssistantTools(input: CreateToolsInput) {
     }),
 
     cadastrar_viagem: tool({
-      description: "Cadastra uma viagem/frete da Prime Group.",
+      description:
+        "CADASTRE IMEDIATAMENTE fretes da Prime Group com SOMENTE os dados que o usuário informou. Nenhuma quilometragem, distância, placa, motorista cadastrado, endereço completo, data, valor, forma de pagamento ou referência é obrigatória. Exemplo real: 'Ortobom para Honório Gurgel, dia 13, frete 1800, 270 pro motorista João' deve ser registrado com origin/destination, serviceDate, freightRevenue, customerName, driverName e driverCost, mesmo SEM distância. Não confunda valor do frete COM recebimento em caixa nem diária combinada COM despesa já paga. Campos desconhecidos ficam null. No mínimo um dado identificável do frete deve ser informado; se nada, utilize salvar_registro_parcial.",
       inputSchema: z.object({
-        reference: z.string().optional(),
-        origin: z.string().optional(),
-        destination: z.string().optional(),
-        vehicleNameOrPlate: z.string().optional(),
-        customerName: z.string().optional(),
-        freightRevenue: z.number().nonnegative().optional(),
-        distanceKm: z.number().nonnegative().optional(),
-        startedAt: z.string().optional(),
-        status: z.enum(["planned", "in_progress", "completed", "cancelled"]).optional(),
+        reference: z.string().trim().optional().describe("Referência só se informada."),
+        origin: z.string().trim().optional().describe("Local de saída, como informado, sem exigir endereço."),
+        destination: z.string().trim().optional().describe("Destino, como informado, sem exigir endereço."),
+        serviceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Data do frete, se informada, sem presumir a hora de início."),
+        startedAt: z.string().optional().describe("Hora de saída somente se o usuário informou horário real."),
+        vehicleNameOrPlate: z.string().trim().optional(),
+        customerName: z.string().trim().optional().describe("Cliente informado, mesmo se não estiver cadastrado."),
+        driverName: z.string().trim().optional().describe("Nome do motorista informado, mesmo se não estiver cadastrado."),
+        driverCost: z.number().nonnegative().optional().describe("Valor COMBINADO pelo serviço do motorista; não é pagamento já realizado."),
+        freightRevenue: z.number().nonnegative().optional().describe("Preço combinado do frete. Não representa dinheiro recebido."),
+        distanceKm: z.number().nonnegative().optional().describe("Distância opcional. NÃO solicitar nem inventar se ausente."),
+        notes: z.string().trim().optional().describe("Demais dados fornecidos. Não invente o que falta."),
+        status: z.enum(["planned", "in_progress", "completed", "cancelled"]).optional().describe("Somente informe um status específico quando o usuário disser claramente. Em outros casos ficará como cadastro inicial."),
       }),
       execute: async (args) => {
         const ws = workspace("prime");
+        const nonEmpty = [
+          args.reference, args.origin, args.destination, args.serviceDate,
+          args.vehicleNameOrPlate, args.customerName, args.driverName,
+          args.driverCost, args.freightRevenue, args.distanceKm, args.notes,
+        ].some((item) => item !== undefined && item !== null && String(item).trim() !== "");
+        if (!nonEmpty) {
+          return { ok: false, needsClarification: true, message: "Não há dados do frete para cadastrar. Use salvar_registro_parcial se o usuário só quiser guardar uma anotação." };
+        }
         return runAction("create_trip", ws.id, args, async () => {
           const vehicle = resolveVehicle(ws.id, args.vehicleNameOrPlate);
           const customer = resolveCounterparty(ws.id, args.customerName);
-          const { data, error } = await supabase
+
+          // A missing registered vehicle/customer must not block the trip.
+          // Keep their names as free text for later association.
+          const serviceDate = args.serviceDate ??
+            (args.startedAt && /^\d{4}-\d{2}-\d{2}/.test(args.startedAt) ? args.startedAt.slice(0, 10) : null);
+
+          // Avoid storing a fabricated departure hour when only the date is known.
+          const actualStart = args.startedAt && /T\d{2}:\d{2}/.test(args.startedAt)
+            ? args.startedAt : null;
+
+          // A repeated request must not silently create an identical freight.
+          const { data: possible, error: duplicateError } = await supabase
             .from("trips")
+            .select("id,reference,origin,destination,customer_name,driver_name,driver_cost,freight_revenue,service_date,vehicle_id")
+            .eq("workspace_id", ws.id)
+            .order("created_at", { ascending: false })
+            .limit(80);
+          if (duplicateError) throw duplicateError;
+          const same = (possible ?? []).find((item) =>
+            item.service_date === serviceDate &&
+            item.origin === (args.origin ?? null) &&
+            item.destination === (args.destination ?? null) &&
+            item.customer_name === (args.customerName ?? null) &&
+            item.driver_name === (args.driverName ?? null) &&
+            item.driver_cost === (args.driverCost ?? null) &&
+            item.freight_revenue === (args.freightRevenue ?? null) &&
+            item.vehicle_id === (vehicle?.id ?? null) &&
+            item.reference === (args.reference ?? null)
+          );
+          if (same && !/\b(outro|outra|novo|nova|segundo|segunda|diferente|mais um)\b/i.test(originalMessage)) {
+            return { ok: true, tripId: same.id, alreadyExisted: true, note: "Esse frete já estava cadastrado; nenhum lançamento duplicado foi criado." };
+          }
+
+          const { data, error } = await supabase.from("trips").insert({
+            workspace_id: ws.id,
+            vehicle_id: vehicle?.id ?? null,
+            customer_id: customer?.id ?? null,
+            customer_name: args.customerName ?? null,
+            driver_name: args.driverName ?? null,
+            driver_cost: args.driverCost ?? null,
+            reference: args.reference ?? null,
+            origin: args.origin ?? null,
+            destination: args.destination ?? null,
+            service_date: serviceDate,
+            freight_revenue: args.freightRevenue ?? null,
+            distance_km: args.distanceKm ?? null,
+            started_at: actualStart,
+            notes: args.notes ?? null,
+            status: args.status ?? "planned",
+          }).select("id").single();
+          if (error) throw error;
+
+          return {
+            ok: true, tripId: data.id, serviceDate,
+            origin: args.origin ?? null, destination: args.destination ?? null,
+            customer: args.customerName ?? null,
+            driver: args.driverName ?? null, driverCost: args.driverCost ?? null,
+            freightRevenue: args.freightRevenue ?? null,
+            distanceKm: args.distanceKm ?? null,
+            financialTransactionsCreated: false,
+            note: "Frete cadastrado com dados disponíveis. Valor do frete e custo do motorista são combinados, sem baixa financeira automática.",
+          };
+        });
+      },
+    }),
+
+    salvar_registro_parcial: tool({
+      description:
+        "SALVA IMEDIATAMENTE uma informação financeira ou operacional incompleta, sem exigir campos, valores, vencimento ou ambiente definidos. Use quando o usuário relatar ou pedir registro de algo mas faltar dado exigido para um lançamento contábil formal, por exemplo 'comprei material mas ainda não sei o valor', 'tenho uma dívida com Pedro' ou 'paguei 500' com ambiente incerto. Cria uma anotação pendente consultável, NÃO um pagamento ou despesa realizada. Para frete com qualquer dado identificável, PREFIRA cadastrar_viagem, pois não exige distância. Não use em consultas, hipóteses ou quando a pessoa disser não registrar.",
+      inputSchema: z.object({
+        workspaceKind: z.enum(["prime", "personal", "interest"]).nullable().optional().describe("Ambiente só quando inequívoco; null para não classificado."),
+        subject: z.string().trim().optional().describe("Título resumido com as palavras do usuário; não invente."),
+        recordKind: z.enum(["expense", "income", "payable", "receivable", "trip", "loan", "other"]).optional(),
+        knownValues: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional().describe("Somente campos efetivamente informados pelo usuário."),
+      }),
+      execute: async (args) => {
+        const ws = args.workspaceKind ? workspace(args.workspaceKind) : null;
+        return runAction("save_partial", ws?.id ?? null, args, async () => {
+          const { data: existing, error: searchError } = await supabase.from("partial_records")
+            .select("id,created_at")
+            .eq("user_id", userId)
+            .eq("original_text", originalMessage)
+            .eq("status", "open")
+            .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+            .order("created_at", { ascending: false })
+            .limit(1);
+          if (searchError) throw searchError;
+          if (existing?.[0] && !/\b(outro|outra|novo|nova|diferente|segunda vez)\b/i.test(originalMessage)) {
+            return { ok: true, recordId: existing[0].id, alreadyExisted: true, recordStatus: "partial" };
+          }
+          const { data, error } = await supabase.from("partial_records")
             .insert({
-              workspace_id: ws.id,
-              vehicle_id: vehicle?.id ?? null,
-              customer_id: customer?.id ?? null,
-              reference: args.reference ?? null,
-              origin: args.origin ?? null,
-              destination: args.destination ?? null,
-              freight_revenue: args.freightRevenue ?? 0,
-              distance_km: args.distanceKm ?? null,
-              started_at: args.startedAt ?? null,
-              status: args.status ?? "planned",
+              user_id: userId, workspace_id: ws?.id ?? null,
+              subject: args.subject?.trim() || "Registro parcial",
+              original_text: originalMessage,
+              extracted_data: jsonValue(args.knownValues ?? {}),
+              record_kind: args.recordKind ?? "other",
+              status: "open",
             })
             .select("id")
             .single();
           if (error) throw error;
-          return { ok: true, tripId: data.id, reference: args.reference ?? null };
+          return {
+            ok: true, recordId: data.id, recordStatus: "partial",
+            workspace: ws?.name ?? "Não classificado",
+            note: "Informações preservadas como registro parcial. Nenhuma receita, despesa, pagamento ou obrigação formal foi criada.",
+          };
         });
       },
     }),
@@ -932,7 +1035,7 @@ export function createAssistantTools(input: CreateToolsInput) {
                 reference: args.number ? `CT-e ${args.number}` : args.accessKey ? `CT-e ${args.accessKey.slice(-10)}` : "CT-e",
                 origin: args.origin ?? null,
                 destination: args.destination ?? null,
-                freight_revenue: args.totalValue ?? 0,
+                freight_revenue: args.totalValue ?? null,
                 started_at: args.issuedAt ?? null,
                 status: "planned",
               })

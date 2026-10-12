@@ -36,7 +36,7 @@ export async function getFinanceSnapshot() {
     supabase.from("payables").select("id,workspace_id,description,amount,paid_amount,due_date,status").neq("status", "cancelled").order("due_date").limit(300),
     supabase.from("receivables").select("id,workspace_id,description,amount,received_amount,due_date,status").neq("status", "cancelled").order("due_date").limit(300),
     supabase.from("vehicles").select("id,workspace_id,nickname,plate,make,model,year,status,odometer_km,estimated_value").order("nickname"),
-    supabase.from("trips").select("id,workspace_id,vehicle_id,reference,origin,destination,started_at,ended_at,distance_km,freight_revenue,status").order("started_at", { ascending: false }).limit(200),
+    supabase.from("trips").select("id,workspace_id,vehicle_id,customer_id,customer_name,driver_name,driver_cost,notes,reference,origin,destination,service_date,started_at,ended_at,distance_km,freight_revenue,status").order("started_at", { ascending: false }).limit(200),
     supabase.from("loans").select("id,workspace_id,counterparty_id,principal,periodic_rate,rate_period,interest_type,fixed_interest,start_date,status,maturity_date,direction,interest_only,first_interest_due_date,late_fee_daily,capitalize_overdue").neq("status", "cancelled").limit(200),
     supabase.from("counterparties").select("id,workspace_id,name,document,phone,email,kind").order("name").limit(300),
     supabase.from("cards").select("id,workspace_id,account_id,name,issuer,last4,closing_day,due_day,credit_limit,active").eq("active",true).order("name"),

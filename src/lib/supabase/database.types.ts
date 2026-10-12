@@ -1264,6 +1264,53 @@ export type Database = {
           },
         ]
       }
+      partial_records: {
+        Row: {
+          id: string
+          user_id: string
+          workspace_id: string | null
+          subject: string
+          original_text: string
+          extracted_data: Json
+          record_kind: string
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          workspace_id?: string | null
+          subject?: string
+          original_text: string
+          extracted_data?: Json
+          record_kind?: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          workspace_id?: string | null
+          subject?: string
+          original_text?: string
+          extracted_data?: Json
+          record_kind?: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partial_records_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -1690,14 +1737,19 @@ export type Database = {
         Row: {
           created_at: string
           customer_id: string | null
+          customer_name: string | null
           destination: string | null
           distance_km: number | null
           driver_id: string | null
+          driver_name: string | null
+          driver_cost: number | null
           ended_at: string | null
-          freight_revenue: number
+          freight_revenue: number | null
           id: string
           origin: string | null
           reference: string | null
+          service_date: string | null
+          notes: string | null
           started_at: string | null
           status: string
           updated_at: string
@@ -1707,14 +1759,19 @@ export type Database = {
         Insert: {
           created_at?: string
           customer_id?: string | null
+          customer_name?: string | null
           destination?: string | null
           distance_km?: number | null
           driver_id?: string | null
+          driver_name?: string | null
+          driver_cost?: number | null
           ended_at?: string | null
-          freight_revenue?: number
+          freight_revenue?: number | null
           id?: string
           origin?: string | null
           reference?: string | null
+          service_date?: string | null
+          notes?: string | null
           started_at?: string | null
           status?: string
           updated_at?: string
@@ -1724,14 +1781,19 @@ export type Database = {
         Update: {
           created_at?: string
           customer_id?: string | null
+          customer_name?: string | null
           destination?: string | null
           distance_km?: number | null
           driver_id?: string | null
+          driver_name?: string | null
+          driver_cost?: number | null
           ended_at?: string | null
-          freight_revenue?: number
+          freight_revenue?: number | null
           id?: string
           origin?: string | null
           reference?: string | null
+          service_date?: string | null
+          notes?: string | null
           started_at?: string | null
           status?: string
           updated_at?: string
