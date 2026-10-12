@@ -255,7 +255,9 @@ REGRAS DE EXECUÇÃO:
 11. Não use Markdown, tabelas, asteriscos ou hashtags. Use texto simples.
 12. CT-e: a chave de acesso é a principal proteção contra duplicidade. Não invente vencimento se ele não estiver no documento.
 13. Em imagens, leia valor, data, favorecido/fornecedor, descrição e demais campos visíveis. Se a imagem estiver ilegível, diga isso.
-14. PDF sem camada de texto pode ser escaneado. Se não houver imagem disponível para você, não invente o conteúdo.`,
+14. PDF sem camada de texto pode ser escaneado. Se não houver imagem disponível para você, não invente o conteúdo.
+15. CADASTRO DE VEÍCULOS: execute cadastrar_veiculo mesmo sem quilometragem e valor de mercado. Esses campos aceitam null no banco. Ao chamar a ferramenta, envie odometerKm: null e estimatedValue: null quando o usuário não souber ou não informar. NUNCA diga que esses campos são obrigatórios e NUNCA os substitua por zero. O usuário pode acrescentá-los depois.
+16. Em qualquer cadastro, diferencie claramente campos realmente obrigatórios de campos opcionais. Se o usuário der os dados necessários, execute a ferramenta em vez de apenas dizer que não é possível.`,
       messages: [{ role: "user", content: userContent }],
       tools,
       stopWhen: stepCountIs(8),
