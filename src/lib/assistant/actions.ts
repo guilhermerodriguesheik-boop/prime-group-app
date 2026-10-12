@@ -10,7 +10,7 @@ type Account = { id: string; workspace_id: string; name: string; institution: st
 type Card = { id: string; workspace_id: string; name: string; issuer: string | null; last4: string | null };
 type Vehicle = { id: string; workspace_id: string; nickname: string; plate: string | null; model: string | null };
 type Counterparty = { id: string; workspace_id: string; name: string; document: string | null; kind: string };
-type Loan = { id: string; workspace_id: string; counterparty_id: string; principal: number; status: string; start_date: string; maturity_date: string | null; periodic_rate: number | null; interest_type: string };
+type Loan = { id: string; workspace_id: string; counterparty_id: string; principal: number; status: string; start_date: string; maturity_date: string | null; periodic_rate: number | null; interest_type: string; interest_only: boolean; first_interest_due_date: string | null };
 
 export type ExecutedAssistantAction = {
   type: string;
@@ -234,58 +234,76 @@ export function createAssistantTools(input: CreateToolsInput) {
 
   const tools = {
     cadastrar_emprestimo: tool({
-      description: "Cadastra um empréstimo em dinheiro concedido a outra pessoa no ambiente exclusivo Juros. Use para 'emprestei 10 mil ao João a 5% ao mês'. Cria contrato, tomador e, se o capital JÁ FOI entregue, registra a saída de capital sem classificar como despesa operacional. Taxa e juros não são renda recebida. Nunca use a ferramenta genérica de movimento no lugar.",
+      description: "Cadastra empréstimo no ambiente Juros. Padrão do usuário: juros simples MENSAIS sobre o capital que permanece devido, com pagamento de juros SEM amortização. Ex.: 'emprestei R$1000 a 30% ao mês' cria R$300 de juros mensais, capital R$1000 intacto quando o cliente paga só juros. Use juros compostos/amortização parcelada só se usuário pedir expressamente. O primeiro vencimento é um mês depois do início, salvo data combinada.",
       inputSchema: z.object({
         borrowerName: z.string().trim().min(2),
         principal: z.number().positive(),
-        interestType: z.enum(["simple","compound","fixed","manual"]).describe("simple: juros simples; compound: compostos; fixed: valor fixo; manual: sem taxa definida ainda."),
-        ratePercent: z.number().min(0).max(100).nullable().describe("Percentual POR PERÍODO, como 5 para 5%. Null só com interesse fixo ou manual."),
-        ratePeriod: z.enum(["day","week","month","year"]).nullable().describe("Período da taxa, normalmente month para ao mês."),
-        fixedInterest: z.number().nonnegative().nullable().describe("Valor total dos juros fixos em reais; null para taxas percentuais."),
+        interestType: z.enum(["simple","compound","fixed","manual"]),
+        ratePercent: z.number().min(0).max(100).nullable().describe("30% ao mês = 30 (não 0.30)."),
+        ratePeriod: z.enum(["day","week","month","year"]).nullable(),
+        fixedInterest: z.number().nonnegative().nullable(),
         startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        maturityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().describe("Vencimento final, ou null se não houver data."),
-        disbursed: z.boolean().describe("TRUE somente quando usuário afirmar que efetivamente já emprestou o capital; FALSE para empréstimo planejado."),
-        accountName: z.string().nullable().describe("Conta do ambiente Juros de onde saiu dinheiro, ou null quando não citada."),
-        notes: z.string().nullable().describe("Termos relevantes declarados pelo usuário, sem prometer cálculos, ou null."),
+        firstInterestDueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().describe("Primeira data para receber juros mensais; null quando não combinada, será exatamente um mês após início."),
+        maturityDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().describe("Data FINAL de devolução do capital, não confundir com vencimento mensal dos juros."),
+        interestOnly: z.boolean().optional().describe("Default TRUE para juros mensais: pagar juros não reduz capital. FALSE somente se a pessoa explicitamente combinou amortização mensal ou juros compostos."),
+        disbursed: z.boolean().describe("TRUE se dinheiro já foi entregue; FALSE se foi apenas combinado."),
+        accountName: z.string().nullable(),
+        notes: z.string().nullable(),
       }),
       execute: async (args) => {
         const ws = workspace("interest");
         const account = args.accountName ? resolveAccount(ws.id,args.accountName) : null;
         if (args.accountName && !account) return {
-          ok: false, needsClarification: true,
-          message: "A conta informada não pertence ao ambiente Juros; informe uma conta cadastrada nele ou faça sem vinculação bancária.",
+          ok: false,needsClarification:true,message:"A conta indicada não pertence ao ambiente Juros. Informe uma conta cadastrada em Juros ou deixe sem conta.",
         };
-        if (args.interestType === "manual" && !/sem juros|taxa ainda|a combinar|indefinid|nao sei|não sei/i.test(originalMessage)) return {
-          ok: false, needsClarification: true,
-          message: "Faltou definir a taxa de juros. Qual percentual e período (ex.: 5% ao mês)?",
-        };
-        if (args.interestType === "compound" && !/compost[oa]s?|juros sobre juros/i.test(originalMessage)) return {
-          ok: false, needsClarification: true,
-          message: "Não vou assumir juros compostos. Os juros são simples ou compostos?",
-        };
+        const monthlyInterestOnly = args.interestOnly !== false &&
+          args.interestType === "simple" && args.ratePeriod === "month";
+        if (monthlyInterestOnly && (args.ratePercent === null || args.ratePercent<=0)){
+          return {ok:false,needsClarification:true,message:"Qual é a taxa de juros mensal? Por exemplo, 10%, 20% ou 30%."};
+        }
+        if (args.interestType === "manual" && !/sem juros|taxa ainda|a combinar|indefinid|nao sei|não sei/i.test(originalMessage)) {
+          return {ok:false,needsClarification:true,message:"Qual é a taxa mensal combinada para esse empréstimo?"};
+        }
+        if (args.interestType === "compound" && !/compost[oa]s?|juros sobre juros/i.test(originalMessage)){
+          return {ok:false,needsClarification:true,message:"Seu padrão é juros sem capitalização. Os juros serão compostos mesmo?"};
+        }
         return runAction("create_loan",ws.id,args,async(actionId)=>{
-          const {data,error}=await supabase.rpc("create_finance_loan",{
-            p_workspace_id:ws.id,
-            p_borrower_name:args.borrowerName,
-            p_principal:args.principal,
-            p_interest_type:args.interestType,
-            p_periodic_rate:args.ratePercent,
-            p_rate_period:args.ratePeriod,
-            p_fixed_interest:args.fixedInterest,
-            p_start_date:args.startDate,
-            p_maturity_date:args.maturityDate,
-            p_notes:args.notes,
-            p_action_id:actionId,
-            p_record_disbursement:args.disbursed,
-            p_account_id:account?.id??null,
-          });
-          if(error) throw error;
-          return {
-            ok:true,loanId:data,borrower:args.borrowerName,principal:args.principal,
-            ratePercent:args.ratePercent,ratePeriod:args.ratePeriod,
-            status:args.disbursed?"active":"draft",
-            disbursementRecorded:args.disbursed,
-          };
+          const result = monthlyInterestOnly
+            ? await supabase.rpc("create_interest_only_loan",{
+                p_workspace_id:ws.id,
+                p_borrower_name:args.borrowerName,
+                p_principal:args.principal,
+                p_monthly_rate:args.ratePercent!,
+                p_start_date:args.startDate,
+                p_first_due_date:args.firstInterestDueDate??null,
+                p_action_id:actionId,
+                p_record_disbursement:args.disbursed,
+                p_account_id:account?.id??null,
+                p_notes:args.notes,
+                p_final_maturity_date:args.maturityDate,
+              })
+            : await supabase.rpc("create_finance_loan",{
+                p_workspace_id:ws.id,
+                p_borrower_name:args.borrowerName,
+                p_principal:args.principal,
+                p_interest_type:args.interestType,
+                p_periodic_rate:args.ratePercent,
+                p_rate_period:args.ratePeriod,
+                p_fixed_interest:args.fixedInterest,
+                p_start_date:args.startDate,
+                p_maturity_date:args.maturityDate,
+                p_notes:args.notes,
+                p_action_id:actionId,
+                p_record_disbursement:args.disbursed,
+                p_account_id:account?.id??null,
+              });
+          if(result.error)throw result.error;
+          return {ok:true,loanId:result.data,borrower:args.borrowerName,
+            principal:args.principal,ratePercent:args.ratePercent,
+            ratePeriod:args.ratePeriod,monthlyInterestOnly,
+            monthlyCharge:monthlyInterestOnly?Math.round(args.principal*args.ratePercent!/100*100)/100:null,
+            firstInterestDueDate:args.firstInterestDueDate??null,
+            status:args.disbursed?"active":"draft",disbursementRecorded:args.disbursed};
         });
       },
     }),
