@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type Status = {
   linked: boolean; maskedPhone: string | null; pendingUntil: string | null;
-  connectedAt: string | null; providerConfigured: boolean; provider: "evolution" | "meta";
+  connectedAt: string | null; providerConfigured: boolean; provider: "evolution_go" | "evolution" | "meta";
 };
 
 export function WhatsAppLinkPanel() {
@@ -53,6 +53,7 @@ export function WhatsAppLinkPanel() {
   }
   const message=code?"VINCULAR "+code:"";
   const readyToLink=Boolean(state?.providerConfigured);
+  const viaGo = state?.provider === "evolution_go";
   const viaQr = state?.provider === "evolution";
   return (
     <div className="card" style={{display:"grid",gap:12}}>
@@ -65,8 +66,8 @@ export function WhatsAppLinkPanel() {
         {state?.linked
           ? "Número vinculado: "+state.maskedPhone
           : readyToLink
-            ? "Canal configurado ("+(viaQr?"QR Code":"Meta")+"). Falta confirmar o vínculo do seu número."
-            : (viaQr?"Aguardando conexão e credenciais do serviço Evolution (QR Code).":
+            ? "Canal configurado ("+(viaGo?"Evolution Go":viaQr?"QR Code":"Meta")+"). Falta confirmar o vínculo do seu número."
+            : (viaGo?"Aguardando credenciais do What's Evolution Go.":viaQr?"Aguardando conexão e credenciais do serviço Evolution (QR Code).":
                "Aguardando credenciais e ativação do número comercial na Meta.")}
       </p>
       {state?.linked && <span className="badge green">Número vinculado</span>}
@@ -78,7 +79,7 @@ export function WhatsAppLinkPanel() {
       )}
       {code && (
         <div className="notice">
-          <div>Código válido por 15 minutos. Envie a mensagem abaixo para o número {viaQr?"conectado pelo QR Code":"comercial conectado à Meta"}:</div>
+          <div>Código válido por 15 minutos. Envie a mensagem abaixo para o número {viaGo?"conectado no Evolution Go":viaQr?"conectado pelo QR Code":"comercial conectado à Meta"}:</div>
           <p style={{fontSize:"1.3rem",fontWeight:700,letterSpacing:1,margin:"12px 0"}}>{message}</p>
           <button className="button" type="button" onClick={()=>
             navigator.clipboard.writeText(message).then(()=>setNotice("Mensagem copiada.")).catch(()=>setError("Não foi possível copiar."))}>
