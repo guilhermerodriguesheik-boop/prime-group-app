@@ -13,7 +13,7 @@ export default async function Page(){
   };
   const totalOpen=data.cards.reduce((sum,card)=>sum+cardOpen(card.id),0);
   return <><Header title="Contas e cartões" subtitle="Bancos, carteiras, cartões e base para conciliação."/>
-  <div className="quick"><Link href="/cadastros">Cadastrar conta ou cartão</Link><Link href="/cadastros">Registrar movimentação</Link><Link href="/planejamento">Planejamento</Link></div>
+  <div className="quick"><Link href="/cadastros">Cadastrar conta ou cartão</Link><Link href="/bancos">Conectar Itaú, Bradesco e Inter</Link><Link href="/cadastros">Registrar movimentação</Link><Link href="/planejamento">Planejamento</Link></div>
   <div className="grid grid-4"><Metric label="Caixa consolidado" value={brl(data.cash)}/><Metric label="Contas cadastradas" value={String(data.accounts.length)}/><Metric label="Faturas em aberto" value={brl(totalOpen)} tone={totalOpen>0?"warning":undefined}/><Metric label="Limite total informado" value={brl(totalLimit)}/></div>
 
   <SectionTitle title="Contas cadastradas"/>
