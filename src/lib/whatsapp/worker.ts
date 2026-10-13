@@ -48,7 +48,7 @@ async function rpc<T>(name: string, payload: Obj): Promise<T> {
   return await r.json() as T;
 }
 const graphVersion = () => process.env.WHATSAPP_GRAPH_VERSION?.trim() || "v24.0";
-const useEvolution = () => process.env.WHATSAPP_PROVIDER === "evolution";
+const isEvolutionProvider = () => process.env.WHATSAPP_PROVIDER === "evolution";
 
 function evolutionConfig() {
   const url = process.env.EVOLUTION_API_URL || "";
@@ -61,7 +61,7 @@ function evolutionConfig() {
 }
 
 async function sendText(to: string, body: string) {
-  if (useEvolution()) {
+  if (isEvolutionProvider()) {
     const {base,key,instance} = evolutionConfig();
     const number=to.replace(/\D/g,"");
     if (!/^[0-9]{10,15}$/.test(number)) throw new Error("Invalid Evolution recipient");
@@ -148,7 +148,7 @@ async function mediaFromEvolution(event: Event) {
   const parts=inner||message;
   const mediaPart=parts.imageMessage||parts.audioMessage||parts.documentMessage||
     ((parts.documentWithCaptionMessage as Obj|undefined)?.message as Obj|undefined)?.documentMessage;
-  const md=(mediaPart && typeof mediaPart==="object")?mediaPart as Obj:{};
+  const md: Obj=(mediaPart && typeof mediaPart==="object") ? mediaPart as Obj : {};
   const suggestedMime=match?.[1]||md.mimetype||result.mimetype||nested.mimetype;
   const mime=typeof suggestedMime==="string" ? suggestedMime.split(";")[0] : (
     event.type==="audio"?"audio/ogg":event.type==="image"?"image/jpeg":
@@ -228,7 +228,7 @@ async function understand(message: string, context: Obj, media?: {
 }
 
 export async function processWhatsAppQueue(maxMessages=1) {
-  const ready = useEvolution() ?
+  const ready = isEvolutionProvider() ?
     Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY &&
       process.env.EVOLUTION_INSTANCE && (process.env.EVOLUTION_WEBHOOK_SECRET||"").length>=32) :
     Boolean(process.env.META_WHATSAPP_APP_SECRET &&
@@ -245,7 +245,7 @@ export async function processWhatsAppQueue(maxMessages=1) {
       const changes = entries?.[0]?.changes as Array<Obj> | undefined;
       const value = changes?.[0]?.value as Obj | undefined;
       const meta = value?.metadata as Obj | undefined;
-      const channelNumber = useEvolution() ?
+      const channelNumber = isEvolutionProvider() ?
         "evolution:"+process.env.EVOLUTION_INSTANCE : process.env.META_WHATSAPP_PHONE_NUMBER_ID;
       if (!meta?.phone_number_id || String(meta.phone_number_id) !== channelNumber) {
         await rpc("whatsapp_finish_event",{
@@ -287,7 +287,7 @@ export async function processWhatsAppQueue(maxMessages=1) {
       let text = (event.body||"").trim();
       let visual: {bytes:Uint8Array;mime:string;filename:string}|undefined;
       if (event.mediaId) {
-        const media = useEvolution() ? await mediaFromEvolution(event) : await mediaFromMeta(event.mediaId);
+        const media = isEvolutionProvider() ? await mediaFromEvolution(event) : await mediaFromMeta(event.mediaId);
         if (event.type==="audio"||media.mime.startsWith("audio/")) {
           const transcription=await transcribe(media);
           if (!transcription) throw new Error("Áudio não compreendido");
