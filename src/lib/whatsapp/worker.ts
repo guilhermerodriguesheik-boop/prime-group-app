@@ -49,6 +49,15 @@ async function rpc<T>(name: string, payload: Obj): Promise<T> {
 }
 const graphVersion = () => process.env.WHATSAPP_GRAPH_VERSION?.trim() || "v24.0";
 const isEvolutionProvider = () => process.env.WHATSAPP_PROVIDER === "evolution";
+const isEvolutionGoProvider = () => process.env.WHATSAPP_PROVIDER === "evolution_go";
+
+function evolutionGoConfig() {
+  const url = new URL(process.env.EVOLUTION_GO_API_URL || "");
+  const token = process.env.EVOLUTION_GO_TOKEN || "";
+  if (url.protocol !== "https:" || url.username || url.password || !token)
+    throw new Error("Evolution Go HTTPS endpoint or token not configured");
+  return {base:url.href.replace(/\/+$/,""),token};
+}
 
 function evolutionConfig() {
   const url = process.env.EVOLUTION_API_URL || "";
@@ -61,6 +70,18 @@ function evolutionConfig() {
 }
 
 async function sendText(to: string, body: string) {
+  if (isEvolutionGoProvider()) {
+    const {base,token}=evolutionGoConfig();
+    const number=to.replace(/\D/g,"");
+    if (!/^[0-9]{10,15}$/.test(number)) throw new Error("Evolution Go recipient invalid");
+    const response=await fetch(base+"/send/text",{
+      method:"POST",cache:"no-store",signal:AbortSignal.timeout(15000),
+      headers:{apikey:token,"Content-Type":"application/json"},
+      body:JSON.stringify({number,text:body.slice(0,3900)}),
+    });
+    if (!response.ok) throw new Error("Evolution Go send HTTP "+response.status);
+    return;
+  }
   if (isEvolutionProvider()) {
     const {base,key,instance} = evolutionConfig();
     const number=to.replace(/\D/g,"");
@@ -162,6 +183,48 @@ async function mediaFromEvolution(event: Event) {
   return {bytes,mime,filename};
 }
 
+async function mediaFromEvolutionGo(event: Event) {
+  const {base,token}=evolutionGoConfig();
+  const source=event.payload.__evolutionGo as Obj | undefined;
+  if (!source || source.instance !== process.env.EVOLUTION_GO_INSTANCE_NAME)
+    throw new Error("Evolution Go media instance mismatch");
+  const message=source.message as Obj | undefined;
+  if (!message || typeof message !== "object") throw new Error("Evolution Go media missing");
+  // This is the documented Evolution Go media download API, not Evolution v2.
+  const response=await fetch(base+"/message/downloadimage",{
+    method:"POST",cache:"no-store",signal:AbortSignal.timeout(20000),
+    headers:{apikey:token,"Content-Type":"application/json"},
+    body:JSON.stringify({message}),
+  });
+  if (!response.ok) throw new Error("Evolution Go media HTTP "+response.status);
+  if (Number(response.headers.get("content-length")||"0")>18_000_000)
+    throw new Error("Evolution Go media too large");
+  const raw=await response.text();
+  if (raw.length>18_000_000) throw new Error("Evolution Go media too large");
+  const result=JSON.parse(raw) as Obj;
+  const data=(result.data && typeof result.data==="object") ? result.data as Obj : {};
+  const candidate=data.base64 || result.base64;
+  if (typeof candidate!=="string") throw new Error("Evolution Go media payload missing");
+  const prefix=candidate.match(/^data:([^;,]+);base64,/);
+  const encoded=(prefix?candidate.slice(prefix[0].length):candidate).replace(/\s/g,"");
+  if (encoded.length>17_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded))
+    throw new Error("Invalid Evolution Go media");
+  const bytes=new Uint8Array(Buffer.from(encoded,"base64"));
+  if (!bytes.length || bytes.length>12*1024*1024) throw new Error("Evolution Go media exceeds 12 MB");
+  const mediaParts=message.imageMessage || message.documentMessage || message.audioMessage ||
+    ((message.documentWithCaptionMessage as Obj|undefined)?.message as Obj|undefined)?.documentMessage;
+  const part:Obj=(mediaParts && typeof mediaParts==="object")? mediaParts as Obj : {};
+  const mimeCandidate=prefix?.[1] || part.mimetype ||
+    (event.type==="audio"?"audio/ogg":event.type==="image"?"image/jpeg":"application/pdf");
+  const mime=typeof mimeCandidate==="string"?mimeCandidate.split(";")[0]:"application/octet-stream";
+  const ext=mime.includes("pdf")?".pdf":mime.includes("ogg")?".ogg":
+    mime.includes("mp4")?".m4a":mime.includes("jpeg")?".jpg":
+    mime.includes("png")?".png":mime.includes("xml")?".xml":".bin";
+  const filename=typeof part.fileName==="string" && /^[a-zA-Z0-9_.-]{1,90}$/.test(part.fileName)
+    ? part.fileName : "evolution-go-"+(event.mediaId||"media").slice(0,24)+ext;
+  return {bytes,mime,filename};
+}
+
 async function transcribe(media: { bytes: Uint8Array; mime: string; filename: string }) {
   if (!process.env.OPENAI_API_KEY) throw new Error("OpenAI not configured");
   if (media.bytes.byteLength > 4 * 1024 * 1024) throw new Error("Áudio maior que 4 MB");
@@ -228,7 +291,10 @@ async function understand(message: string, context: Obj, media?: {
 }
 
 export async function processWhatsAppQueue(maxMessages=1) {
-  const ready = isEvolutionProvider() ?
+  const ready = isEvolutionGoProvider() ?
+    Boolean(process.env.EVOLUTION_GO_API_URL && (process.env.EVOLUTION_GO_TOKEN||"").length>=32 &&
+      process.env.EVOLUTION_GO_INSTANCE_NAME) :
+    isEvolutionProvider() ?
     Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY &&
       process.env.EVOLUTION_INSTANCE && (process.env.EVOLUTION_WEBHOOK_SECRET||"").length>=32) :
     Boolean(process.env.META_WHATSAPP_APP_SECRET &&
@@ -245,8 +311,10 @@ export async function processWhatsAppQueue(maxMessages=1) {
       const changes = entries?.[0]?.changes as Array<Obj> | undefined;
       const value = changes?.[0]?.value as Obj | undefined;
       const meta = value?.metadata as Obj | undefined;
-      const channelNumber = isEvolutionProvider() ?
-        "evolution:"+process.env.EVOLUTION_INSTANCE : process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+      const channelNumber = isEvolutionGoProvider() ?
+        "evolution_go:"+process.env.EVOLUTION_GO_INSTANCE_NAME :
+        isEvolutionProvider() ? "evolution:"+process.env.EVOLUTION_INSTANCE :
+        process.env.META_WHATSAPP_PHONE_NUMBER_ID;
       if (!meta?.phone_number_id || String(meta.phone_number_id) !== channelNumber) {
         await rpc("whatsapp_finish_event",{
           p_secret:secret,p_event_id:event.id,p_state:"ignored",
@@ -287,7 +355,7 @@ export async function processWhatsAppQueue(maxMessages=1) {
       let text = (event.body||"").trim();
       let visual: {bytes:Uint8Array;mime:string;filename:string}|undefined;
       if (event.mediaId) {
-        const media = isEvolutionProvider() ? await mediaFromEvolution(event) : await mediaFromMeta(event.mediaId);
+        const media = isEvolutionGoProvider() ? await mediaFromEvolutionGo(event) : isEvolutionProvider() ? await mediaFromEvolution(event) : await mediaFromMeta(event.mediaId);
         if (event.type==="audio"||media.mime.startsWith("audio/")) {
           const transcription=await transcribe(media);
           if (!transcription) throw new Error("Áudio não compreendido");
