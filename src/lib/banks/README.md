@@ -9,18 +9,20 @@ Não capture senhas bancárias, certificados de terceiros ou tokens em tabelas p
 Inter pessoal (personal). O conector Open Finance da Pluggy declara suportar os três
 para PF/PJ. Disponibilidade final depende dos consentimentos bancários e da conexão.
 
-**Modelo de custos:** a Pluggy anunciou plano comercial de dados a partir de R$ 2.500/mês.
-A modalidade Meu Pluggy permite gratuitamente até 5 conexões para **uso pessoal,
-não comercial** e exige que o próprio usuário conecte contas no Meu Pluggy e
-crie itens no Dashboard via conector MeuPluggy. Não usar essa oferta para revenda,
-produto de terceiros ou automação empresarial sem confirmar as condições com a Pluggy.
-Se envolver movimentações empresariais, validar elegibilidade contratual antes.
+**Uso exclusivo do titular:** seguir https://meu.pluggy.ai/api-guide.
+O caminho gratuito para ler os próprios dados usa bancos conectados no Meu Pluggy
+e um item proxy por banco, criado pelo conector MeuPluggy na aplicação demo.
+O ID original do Meu Pluggy e o ID proxy do Dashboard são distintos.
+Não é necessário contratar plano nem habilitar listagem de itens em /v2/items.
+Com PLUGGY_PERSONAL_OWNER_ID configurado, o widget oferece somente o conector
+MeuPluggy, descoberto pelo nome na API; não usa um ID de conector presumido.
 
 **Configuração para o provedor:**
 - PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET (server-only; produção, criptografados)
 - PLUGGY_PERSONAL_OWNER_ID (opcional): UUID do único usuário do app autorizado
   a registrar itens do Meu Pluggy cujo clientUserId venha null. Nunca habilite
-  esse bypass para múltiplos usuários ou para itens de terceiros.
+  essa permissão para múltiplos usuários ou para itens de terceiros. A titularidade
+  é verificada tanto ao vincular quanto a cada sincronização.
 - Não colocar nenhum segredo com NEXT_PUBLIC_. O app mostra o estado 'aguardando'
   até existir um par de credenciais real.
 

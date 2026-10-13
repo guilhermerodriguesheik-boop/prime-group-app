@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pluggyAccounts, pluggyApiKey, pluggyItem, pluggyTransactions, type PluggyAccount } from "./pluggy";
+import { personalBankUserAllowed, pluggyAccounts, pluggyApiKey, pluggyItem, pluggyTransactions, type PluggyAccount } from "./pluggy";
 
 // Works with the signed-in user's RLS client. It cannot access accounts
 // belonging to another owner and does not post ledger transactions.
@@ -29,15 +29,19 @@ export async function syncBankConnection(
   days=120
 ):Promise<{accounts:number;transactions:number;at:string}>{
   if(connection.status==="disconnected")throw new Error("Conexão desconectada.");
-  const key=await pluggyApiKey();
-  const item=await pluggyItem(key,connection.provider_item_id);
-  if(item.id!==connection.provider_item_id)throw new Error("Conta do provedor não corresponde à conexão.");
-  // Item ownership is verified on initial attach; all subsequent access is
-  // restricted by Supabase RLS and the user's stored connection.
-  const accounts=await pluggyAccounts(key,item.id);
-  if(accounts.length>20)throw new Error("Número inesperado de contas.");
   let imported=0;
   try {
+    const key=await pluggyApiKey();
+    const item=await pluggyItem(key,connection.provider_item_id);
+    // Recheck even existing rows: authenticated clients can write through RLS.
+    if(item.id!==connection.provider_item_id || !allowPersonalItem(connection.owner_id,item.clientUserId))
+      throw new Error("Item bancário não autorizado para este usuário.");
+    if(item.status!=="UPDATED")
+      throw new Error(item.status==="UPDATING" ? "O banco ainda está atualizando os dados. Tente novamente em instantes." :
+        "A conexão precisa de atenção no Meu Pluggy. Confira a autorização do banco.");
+    const accounts=await pluggyAccounts(key,item.id);
+    if(accounts.length>20)throw new Error("Número inesperado de contas.");
+    if(!accounts.length)throw new Error("Nenhuma conta disponível. Confira o consentimento no Meu Pluggy.");
     for(const a of accounts){
       if(!a.id || !["BANK","CREDIT"].includes(a.type||""))continue;
       const at=new Date().toISOString();
@@ -95,9 +99,9 @@ export async function syncBankConnection(
   }
 }
 export function allowPersonalItem(userId:string,clientUserId:string|null|undefined){
-  return clientUserId===userId ||
+  return personalBankUserAllowed(userId) && (clientUserId===userId ||
     (!clientUserId && !!process.env.PLUGGY_PERSONAL_OWNER_ID &&
-     process.env.PLUGGY_PERSONAL_OWNER_ID===userId);
+     process.env.PLUGGY_PERSONAL_OWNER_ID===userId));
 }
 export function inferBankLabel(a:PluggyAccount):string{
   return a.name || a.marketingName || "Conta";

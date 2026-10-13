@@ -21,6 +21,17 @@ export type PluggyTransaction = {
 export function pluggyReady() {
   return Boolean(process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET);
 }
+export function personalBankUserAllowed(userId:string) {
+  const owner=process.env.PLUGGY_PERSONAL_OWNER_ID;
+  return !owner || owner===userId;
+}
+export async function meuPluggyConnector(key:string):Promise<number> {
+  const data=await request<{results?:{id:number;name:string}[]}>("/connectors?name=MeuPluggy",key);
+  const connector=data.results?.find(c=>c.name.replace(/\s/g,"").toLowerCase()==="meupluggy");
+  if(!connector || !Number.isInteger(connector.id))
+    throw new Error("Conector Meu Pluggy não disponível. Vincule o item da aplicação demo no Dashboard.");
+  return connector.id;
+}
 async function jsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     // Do not leak the provider response; it can contain private bank metadata.

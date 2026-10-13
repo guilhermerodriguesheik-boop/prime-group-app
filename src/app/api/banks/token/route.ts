@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { pluggyApiKey, pluggyConnectToken, pluggyReady } from "@/lib/banks/pluggy";
+import { meuPluggyConnector, personalBankUserAllowed, pluggyApiKey, pluggyConnectToken, pluggyReady } from "@/lib/banks/pluggy";
 
 export const runtime="nodejs";
 export async function POST(request:Request) {
@@ -10,6 +10,7 @@ export async function POST(request:Request) {
   const supabase=await createClient();
   const {data:{user}}=await supabase.auth.getUser();
   if(!user)return NextResponse.json({error:"Faça login."},{status:401});
+  if(!personalBankUserAllowed(user.id))return NextResponse.json({error:"Integração reservada ao titular."},{status:403});
   if(!pluggyReady())return NextResponse.json({
     error:"Credenciais Pluggy ainda não configuradas na Vercel."
   },{status:503});
@@ -25,8 +26,9 @@ export async function POST(request:Request) {
   if(!workspace)return NextResponse.json({error:"Ambiente não autorizado."},{status:403});
   try{
     const key=await pluggyApiKey();
+    const connectorId=process.env.PLUGGY_PERSONAL_OWNER_ID ? await meuPluggyConnector(key) : null;
     const accessToken=await pluggyConnectToken(key,user.id);
-    return NextResponse.json({accessToken},{
+    return NextResponse.json({accessToken,connectorId},{
       headers:{"Cache-Control":"no-store","Pragma":"no-cache"}
     });
   }catch(e){

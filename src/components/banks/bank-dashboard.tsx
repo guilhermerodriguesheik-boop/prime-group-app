@@ -14,6 +14,7 @@ type Data={configured:boolean;mode:string;workspaces:Workspace[];connections:Con
   accounts:BankAccount[];transactions:Statement[]};
 type WidgetOptions={
   connectToken:string;includeSandbox:boolean;
+  selectedConnectorId?:number;connectorIds?:number[];products?:string[];
   onSuccess:(data:{item:{id:string}})=>void;
   onError:(error:{message:string})=>void;
   onClose?:()=>void;
@@ -74,6 +75,8 @@ export function BankDashboard(){
       if(!r.ok)throw new Error(payload.error||"Falha ao iniciar.");
       const widget=new pluggy({
         connectToken:payload.accessToken,includeSandbox:false,
+        ...(payload.connectorId ? {selectedConnectorId:payload.connectorId,connectorIds:[payload.connectorId]} : {}),
+        products:["ACCOUNTS","CREDIT_CARDS","TRANSACTIONS"],
         onSuccess:async ({item})=>{
           setBusy("attach");
           try{await attach(item.id);}catch(e){setNotice(e instanceof Error?e.message:"Erro ao vincular conta.");}
@@ -112,6 +115,7 @@ export function BankDashboard(){
   useEffect(()=>{
     if(!data?.configured)return;
     for(const c of data.connections){
+      if(c.provider!=="pluggy")continue;
       if(c.status!=="connected"&&c.status!=="attention")continue;
       if(c.last_synced_at && Date.now()-Date.parse(c.last_synced_at)<24*3600_000)continue;
       if(attempted.current.has(c.id))continue;
@@ -131,6 +135,7 @@ export function BankDashboard(){
       src="https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js"
       strategy="afterInteractive"
       onReady={()=>setSdkReady(true)}
+      onError={()=>setNotice("Não foi possível abrir a autorização. Tente recarregar ou vincule o item já criado no Dashboard Pluggy.")}
     />
     <div className="grid grid-3" style={{marginBottom:16}}>
       <div className="card"><div className="metric-label">Contas conectadas</div><div className="metric-value">{data?.accounts.length||0}</div><div className="metric-foot">Apenas contas realmente autorizadas</div></div>
@@ -140,15 +145,15 @@ export function BankDashboard(){
     {notice&&<div className="notice" role="status" style={{marginBottom:16}}>{notice}</div>}
     <div className="card" style={{marginBottom:18}}>
       <h3>Conectar suas instituições</h3>
-      <p className="metric-foot">Escolha o banco, autorize seus dados no fluxo oficial da instituição e vincule ao ambiente correto.</p>
+      <p className="metric-foot">{data?.mode==="personal-allowed" ? "Conecte seus bancos no Meu Pluggy e autorize aqui o acesso aos seus próprios dados. Escolha o banco correspondente para separar Prime e Pessoal." : "Escolha o banco, autorize seus dados no fluxo oficial da instituição e vincule ao ambiente correto."}</p>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"14px 0"}}>
         {banks.map((b,i)=><button key={b.slug} className={"button "+(bank===i?"":"ghost")}
-          type="button" onClick={()=>{setBank(i);setNotice("");}}>{b.name}</button>)}
+          type="button" disabled={!!busy} onClick={()=>{setBank(i);setNotice("");}}>{b.name}</button>)}
       </div>
       <p className="metric-foot">Destino: <b>{workspace?.name||"Ambiente não cadastrado"}</b> · {selected.kind==="business"?"Pessoa jurídica":"Pessoa física"}</p>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:12}}>
         <button type="button" className="button" disabled={!!busy||loading||!data?.configured||!workspace}
-          onClick={()=>void connect()}>{busy==="connecting"?"Abrindo autorização...":"Conectar com Open Finance"}</button>
+          onClick={()=>void connect()}>{busy==="connecting"?"Abrindo autorização...":data?.mode==="personal-allowed"?"Conectar pelo Meu Pluggy":"Conectar com Open Finance"}</button>
         <span className="metric-foot">{data?.configured?"Integração técnica configurada":"Aguardando credenciais do provedor"}</span>
       </div>
       <div className="notice" style={{marginTop:18}}>
@@ -176,8 +181,8 @@ export function BankDashboard(){
         </form>
       </div>
       <details style={{marginTop:16}}> 
-        <summary>Já tenho um itemId da minha conta Meu Pluggy</summary>
-        <p className="metric-foot">Para uso pessoal autorizado, conecte seus bancos no Meu Pluggy e copie o itemId no Dashboard. A conexão exige credenciais de API do próprio titular no servidor. Conexões sem identificação de usuário só podem ser importadas pelo proprietário previamente habilitado.</p>
+        <summary>Já tenho um item da aplicação demo no Dashboard Pluggy</summary>
+        <p className="metric-foot">Use o ID do item criado pelo conector Meu Pluggy na aplicação demo do Dashboard. O ID da conexão original no site Meu Pluggy é diferente. Vincule um item por banco, escolhendo a instituição acima.</p>
         <form onSubmit={async e=>{e.preventDefault();setBusy("manual");try{await attach(manualId.trim());setManualId("");}catch(err){setNotice(err instanceof Error?err.message:"Falha no cadastro.");}finally{setBusy("");}}}>
           <input aria-label="Item ID da Pluggy" placeholder="UUID do item bancário" value={manualId} onChange={e=>setManualId(e.target.value)}
             style={{padding:10,maxWidth:"100%",width:380,marginRight:8}}/>
