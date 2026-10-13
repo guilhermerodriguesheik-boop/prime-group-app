@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Header, SectionTitle } from "@/components/ui";
 import { WhatsAppLinkPanel } from "@/components/whatsapp/link-panel";
 
@@ -52,9 +53,11 @@ export default function Page() {
     },
     {
       name: "Open Finance / Pluggy",
-      description: "Contas, transações, cartões e conciliação",
-      status: "Próxima etapa",
-      tone: "orange",
+      description: "Itaú PJ, Bradesco PJ e Inter PF — integração em modo de leitura",
+      status: process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET
+        ? "Credenciais configuradas; aguardando consentimentos"
+        : "Conector implementado; aguardando credenciais",
+      tone: process.env.PLUGGY_CLIENT_ID && process.env.PLUGGY_CLIENT_SECRET ? "green" : "orange",
     },
   ];
 
@@ -72,6 +75,7 @@ export default function Page() {
         ))}
       </div>
 
+      <div className="notice"><Link href="/bancos">Abrir painel bancário / Open Finance →</Link></div>
       <SectionTitle title="WhatsApp Business" />
       <WhatsAppLinkPanel />
       <div className="notice">
