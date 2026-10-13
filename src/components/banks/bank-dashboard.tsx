@@ -4,7 +4,7 @@ import Script from "next/script";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Workspace={id:string;kind:string;name:string};
-type Connection={id:string;workspace_id:string;display_name:string;institution_name:string|null;
+type Connection={id:string;provider:string;workspace_id:string;display_name:string;institution_name:string|null;
   account_kind:string;status:string;last_synced_at:string|null;last_error:string|null};
 type BankAccount={id:string;connection_id:string;display_name:string;account_last4:string|null;
   kind:string;currency:string;balance:number|null;balance_updated_at:string|null};
@@ -151,7 +151,31 @@ export function BankDashboard(){
           onClick={()=>void connect()}>{busy==="connecting"?"Abrindo autorização...":"Conectar com Open Finance"}</button>
         <span className="metric-foot">{data?.configured?"Integração técnica configurada":"Aguardando credenciais do provedor"}</span>
       </div>
-      <details style={{marginTop:16}}>
+      <div className="notice" style={{marginTop:18}}>
+        <b>Sem mensalidade de Open Finance: importar extrato OFX</b>
+        <p className="metric-foot">Exporte o extrato OFX do banco pelo internet banking. O arquivo será analisado e suas movimentações entrarão em conferência, sem lançamentos automáticos no caixa.</p>
+        <form onSubmit={async e=>{
+          e.preventDefault();
+          const form=new FormData(e.currentTarget);
+          const file=form.get("file");
+          if(!(file instanceof File))return;
+          form.set("bank",selected.slug);
+          setBusy("ofx");setNotice("");
+          try{
+            const response=await fetch("/api/banks/import",{method:"POST",body:form});
+            const body=await response.json();
+            if(!response.ok)throw new Error(body.error||"Falha ao importar arquivo.");
+            setNotice(body.imported+" movimentações lidas de "+body.bank+". Revise antes de conciliar.");
+            await load();
+          }catch(err){setNotice(err instanceof Error?err.message:"Falha ao importar.");}
+          finally{setBusy("");}
+        }}>
+          <input type="file" name="file" accept=".ofx,.qfx" required aria-label="Selecionar extrato OFX"
+            style={{padding:"8px 0",marginRight:10,maxWidth:"100%"}}/>
+          <button type="submit" className="button ghost" disabled={!!busy||!workspace}>Importar OFX</button>
+        </form>
+      </div>
+      <details style={{marginTop:16}}> 
         <summary>Já tenho um itemId da minha conta Meu Pluggy</summary>
         <p className="metric-foot">Para uso pessoal autorizado, conecte seus bancos no Meu Pluggy e copie o itemId no Dashboard. A conexão exige credenciais de API do próprio titular no servidor. Conexões sem identificação de usuário só podem ser importadas pelo proprietário previamente habilitado.</p>
         <form onSubmit={async e=>{e.preventDefault();setBusy("manual");try{await attach(manualId.trim());setManualId("");}catch(err){setNotice(err instanceof Error?err.message:"Falha no cadastro.");}finally{setBusy("");}}}>
@@ -165,15 +189,15 @@ export function BankDashboard(){
       <h3>Suas conexões e saldos</h3>
       {loading?<p>Carregando...</p>:data?.connections.length===0?<p className="metric-foot">Nenhuma conta conectada. Não há extratos reais para importar até você autorizar os bancos.</p>:null}
       {data?.connections.map(c=><div key={c.id} style={{padding:"12px 0",borderTop:"1px solid var(--line)"}}>
-        <strong>{c.display_name}</strong><span className="metric-foot"> · {data.workspaces.find(w=>w.id===c.workspace_id)?.name} · {c.status}</span>
+        <strong>{c.display_name}</strong><span className="metric-foot"> · {data.workspaces.find(w=>w.id===c.workspace_id)?.name} · {c.provider==="manual"?"Arquivo OFX":"Pluggy"} · {c.status}</span>
         <div className="metric-foot">Última sincronização: {date(c.last_synced_at)}</div>
         {c.last_error&&<div className="warning" style={{fontSize:12}}>Erro: {c.last_error}</div>}
         {data.accounts.filter(a=>a.connection_id===c.id).map(a=><div className="metric-foot" key={a.id}>
           {a.display_name} {a.account_last4&&"· final "+a.account_last4} · Saldo: {a.balance===null?"indisponível":money(a.balance)} {a.kind==="CREDIT"?"(cartão/crédito)":""}
         </div>)}
         <div style={{display:"flex",gap:8,marginTop:10}}>
-          <button className="button ghost" type="button" disabled={!!busy||c.status==="disconnected"}
-            onClick={()=>void sync(c.id,true)}>{busy===c.id?"Atualizando...":"Atualizar extrato"}</button>
+          {c.provider==="pluggy"&&<button className="button ghost" type="button" disabled={!!busy||c.status==="disconnected"}
+            onClick={()=>void sync(c.id,true)}>{busy===c.id?"Atualizando...":"Atualizar extrato"}</button>}
           <button className="button ghost" type="button" disabled={!!busy}
             onClick={()=>void toggle(c.id,c.status==="disconnected")}>
             {c.status==="disconnected"?"Reativar":"Pausar neste app"}</button>
