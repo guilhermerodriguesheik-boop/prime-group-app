@@ -10,7 +10,6 @@ const nav = [
   ["⌂", "Pessoal", "/pessoal"],
   ["%", "Juros", "/juros"],
   ["▣", "Contas", "/contas"],
-  ["▤", "Bancos", "/bancos"],
   ["↔", "Bancos / Open Finance", "/bancos"],
   ["◴", "Planejamento", "/planejamento"],
   ["▥", "Relatórios", "/relatorios"],
