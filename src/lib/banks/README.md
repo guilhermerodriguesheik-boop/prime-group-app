@@ -34,7 +34,13 @@ Upsert com IDs do provedor impede duplicação em importação repetida.
 POST action=pause interrompe consultas no app, mas não revoga o consentimento
 existente no provedor. Não há iniciação de Pix, transferências nem pagamento.
 
-**Importante:** banco bancário não é livro-caixa:
+**Importação sem assinatura:** no painel /bancos a pessoa pode importar um OFX de
+Itaú PJ, Bradesco PJ ou Inter PF, com idempotência pelo FITID de cada movimento.
+A fonte manual aparece rotulada como OFX e não é sincronizada por API. O arquivo
+é enviado apenas ao servidor autenticado, limitado em tamanho, e não armazena
+senhas. Cuidado para escolher o banco/ambiente correto; faça conferência.
+
+**Importante:** extrato bancário não é livro-caixa:
 nem balance nem extratos importados alteram transactions, payables, receivables
 ou accounts existentes. De-para, matching de transferências e baixa automática
 só podem ser habilitados após confirmação explícita e testes reais.
