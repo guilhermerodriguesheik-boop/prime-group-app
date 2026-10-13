@@ -190,23 +190,28 @@ async function mediaFromEvolutionGo(event: Event) {
     throw new Error("Evolution Go media instance mismatch");
   const message=source.message as Obj | undefined;
   if (!message || typeof message !== "object") throw new Error("Evolution Go media missing");
-  // Evolution Go serves audio, images and documents through one media route.
-  // /message/downloadimage is documented in an older wiki but returns 404 on
-  // current hosted releases. The actual router exposes /message/downloadmedia.
-  const response=await fetch(base+"/message/downloadmedia",{
-    method:"POST",cache:"no-store",signal:AbortSignal.timeout(20000),
-    headers:{apikey:token,"Content-Type":"application/json"},
-    body:JSON.stringify({message}),
-  });
-  if (!response.ok) throw new Error("Evolution Go media HTTP "+response.status);
-  if (Number(response.headers.get("content-length")||"0")>18_000_000)
-    throw new Error("Evolution Go media too large");
-  const raw=await response.text();
-  if (raw.length>18_000_000) throw new Error("Evolution Go media too large");
-  const result=JSON.parse(raw) as Obj;
-  const data=(result.data && typeof result.data==="object") ? result.data as Obj : {};
-  const candidate=data.base64 || result.base64;
-  if (typeof candidate!=="string") throw new Error("Evolution Go media payload missing");
+  // Hosted Evolution Go can include a base64 attachment directly in the signed
+  // webhook event. Prefer it: media download endpoints differ among versions.
+  let candidate = typeof message.base64 === "string" ? message.base64 : "";
+  if (!candidate) {
+    // Verified in Evolution Go source: POST /message/downloadmedia. The older
+    // wiki refers to /message/downloadimage, which fails with HTTP 404.
+    const response=await fetch(base+"/message/downloadmedia",{
+      method:"POST",cache:"no-store",signal:AbortSignal.timeout(20000),
+      headers:{apikey:token,"Content-Type":"application/json"},
+      body:JSON.stringify({message}),
+    });
+    if (!response.ok) throw new Error("Evolution Go media HTTP "+response.status);
+    if (Number(response.headers.get("content-length")||"0")>18_000_000)
+      throw new Error("Evolution Go media too large");
+    const raw=await response.text();
+    if (raw.length>18_000_000) throw new Error("Evolution Go media too large");
+    const result=JSON.parse(raw) as Obj;
+    const data=(result.data && typeof result.data==="object") ? result.data as Obj : {};
+    const downloaded=data.base64 || result.base64;
+    if (typeof downloaded!=="string") throw new Error("Evolution Go media payload missing");
+    candidate=downloaded;
+  }
   const prefix=candidate.match(/^data:([^;,]+);base64,/);
   const encoded=(prefix?candidate.slice(prefix[0].length):candidate).replace(/\s/g,"");
   if (encoded.length>17_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded))
