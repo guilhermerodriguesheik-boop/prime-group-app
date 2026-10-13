@@ -77,7 +77,7 @@ export default function Page() {
       <div className="notice">
         {viaGo ? (
           <>
-            <b>Webhook do What's Evolution Go:</b>
+            <b>Webhook do What&apos;s Evolution Go:</b>
             <code> https://prime-finance-ochre.vercel.app/api/webhooks/evolution-go </code>.
             No painel do Evolution Go, abra Webhook, use essa URL, ative mensagens recebidas
             (evento MESSAGE) e salve. O serviço envia o token da instância no evento, validado
