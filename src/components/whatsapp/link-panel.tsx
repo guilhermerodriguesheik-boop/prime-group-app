@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type Status = {
   linked: boolean; maskedPhone: string | null; pendingUntil: string | null;
-  connectedAt: string | null; metaConfigured: boolean;
+  connectedAt: string | null; providerConfigured: boolean; provider: "evolution" | "meta";
 };
 
 export function WhatsAppLinkPanel() {
@@ -52,20 +52,22 @@ export function WhatsAppLinkPanel() {
     finally{setLoading(false)}
   }
   const message=code?"VINCULAR "+code:"";
-  const readyToLink=Boolean(state?.metaConfigured);
+  const readyToLink=Boolean(state?.providerConfigured);
+  const viaQr = state?.provider === "evolution";
   return (
     <div className="card" style={{display:"grid",gap:12}}>
       <h3>Vincular meu WhatsApp ao Prime Finance</h3>
       <p className="metric-foot">
         Seu número só terá acesso às contas depois que enviar um código temporário pelo WhatsApp
-        para o número comercial autorizado na Meta. Outros números não podem consultar seus dados.
+        para o número do canal conectado. Outros números não podem consultar seus dados.
       </p>
       <p>
         {state?.linked
           ? "Número vinculado: "+state.maskedPhone
           : readyToLink
-            ? "Integração técnica configurada. Falta confirmar o vínculo do seu número."
-            : "Aguardando credenciais e ativação do número comercial na Meta."}
+            ? "Canal configurado ("+(viaQr?"QR Code":"Meta")+"). Falta confirmar o vínculo do seu número."
+            : (viaQr?"Aguardando conexão e credenciais do serviço Evolution (QR Code).":
+               "Aguardando credenciais e ativação do número comercial na Meta.")}
       </p>
       {state?.linked && <span className="badge green">Número vinculado</span>}
       {!state?.linked && (
@@ -76,7 +78,7 @@ export function WhatsAppLinkPanel() {
       )}
       {code && (
         <div className="notice">
-          <div>Código válido por 15 minutos. Envie a mensagem abaixo para o WhatsApp Business configurado na Meta:</div>
+          <div>Código válido por 15 minutos. Envie a mensagem abaixo para o número {viaQr?"conectado pelo QR Code":"comercial conectado à Meta"}:</div>
           <p style={{fontSize:"1.3rem",fontWeight:700,letterSpacing:1,margin:"12px 0"}}>{message}</p>
           <button className="button" type="button" onClick={()=>
             navigator.clipboard.writeText(message).then(()=>setNotice("Mensagem copiada.")).catch(()=>setError("Não foi possível copiar."))}>
@@ -100,7 +102,7 @@ export function WhatsAppLinkPanel() {
       <p className="metric-foot">
         Depois de ativado: texto, áudio, foto e XML/PDF; informações incompletas viram registros
         parciais. Recebimentos/contas só são gravados como pagamentos quando houver dados suficientes.
-        WhatsApp Business pode ter custos cobrados pela Meta.
+        O canal QR Code é não oficial e pode sofrer desconexões ou bloqueio do número. O canal Meta tem cobrança própria.
       </p>
     </div>
   );
