@@ -65,7 +65,9 @@ export async function syncBankConnection(
           occurred_on:t.date!.slice(0,10),
           description:(t.description||t.descriptionRaw||"Movimentação").slice(0,350),
           amount:Math.abs(t.amount!),
-          direction:(t.amount! < 0 ? "debit" : "credit"),
+          // Pluggy CREDIT accounts use positive amounts for card charges, so sign alone is unsafe.
+          direction:t.type==="DEBIT" ? "debit" : t.type==="CREDIT" ? "credit" :
+            (t.amount! < 0 ? "debit" : "credit"),
           provider_status:safeStatus(t.status),
           category:(t.category||"").slice(0,100)||null,
           updated_at:at,
