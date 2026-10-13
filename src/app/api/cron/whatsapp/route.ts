@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     return NextResponse.json({error:"Unauthorized"},{status:401});
   }
   try {
-    return NextResponse.json(await processWhatsAppQueue(1),{
+    return NextResponse.json(await processWhatsAppQueue(2),{
       headers:{"Cache-Control":"no-store"},
     });
   } catch(error) {

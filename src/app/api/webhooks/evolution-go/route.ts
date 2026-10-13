@@ -114,7 +114,8 @@ export async function POST(request: Request) {
   }
   if (process.env.OPENAI_API_KEY) {
     after(async () => {
-      try { await processWhatsAppQueue(1); }
+      // Drain one older retry plus the newly received message without waiting for cron.
+      try { await processWhatsAppQueue(2); }
       catch (e) { console.error("Evolution Go queue error",e instanceof Error?e.message:"unknown"); }
     });
   }
