@@ -24,11 +24,12 @@ export async function GET() {
     maskedPhone: data?.phone_number ? "••••" + data.phone_number.slice(-4) : null,
     connectedAt: data?.connected_at ?? null,
     pendingUntil: data?.pending_until ?? null,
-    metaConfigured: Boolean(
-      process.env.META_WHATSAPP_APP_SECRET &&
-      process.env.META_WHATSAPP_ACCESS_TOKEN &&
-      process.env.META_WHATSAPP_PHONE_NUMBER_ID
-    ),
+    provider: process.env.WHATSAPP_PROVIDER === "evolution" ? "evolution" : "meta",
+    providerConfigured: process.env.WHATSAPP_PROVIDER === "evolution" ?
+      Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY &&
+        process.env.EVOLUTION_INSTANCE && (process.env.EVOLUTION_WEBHOOK_SECRET||"").length>=32) :
+      Boolean(process.env.META_WHATSAPP_APP_SECRET &&
+        process.env.META_WHATSAPP_ACCESS_TOKEN && process.env.META_WHATSAPP_PHONE_NUMBER_ID),
   }, { headers: noStore });
 }
 
@@ -53,7 +54,11 @@ export async function POST() {
   return NextResponse.json({
     code,
     expiresAt: expires,
-    instruction: "Envie VINCULAR " + code + " pelo seu WhatsApp para o número do WhatsApp Business cadastrado na Meta. Esse código dura 15 minutos.",
+    instruction: "Envie VINCULAR " + code +
+      (process.env.WHATSAPP_PROVIDER==="evolution" ?
+        " pelo seu WhatsApp para o número conectado via QR Code." :
+        " pelo seu WhatsApp para o número comercial cadastrado na Meta.") +
+      " Esse código dura 15 minutos.",
   }, { headers: noStore });
 }
 
