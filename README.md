@@ -74,7 +74,21 @@ select * from public.bootstrap_my_finance();
 
 A função cria os workspaces Prime Group, Pessoal e Recebíveis e Juros.
 
-## 5. WhatsApp Cloud API: ativação e limites
+## 5. WhatsApp: dois canais independentes
+
+O WhatsApp pode usar a integração **Meta oficial** ou uma **instância Evolution API v2 vinculada por QR Code**. Esta segunda opção dispensa verificar o CNPJ na Meta, porém é **não oficial**, tem risco de bloqueio do número e exige um provedor Evolution confiável. Por segurança, use um número secundário e considere o acesso do provedor aos documentos/áudios que você enviar. As duas opções reutilizam o mesmo vínculo por código de 8 dígitos e as funções de isolamento financeiro do Supabase.
+
+### Alternativa QR Code / Evolution API (sem Meta)
+
+1. Contrate um host compatível com a Evolution API v2 ou hospede uma instância própria. A Vercel hospeda apenas o Prime Finance; a sessão do WhatsApp precisa de servidor persistente. Conecte um **número secundário**, não o WhatsApp comercial principal, lendo o QR Code na interface do provedor.
+2. Configure na Vercel do Prime Finance as variáveis de servidor `WHATSAPP_PROVIDER=evolution`, `EVOLUTION_API_URL=https://seu-servidor`, `EVOLUTION_INSTANCE=nome-da-instancia`, `EVOLUTION_API_KEY` (chave privada), `EVOLUTION_WEBHOOK_SECRET` (aleatório com pelo menos 32 caracteres) e o `WHATSAPP_INGRESS_SECRET` que o banco já utiliza. Opcionalmente `EVOLUTION_PHONE_NUMBER` (DDI + DDD + número). Nunca salve chaves no GitHub.
+3. No painel Evolution API v2, configure **webhook por instância**: URL `https://prime-finance-ochre.vercel.app/api/webhooks/evolution`; evento **MESSAGES_UPSERT**; `byEvents: false`, `base64: false`, com cabeçalho customizado **x-prime-webhook-secret** igual à variável privada. Em instalações v2 clássicas, a API de cadastro é `POST /webhook/set/{instance}`, com objeto `webhook: { enabled: true, url, headers: {"x-prime-webhook-secret": "..."}, byEvents: false, base64: false, events: ["MESSAGES_UPSERT"] }`. Alguns painéis e versões usam nomes de campos diferentes: confirme no painel da instância. Sem cabeçalho de autenticação, a entrada fica bloqueada com HTTP 401.
+4. Faça novo deploy das variáveis (sem novas compras) e, em **Integrações**, gere o código temporário. Envie `VINCULAR 12345678` (substitua pelo código apresentado) do WhatsApp pessoal para o **número secundário conectado via QR**. Se você preferir operar no mesmo número, considere primeiro a solução oficial de coexistência, porque sessões não oficiais podem ser interrompidas.
+5. Teste um texto e, em seguida, uma imagem/PDF/áudio. As mídias são buscadas por autenticação na instância Evolution, com limite de 12 MB; compatibilidade exata depende da versão e deve ser validada ao vivo antes de confiar em registros financeiros.
+
+**Proteções:** rejeita remetentes que são grupos, status ou mensagens enviadas pelo próprio aparelho; exige instância e segredo corretos; aceita apenas telefones identificáveis; impõe limite de payload; ingere no mesmo banco com idempotência e autorização por código de posse do número. O endpoint Meta original permanece intacto. Não é uma integração WhatsApp oficialmente autorizada; pode sofrer restrições ou descontinuidade.
+
+## 5.1. WhatsApp Cloud API: ativação e limites
 
 O backend suporta assinatura HMAC da Meta, persistência idempotente, fila, transcrição de áudio, fotos, PDFs e leitura de XML. O canal só opera com token/telefone aprovados pela Meta e configurados na Vercel.
 
