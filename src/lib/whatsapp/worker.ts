@@ -190,8 +190,10 @@ async function mediaFromEvolutionGo(event: Event) {
     throw new Error("Evolution Go media instance mismatch");
   const message=source.message as Obj | undefined;
   if (!message || typeof message !== "object") throw new Error("Evolution Go media missing");
-  // This is the documented Evolution Go media download API, not Evolution v2.
-  const response=await fetch(base+"/message/downloadimage",{
+  // Evolution Go serves audio, images and documents through one media route.
+  // /message/downloadimage is documented in an older wiki but returns 404 on
+  // current hosted releases. The actual router exposes /message/downloadmedia.
+  const response=await fetch(base+"/message/downloadmedia",{
     method:"POST",cache:"no-store",signal:AbortSignal.timeout(20000),
     headers:{apikey:token,"Content-Type":"application/json"},
     body:JSON.stringify({message}),
