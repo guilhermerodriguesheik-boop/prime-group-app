@@ -48,7 +48,7 @@ export function BankDashboard(){
     }catch(err){setNotice(err instanceof Error?err.message:"Falha ao carregar.");}
     finally{setLoading(false);}
   },[]);
-  useEffect(()=>{void load();},[load]);
+  useEffect(()=>{const timer=window.setTimeout(()=>{void load();},0);return ()=>window.clearTimeout(timer);},[load]);
   async function post(payload:Record<string,unknown>){
     const r=await fetch("/api/banks",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const v=await r.json();
@@ -116,7 +116,7 @@ export function BankDashboard(){
       if(c.last_synced_at && Date.now()-Date.parse(c.last_synced_at)<24*3600_000)continue;
       if(attempted.current.has(c.id))continue;
       attempted.current.add(c.id);
-      void sync(c.id);
+      window.setTimeout(()=>{void sync(c.id);},0);
       break;
     }
     // Synchronize on app entry only. Never poll continuously or bypass consent.
