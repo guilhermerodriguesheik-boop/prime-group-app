@@ -48,8 +48,31 @@ async function rpc<T>(name: string, payload: Obj): Promise<T> {
   return await r.json() as T;
 }
 const graphVersion = () => process.env.WHATSAPP_GRAPH_VERSION?.trim() || "v24.0";
+const useEvolution = () => process.env.WHATSAPP_PROVIDER === "evolution";
+
+function evolutionConfig() {
+  const url = process.env.EVOLUTION_API_URL || "";
+  const key = process.env.EVOLUTION_API_KEY || "";
+  const instance = process.env.EVOLUTION_INSTANCE || "";
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || !key || !instance || parsed.username || parsed.password)
+    throw new Error("Evolution HTTPS endpoint or credentials not configured");
+  return { base: parsed.href.replace(/\/+$/,""), key, instance };
+}
 
 async function sendText(to: string, body: string) {
+  if (useEvolution()) {
+    const {base,key,instance} = evolutionConfig();
+    const number=to.replace(/\D/g,"");
+    if (!/^[0-9]{10,15}$/.test(number)) throw new Error("Invalid Evolution recipient");
+    const response=await fetch(base+"/message/sendText/"+encodeURIComponent(instance),{
+      method:"POST",cache:"no-store",signal:AbortSignal.timeout(15000),
+      headers:{apikey:key,"Content-Type":"application/json"},
+      body:JSON.stringify({number,text:body.slice(0,3900)}),
+    });
+    if (!response.ok) throw new Error("Evolution send HTTP "+response.status);
+    return;
+  }
   const token = process.env.META_WHATSAPP_ACCESS_TOKEN;
   const number = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
   if (!token || !number) throw new Error("Meta API not configured");
@@ -89,6 +112,54 @@ async function mediaFromMeta(id: string) {
     mime.includes("mp4") ? ".m4a" : mime.includes("jpeg") ? ".jpg" :
     mime.includes("png") ? ".png" : mime.includes("xml") ? ".xml" : ".bin";
   return { bytes, mime, filename: "whatsapp-" + id.slice(0,24) + ext };
+}
+
+async function mediaFromEvolution(event: Event) {
+  const {base,key,instance}=evolutionConfig();
+  const evo=event.payload.__evolution as Obj | undefined;
+  if (!evo || evo.instance !== instance) throw new Error("Evolution instance mismatch");
+  const data=evo.data as Obj | undefined;
+  if (!data || !data.message || !data.key) throw new Error("Evolution media data missing");
+  // Request authenticated media from our own Evolution instance; never fetch
+  // a download URL supplied by an untrusted WhatsApp message.
+  const response=await fetch(base+"/chat/getBase64FromMediaMessage/"+encodeURIComponent(instance),{
+    method:"POST",cache:"no-store",signal:AbortSignal.timeout(18000),
+    headers:{apikey:key,"Content-Type":"application/json"},
+    body:JSON.stringify({message:data,convertToMp4:false}),
+  });
+  if (!response.ok) throw new Error("Evolution media HTTP "+response.status);
+  if (Number(response.headers.get("content-length") || 0)>18_000_000)
+    throw new Error("Evolution media exceeds size limit");
+  const raw=await response.text();
+  if (raw.length>18_000_000) throw new Error("Evolution media exceeds size limit");
+  const result=JSON.parse(raw) as Obj;
+  const nested=(result.data && typeof result.data==="object") ? result.data as Obj : {};
+  const media=(result.media && typeof result.media==="object") ? result.media as Obj : {};
+  const candidate=[result.base64,nested.base64,media.base64].find(v=>typeof v==="string");
+  if (typeof candidate!=="string") throw new Error("Evolution media base64 missing");
+  const match=candidate.match(/^data:([^;,]+);base64,/);
+  const encoded=(match?candidate.slice(match[0].length):candidate).replace(/\s/g,"");
+  if (encoded.length>17_000_000 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded))
+    throw new Error("Invalid Evolution media encoding");
+  const bytes=new Uint8Array(Buffer.from(encoded,"base64"));
+  if (!bytes.length || bytes.length>12*1024*1024) throw new Error("Evolution media too large");
+  const message=data.message as Obj;
+  const inner=(message?.ephemeralMessage as Obj|undefined)?.message as Obj|undefined;
+  const parts=inner||message;
+  const mediaPart=parts.imageMessage||parts.audioMessage||parts.documentMessage||
+    ((parts.documentWithCaptionMessage as Obj|undefined)?.message as Obj|undefined)?.documentMessage;
+  const md=(mediaPart && typeof mediaPart==="object")?mediaPart as Obj:{};
+  const suggestedMime=match?.[1]||md.mimetype||result.mimetype||nested.mimetype;
+  const mime=typeof suggestedMime==="string" ? suggestedMime.split(";")[0] : (
+    event.type==="audio"?"audio/ogg":event.type==="image"?"image/jpeg":
+    event.type==="document"?"application/pdf":"application/octet-stream"
+  );
+  const ext=mime.includes("pdf")?".pdf":mime.includes("ogg")?".ogg":
+    mime.includes("mp4")?".m4a":mime.includes("jpeg")?".jpg":
+    mime.includes("png")?".png":mime.includes("xml")?".xml":".bin";
+  const filename=typeof md.fileName==="string" && /^[a-zA-Z0-9_.-]{1,90}$/.test(md.fileName)
+    ? md.fileName : "evolution-"+(event.mediaId||"media").slice(0,24)+ext;
+  return {bytes,mime,filename};
 }
 
 async function transcribe(media: { bytes: Uint8Array; mime: string; filename: string }) {
@@ -157,10 +228,12 @@ async function understand(message: string, context: Obj, media?: {
 }
 
 export async function processWhatsAppQueue(maxMessages=1) {
-  if (!process.env.META_WHATSAPP_APP_SECRET ||
-      !process.env.META_WHATSAPP_ACCESS_TOKEN ||
-      !process.env.META_WHATSAPP_PHONE_NUMBER_ID ||
-      !process.env.OPENAI_API_KEY) return {processed:0,disabled:true};
+  const ready = useEvolution() ?
+    Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY &&
+      process.env.EVOLUTION_INSTANCE && (process.env.EVOLUTION_WEBHOOK_SECRET||"").length>=32) :
+    Boolean(process.env.META_WHATSAPP_APP_SECRET &&
+      process.env.META_WHATSAPP_ACCESS_TOKEN && process.env.META_WHATSAPP_PHONE_NUMBER_ID);
+  if (!ready || !process.env.OPENAI_API_KEY) return {processed:0,disabled:true};
   const {secret} = bridgeConfig();
   const events = await rpc<Event[]>("whatsapp_claim_events",{
     p_secret:secret,p_limit:Math.min(2,maxMessages),
@@ -172,8 +245,9 @@ export async function processWhatsAppQueue(maxMessages=1) {
       const changes = entries?.[0]?.changes as Array<Obj> | undefined;
       const value = changes?.[0]?.value as Obj | undefined;
       const meta = value?.metadata as Obj | undefined;
-      if (!meta?.phone_number_id ||
-          String(meta.phone_number_id) !== process.env.META_WHATSAPP_PHONE_NUMBER_ID) {
+      const channelNumber = useEvolution() ?
+        "evolution:"+process.env.EVOLUTION_INSTANCE : process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+      if (!meta?.phone_number_id || String(meta.phone_number_id) !== channelNumber) {
         await rpc("whatsapp_finish_event",{
           p_secret:secret,p_event_id:event.id,p_state:"ignored",
           p_error:"Received for a different business number",
@@ -213,7 +287,7 @@ export async function processWhatsAppQueue(maxMessages=1) {
       let text = (event.body||"").trim();
       let visual: {bytes:Uint8Array;mime:string;filename:string}|undefined;
       if (event.mediaId) {
-        const media = await mediaFromMeta(event.mediaId);
+        const media = useEvolution() ? await mediaFromEvolution(event) : await mediaFromMeta(event.mediaId);
         if (event.type==="audio"||media.mime.startsWith("audio/")) {
           const transcription=await transcribe(media);
           if (!transcription) throw new Error("Áudio não compreendido");
