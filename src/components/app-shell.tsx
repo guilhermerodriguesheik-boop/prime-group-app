@@ -23,7 +23,7 @@ const nav = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  if (pathname === "/login" || pathname.startsWith("/auth/")) {
+  if (pathname === "/login" || pathname.startsWith("/auth/") || pathname === "/empresa" || pathname.startsWith("/empresa/")) {
     return <>{children}</>;
   }
 
