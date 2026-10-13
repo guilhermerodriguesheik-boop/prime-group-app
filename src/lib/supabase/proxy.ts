@@ -2,7 +2,16 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "./database.types";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/webhooks/whatsapp", "/empresa"];
+// Public routing is not public data access. Each inbound endpoint validates its
+// own signed webhook secret or Bearer CRON_SECRET before touching financial data.
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth/callback",
+  "/api/webhooks/whatsapp",
+  "/api/webhooks/evolution",
+  "/api/cron/whatsapp",
+  "/empresa",
+];
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
