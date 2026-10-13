@@ -3,6 +3,7 @@ import { WhatsAppLinkPanel } from "@/components/whatsapp/link-panel";
 
 export default function Page() {
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "a definir";
+  const viaGo = process.env.WHATSAPP_PROVIDER === "evolution_go";
   const viaQr = process.env.WHATSAPP_PROVIDER === "evolution";
   const metaReady = Boolean(
     process.env.META_WHATSAPP_APP_SECRET &&
@@ -15,6 +16,10 @@ export default function Page() {
     process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY &&
     process.env.EVOLUTION_INSTANCE && process.env.WHATSAPP_INGRESS_SECRET &&
     (process.env.EVOLUTION_WEBHOOK_SECRET||"").length >= 32,
+  );
+  const evolutionGoReady = Boolean(
+    process.env.EVOLUTION_GO_API_URL && process.env.EVOLUTION_GO_INSTANCE_NAME &&
+    (process.env.EVOLUTION_GO_TOKEN||"").length >= 32 && process.env.WHATSAPP_INGRESS_SECRET,
   );
 
   const items = [
@@ -31,11 +36,12 @@ export default function Page() {
       tone: process.env.OPENAI_API_KEY ? "green" : "orange",
     },
     {
-      name: viaQr ? "WhatsApp QR Code (Evolution)" : "WhatsApp Cloud API",
-      description: "Canal configurado: "+(viaQr ? (process.env.EVOLUTION_PHONE_NUMBER||whatsappNumber) : whatsappNumber),
-      status: viaQr
-        ? (evolutionReady ? "Credenciais presentes (teste pendente)" : "Aguardando conexão QR")
-        : (metaReady ? "Credenciais presentes (teste pendente)" : "Aguardando Meta"),
+      name: viaGo ? "WhatsApp What's Evolution Go" : viaQr ? "WhatsApp QR Code (Evolution)" : "WhatsApp Cloud API",
+      description: "Canal configurado: "+(viaGo ? (process.env.EVOLUTION_GO_PHONE_NUMBER||whatsappNumber) :
+        viaQr ? (process.env.EVOLUTION_PHONE_NUMBER||whatsappNumber) : whatsappNumber),
+      status: viaGo ? (evolutionGoReady ? "Credenciais presentes (webhook e teste pendentes)" : "Aguardando Evolution Go") :
+        viaQr ? (evolutionReady ? "Credenciais presentes (teste pendente)" : "Aguardando conexão QR") :
+        (metaReady ? "Credenciais presentes (teste pendente)" : "Aguardando Meta"),
       tone: "orange",
     },
     {
@@ -69,7 +75,16 @@ export default function Page() {
       <SectionTitle title="WhatsApp Business" />
       <WhatsAppLinkPanel />
       <div className="notice">
-        {viaQr ? (
+        {viaGo ? (
+          <>
+            <b>Webhook do What&apos;s Evolution Go:</b>
+            <code> https://prime-finance-ochre.vercel.app/api/webhooks/evolution-go </code>.
+            No painel do Evolution Go, abra Webhook, use essa URL, ative mensagens recebidas
+            (evento MESSAGE) e salve. O serviço envia o token da instância no evento, validado
+            no servidor. Em seguida, use o código de vínculo acima enviando de outro WhatsApp
+            para o número conectado. Não compartilhe o token nem o insira no GitHub.
+          </>
+        ) : viaQr ? (
           <>
             <b>Canal QR Code:</b> conecte um número dedicado na instância Evolution e configure
             o webhook HTTPS <code>/api/webhooks/evolution</code> para o evento MESSAGES_UPSERT,

@@ -24,8 +24,12 @@ export async function GET() {
     maskedPhone: data?.phone_number ? "••••" + data.phone_number.slice(-4) : null,
     connectedAt: data?.connected_at ?? null,
     pendingUntil: data?.pending_until ?? null,
-    provider: process.env.WHATSAPP_PROVIDER === "evolution" ? "evolution" : "meta",
-    providerConfigured: process.env.WHATSAPP_PROVIDER === "evolution" ?
+    provider: process.env.WHATSAPP_PROVIDER === "evolution_go" ? "evolution_go" :
+      process.env.WHATSAPP_PROVIDER === "evolution" ? "evolution" : "meta",
+    providerConfigured: process.env.WHATSAPP_PROVIDER === "evolution_go" ?
+      Boolean(process.env.EVOLUTION_GO_API_URL && (process.env.EVOLUTION_GO_TOKEN||"").length>=32 &&
+        process.env.EVOLUTION_GO_INSTANCE_NAME) :
+      process.env.WHATSAPP_PROVIDER === "evolution" ?
       Boolean(process.env.EVOLUTION_API_URL && process.env.EVOLUTION_API_KEY &&
         process.env.EVOLUTION_INSTANCE && (process.env.EVOLUTION_WEBHOOK_SECRET||"").length>=32) :
       Boolean(process.env.META_WHATSAPP_APP_SECRET &&
@@ -55,7 +59,9 @@ export async function POST() {
     code,
     expiresAt: expires,
     instruction: "Envie VINCULAR " + code +
-      (process.env.WHATSAPP_PROVIDER==="evolution" ?
+      (process.env.WHATSAPP_PROVIDER==="evolution_go" ?
+        " de outro número WhatsApp para o número conectado no What's Evolution Go." :
+        process.env.WHATSAPP_PROVIDER==="evolution" ?
         " pelo seu WhatsApp para o número conectado via QR Code." :
         " pelo seu WhatsApp para o número comercial cadastrado na Meta.") +
       " Esse código dura 15 minutos.",
