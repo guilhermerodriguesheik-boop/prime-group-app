@@ -24,7 +24,7 @@ export async function GET(){
   if(!user)return json({error:"Faça login."},401);
   const [workspaces,connections,accounts,transactions]=await Promise.all([
     db.from("workspaces").select("id,name,kind").eq("owner_id",user.id),
-    db.from("bank_connections").select("id,workspace_id,display_name,institution_name,account_kind,status,last_synced_at,last_error,created_at").eq("owner_id",user.id).order("created_at",{ascending:false}),
+    db.from("bank_connections").select("id,provider,workspace_id,display_name,institution_name,account_kind,status,last_synced_at,last_error,created_at").eq("owner_id",user.id).order("created_at",{ascending:false}),
     db.from("bank_accounts").select("id,workspace_id,connection_id,display_name,account_last4,kind,currency,balance,balance_updated_at").eq("owner_id",user.id),
     db.from("bank_transactions").select("id,workspace_id,bank_account_id,occurred_on,description,amount,direction,provider_status,review_status,category").eq("owner_id",user.id).order("occurred_on",{ascending:false}).limit(150),
   ]);
@@ -82,7 +82,7 @@ export async function POST(request:Request){
     const id=body.id;
     if(typeof id!=="string"||!uuid.test(id))return json({error:"Conexão inválida."},400);
     const {data:c}=await db.from("bank_connections")
-      .select("id,owner_id,workspace_id,provider_item_id,status,display_name,last_synced_at")
+      .select("id,owner_id,provider,workspace_id,provider_item_id,status,display_name,last_synced_at")
       .eq("id",id).eq("owner_id",user.id).maybeSingle();
     if(!c)return json({error:"Conexão não encontrada."},404);
     if(action==="pause"||action==="resume"){
@@ -91,6 +91,7 @@ export async function POST(request:Request){
         .eq("id",c.id).eq("owner_id",user.id);
       return error?json({error:"Falha ao atualizar."},500):json({ok:true,status});
     }
+    if(c.provider==="manual")return json({error:"Conta OFX: importe outro extrato para atualizar."},400);
     if(!pluggyReady())return json({error:"Pluggy não configurada."},503);
     if(c.last_synced_at && Date.now()-Date.parse(c.last_synced_at)<10*60_000 && body.force!==true)
       return json({ok:true,cached:true});
