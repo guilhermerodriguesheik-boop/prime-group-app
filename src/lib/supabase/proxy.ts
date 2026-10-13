@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/api/webhooks/whatsapp",
   "/api/webhooks/evolution",
   "/api/webhooks/evolution-go",
+  "/api/webhooks/evolution-go",
   "/api/cron/whatsapp",
   "/empresa",
 ];
