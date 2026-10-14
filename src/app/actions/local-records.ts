@@ -19,7 +19,7 @@ const fields:Record<Kind,readonly string[]>={
   card:["name","issuer","last4","closing_day","due_day","credit_limit"],
   vehicle:["nickname","plate","make","model","year","odometer_km","estimated_value","status"],
   trip:["customer_name","origin","destination","driver_name","service_date","freight_revenue","driver_cost","distance_km","reference","status"],
-  counterparty:["name","kind","phone","email","document"],
+  counterparty:["name","kind","phone","email","document","whatsapp_consent"],
   recurring:["name","type","amount","frequency","due_day","starts_on","ends_on"],
   reminder:["description","amount","due_date"],
   loan:["maturity_date","notes"],
@@ -130,6 +130,7 @@ export async function saveLocalRecord(formData:FormData){
    }else if(field==="type"&&category==="transaction"){
      if(!["income","expense","card_payment"].includes(raw))invalid("Tipo de lançamento inválido.");
    }else if(options[field]&&!options[field].includes(raw))invalid("Opção inválida.");
+   if(field==="whatsapp_consent"){patch.whatsapp_consent=raw==="yes";patch.whatsapp_authorized_at=raw==="yes"?new Date().toISOString():null;continue;}
    if(field.endsWith("_date")||field==="starts_on"||field==="ends_on"||field==="occurred_at"||field==="maturity_date"||field==="service_date"){
      if(raw)parseDate(raw);
      patch[field]=raw?(field==="occurred_at"?raw+"T12:00:00-03:00":raw):null;
@@ -186,7 +187,7 @@ export async function removeLocalRecord(formData:FormData){
    }
  }
  if(category==="trip"){
-   for(const table of ["transactions","fuel_logs","tolls","cte_documents"] as const){
+   for(const table of ["transactions","fuel_logs","tolls","cte_documents","prime_trip_workers"] as const){
      const {count,error:linkedError}=await db.from(table).select("id",{count:"exact",head:true}).eq("trip_id",id);
      if(linkedError||count)invalid("Frete com movimentações ou documentos relacionados. Cancele pela situação sem excluir seu histórico.");
    }
