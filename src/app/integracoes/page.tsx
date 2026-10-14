@@ -40,10 +40,10 @@ export default function Page() {
       name: viaGo ? "WhatsApp What's Evolution Go" : viaQr ? "WhatsApp QR Code (Evolution)" : "WhatsApp Cloud API",
       description: "Canal configurado: "+(viaGo ? (process.env.EVOLUTION_GO_PHONE_NUMBER||whatsappNumber) :
         viaQr ? (process.env.EVOLUTION_PHONE_NUMBER||whatsappNumber) : whatsappNumber),
-      status: viaGo ? (evolutionGoReady ? "Credenciais presentes (webhook e teste pendentes)" : "Aguardando Evolution Go") :
+      status: viaGo ? (evolutionGoReady ? "Configurado · Evolution Go" : "Aguardando Evolution Go") :
         viaQr ? (evolutionReady ? "Credenciais presentes (teste pendente)" : "Aguardando conexão QR") :
         (metaReady ? "Credenciais presentes (teste pendente)" : "Aguardando Meta"),
-      tone: "orange",
+      tone: viaGo && evolutionGoReady ? "green" : "orange",
     },
     {
       name: "Cargozilla",
