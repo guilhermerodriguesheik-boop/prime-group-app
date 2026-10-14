@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:fiscal": "node --experimental-strip-types --test tests/fiscal.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.125",
