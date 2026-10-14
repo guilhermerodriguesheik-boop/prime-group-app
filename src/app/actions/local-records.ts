@@ -169,6 +169,23 @@ export async function removeLocalRecord(formData:FormData){
    if(storageError)invalid("Cadastro apagado, mas a remoção do arquivo do armazenamento falhou.");
    revalidatePath("/documentos");return {ok:true};
  }
+ if(category==="counterparty"){
+   // Referential SET NULL would silently erase names from historical receivables/trips.
+   for(const [table,column] of [
+     ["loans","counterparty_id"],["payables","counterparty_id"],
+     ["receivables","counterparty_id"],["transactions","counterparty_id"],
+     ["maintenance","vendor_id"],["trips","customer_id"],
+   ] as const){
+     const {count,error:linkedError}=await db.from(table).select("id",{count:"exact",head:true}).eq(column,id);
+     if(linkedError||count)invalid("Pessoa vinculada a históricos financeiros. Edite os dados, mas não exclua o cadastro.");
+   }
+ }
+ if(category==="trip"){
+   for(const table of ["transactions","fuel_logs","tolls","cte_documents"] as const){
+     const {count,error:linkedError}=await db.from(table).select("id",{count:"exact",head:true}).eq("trip_id",id);
+     if(linkedError||count)invalid("Frete com movimentações ou documentos relacionados. Cancele pela situação sem excluir seu histórico.");
+   }
+ }
  if(category==="transaction"&&(row.source!=="manual"||row.status==="reconciled"))invalid("Lançamento vinculado: use o estorno contábil.");
  if(category==="payable"&&Number(row.paid_amount)>0)invalid("Conta com pagamento não pode ser excluída. Faça o estorno primeiro.");
  if(category==="receivable"&&Number(row.received_amount)>0)invalid("Recebível com recebimento não pode ser excluído. Faça o estorno primeiro.");
