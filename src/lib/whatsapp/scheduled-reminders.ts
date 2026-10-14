@@ -45,22 +45,30 @@ export async function runScheduledReminders(){
   }
   let sent=0,failed=0;
   for(const [phone,items] of groups){
-    try{
-      // A single consolidated daily notice avoids spamming one alert per obligation.
-      await sendScheduledWhatsAppMessage(phone,messageFor(items).slice(0,3900));
-      for(const job of items){
-        await rpc("prime_finish_reminder_notification",{
-          p_secret:secret,p_id:job.id,p_success:true,
-        });
-        sent++;
-      }
-    }catch(e){
-      const error=e instanceof Error?e.message:"Unknown delivery failure";
-      for(const job of items){
-        await rpc("prime_finish_reminder_notification",{
-          p_secret:secret,p_id:job.id,p_success:false,p_error:error,
-        }).catch(()=>undefined);
-        failed++;
+    const batches:ReminderJob[][]=[];
+    for(const item of items){
+      const last=batches.at(-1);
+      if(!last||messageFor([...last,item]).length>3700)batches.push([item]);
+      else last.push(item);
+    }
+    for(const batch of batches){
+      try{
+        // Group each recipient's due items, but never truncate a notification.
+        await sendScheduledWhatsAppMessage(phone,messageFor(batch));
+        for(const job of batch){
+          await rpc("prime_finish_reminder_notification",{
+            p_secret:secret,p_id:job.id,p_success:true,
+          });
+          sent++;
+        }
+      }catch(e){
+        const error=e instanceof Error?e.message:"Unknown delivery failure";
+        for(const job of batch){
+          await rpc("prime_finish_reminder_notification",{
+            p_secret:secret,p_id:job.id,p_success:false,p_error:error,
+          }).catch(()=>undefined);
+          failed++;
+        }
       }
     }
   }
