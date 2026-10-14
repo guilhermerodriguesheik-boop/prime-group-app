@@ -6,4 +6,8 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   globalIgnores([".next/**", "node_modules/**"]),
+  {
+    files: ["tests/**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ]);

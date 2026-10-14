@@ -63,6 +63,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname==="/login" || pathname.startsWith("/auth/") || pathname==="/empresa" || pathname.startsWith("/empresa/")) {
     return <>{children}</>;
   }
+  let currentLabel="Prime Finance";
+  for(const group of nav){
+    for(const item of group.items){
+      const active=item.href==="/"?pathname==="/":pathname.startsWith(item.href);
+      if(active){currentLabel=item.label;break;}
+    }
+  }
   return (
     <div className="shell">
       <div className="mobile-appbar">
@@ -105,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="shell-content">
         <header className="app-toolbar">
-          <div className="toolbar-location"><span className="toolbar-dot"/> Painel financeiro <span className="toolbar-separator">/</span> <strong>{nav.flatMap(group=>group.items).find(item=>item.href==="/"?pathname==="/":pathname.startsWith(item.href))?.label||"Prime Finance"}</strong></div>
+          <div className="toolbar-location"><span className="toolbar-dot"/> Painel financeiro <span className="toolbar-separator">/</span> <strong>{currentLabel}</strong></div>
           <div className="toolbar-actions">{themeButton("theme-button")}</div>
         </header>
         <main className="main">{children}</main>
