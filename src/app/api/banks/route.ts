@@ -60,9 +60,15 @@ export async function GET(request:Request){
     ? await db.from("bank_transactions").select("id,workspace_id,bank_account_id,occurred_on,description,amount,direction,provider_status,review_status,category").eq("owner_id",user.id).in("bank_account_id",accountIds).order("occurred_on",{ascending:false}).limit(150)
     : {data:[],error:null};
   if(movements.error)return json({error:"Não foi possível consultar extratos bancários."},500);
+  const txIds=(movements.data||[]).map(t=>t.id);
+  const classifications=txIds.length
+    ? await db.from("prime_bank_classifications").select("bank_transaction_id,destination,category")
+      .eq("user_id",user.id).in("bank_transaction_id",txIds)
+    : {data:[],error:null};
+  if(classifications.error)return json({error:"Falha ao carregar classificações."},500);
   return json({
     configured:pluggyReady(),workspaces:workspaces.data||[],
-    connections:connections.data||[],accounts:accounts.data||[],transactions:movements.data||[],
+    connections:connections.data||[],accounts:accounts.data||[],transactions:movements.data||[],classifications:classifications.data||[],
     archivedView,
     mode:process.env.PLUGGY_PERSONAL_OWNER_ID===user.id?"personal-allowed":"standard",
   });
