@@ -29,7 +29,7 @@ export function estimateAiCostUsd(
   if (!price || !usage) return null;
   const input = usage.inputTokens;
   const output = usage.outputTokens;
-  if (!Number.isFinite(input) || !Number.isFinite(output) || input === undefined || output === undefined) {
+  if (typeof input !== "number" || typeof output !== "number" || !Number.isFinite(input) || !Number.isFinite(output)) {
     return null;
   }
   if (input < 0 || output < 0) return null;
