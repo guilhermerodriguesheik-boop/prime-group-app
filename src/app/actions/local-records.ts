@@ -61,7 +61,7 @@ export async function saveLocalRecord(formData:FormData){
  if(!rowId){
    formData.set("workspace",workspace);
    if(category==="transaction"){
-     formData.set("entry_mode",txt(formData,"type")||"expense");
+     formData.set("entry_mode",txt(formData,"entry_mode")||txt(formData,"type")||"expense");
      if(!txt(formData,"occurred_at"))formData.set("occurred_at",new Date().toISOString().slice(0,10));
      await createTransaction(formData);
    }else if(category==="account")await createAccount(formData);
@@ -112,8 +112,8 @@ export async function saveLocalRecord(formData:FormData){
    invalid("Lançamentos de empréstimos ou conciliados devem ser corrigidos pelo fluxo financeiro.");
  if(category==="loan"){
    if(previous.status!=="draft"||previous.disbursement_transaction_id)invalid("Somente contratos planejados podem ser editados.");
-   const {count}=await db.from("loan_payments").select("id",{count:"exact",head:true}).eq("loan_id",rowId);
-   if(count)invalid("Contrato com pagamentos não pode ser editado diretamente.");
+   const {count,error:paymentError}=await db.from("loan_payments").select("id",{count:"exact",head:true}).eq("loan_id",rowId);
+   if(paymentError||count)invalid("Contrato com pagamentos não pode ser editado diretamente.");
  }
  if(category==="payable"||category==="receivable"){
    const paid=Number(category==="payable"?previous.paid_amount:previous.received_amount)||0;
@@ -173,8 +173,8 @@ export async function removeLocalRecord(formData:FormData){
  if(category==="payable"&&Number(row.paid_amount)>0)invalid("Conta com pagamento não pode ser excluída. Faça o estorno primeiro.");
  if(category==="receivable"&&Number(row.received_amount)>0)invalid("Recebível com recebimento não pode ser excluído. Faça o estorno primeiro.");
  if(category==="loan"){
-   const {count}=await db.from("loan_payments").select("id",{count:"exact",head:true}).eq("loan_id",id);
-   if(row.status!=="draft"||row.disbursement_transaction_id||count)invalid("Contrato movimentado não pode ser excluído; preserve o histórico.");
+   const {count,error:paymentError}=await db.from("loan_payments").select("id",{count:"exact",head:true}).eq("loan_id",id);
+   if(row.status!=="draft"||row.disbursement_transaction_id||paymentError||count)invalid("Contrato movimentado não pode ser excluído; preserve o histórico.");
  }
  let errorOut:null|{message:string}=null;
  const soft:Record<string,unknown>|null=
