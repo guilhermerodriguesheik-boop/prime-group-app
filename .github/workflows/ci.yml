@@ -32,5 +32,8 @@ jobs:
       - name: AI economy tests
         run: npm run test:ai
 
+      - name: Fiscal parser tests
+        run: npm run test:fiscal
+
       - name: Build
         run: npm run build

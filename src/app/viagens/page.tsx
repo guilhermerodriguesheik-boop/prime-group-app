@@ -19,6 +19,7 @@ export default async function Page() {
       <div className="quick">
         <Link href="/assistente">Cadastrar frete conversando com a IA</Link>
         <Link href="/registros">Ver anotações incompletas</Link>
+        <Link href="/fiscal">Importar XML e preparar CT-e (Prime Emissor Fiscal)</Link>
       </div>
       <div className="grid grid-4">
         <Metric label="Viagens concluídas" value={String(completed.length)} />
