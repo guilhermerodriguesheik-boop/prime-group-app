@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { processWhatsAppQueue } from "@/lib/whatsapp/worker";
+import { runScheduledReminders } from "@/lib/whatsapp/scheduled-reminders";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,7 +14,15 @@ export async function GET(request: Request) {
     return NextResponse.json({error:"Unauthorized"},{status:401});
   }
   try {
-    return NextResponse.json(await processWhatsAppQueue(2),{
+    // Existing daily cron: 10:00 UTC (07:00 in Rio de Janeiro).
+    let reminders:unknown;
+    try{reminders=await runScheduledReminders();}
+    catch(error){
+      console.error("Scheduled reminders unavailable",error instanceof Error?error.message:"unknown");
+      reminders={sent:0,error:"delivery_unavailable"};
+    }
+    const queue=await processWhatsAppQueue(2);
+    return NextResponse.json({reminders,queue},{
       headers:{"Cache-Control":"no-store"},
     });
   } catch(error) {
