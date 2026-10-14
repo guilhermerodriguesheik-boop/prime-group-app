@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Header, Metric, SectionTitle } from "@/components/ui";
 import { RecordControl } from "@/components/records/record-control";
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { setWhatsappReminderPreference } from "@/app/actions/local-records";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, shortDate, workspaceLabel } from "@/lib/finance/format";
@@ -9,7 +10,7 @@ import { concluirLembrete } from "./actions";
 
 export default async function Page() {
   const data = await getFinanceSnapshot();
-  const db=await createClient();
+  const db=await createClient() as unknown as SupabaseClient;
   const {data:whatsappPref}=await db.from("whatsapp_reminder_preferences").select("enabled").eq("user_id",data.user.id).maybeSingle();
   const alertsOn=Boolean(whatsappPref?.enabled);
   const monthlyExpenses = data.recurringEntries
