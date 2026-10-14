@@ -40,8 +40,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(()=>{
     const saved=window.localStorage.getItem("prime-theme");
     const preference=saved==="dark"?"dark":"light";
-    setTheme(preference);
-    document.documentElement.dataset.theme=preference;
+    const tick=window.setTimeout(()=>{
+      setTheme(preference);
+      document.documentElement.dataset.theme=preference;
+    },0);
+    return ()=>window.clearTimeout(tick);
   },[]);
   function toggleTheme(){
     const next=theme==="light"?"dark":"light";
@@ -49,7 +52,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     document.documentElement.dataset.theme=next;
     window.localStorage.setItem("prime-theme",next);
   }
-  useEffect(()=>{setMenuOpen(false);},[pathname]);
   const themeButton=(className:string)=>(
     <button type="button" className={className} onClick={toggleTheme}
       title={theme==="light"?"Ativar modo escuro":"Ativar modo claro"}
@@ -85,7 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {group.items.map(item=>{
                   const Icon=item.icon;
                   const active=item.href==="/"?pathname==="/":pathname.startsWith(item.href);
-                  return <Link key={item.href} href={item.href} className={active?"active":undefined} aria-current={active?"page":undefined}>
+                  return <Link key={item.href} href={item.href} onClick={()=>setMenuOpen(false)} className={active?"active":undefined} aria-current={active?"page":undefined}>
                     <Icon size={17} strokeWidth={active?2.25:1.8}/>
                     <span className="label">{item.label}</span>
                   </Link>;
