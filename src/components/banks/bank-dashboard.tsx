@@ -60,7 +60,6 @@ export function BankDashboard(){
   const archivedConnections=useMemo(()=>data?.connections.filter(c=>!!c.archived_at)||[],[data]);
   const visibleConnections=showArchived?archivedConnections:activeConnections;
   const accountMap=useMemo(()=>new Map((data?.accounts||[]).map(a=>[a.id,a])),[data]);
-  const visibleAccounts=useMemo(()=>data?.accounts.filter(a=>visibleConnections.some(c=>c.id===a.connection_id))||[],[data,visibleConnections]);
   const pendingVisible=(data?.transactions||[]).filter(t=>t.review_status==="pending").length;
 
   const load=useCallback(async()=>{
