@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Header, Metric, SectionTitle } from "@/components/ui";
+import { RecordControl } from "@/components/records/record-control";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, shortDate } from "@/lib/finance/format";
 
@@ -14,6 +15,7 @@ export default async function Page() {
   return (
     <>
       <Header title="Viagens e CT-e" subtitle="Fretes cadastrados com os dados conhecidos, sem exigir quilometragem ou horários." />
+      <div className="record-toolbar"><RecordControl category="trip" workspace="prime" label="Cadastrar frete"/></div>
       <div className="quick">
         <Link href="/assistente">Cadastrar frete conversando com a IA</Link>
         <Link href="/registros">Ver anotações incompletas</Link>
@@ -39,6 +41,7 @@ export default async function Page() {
               <th>Valor motorista</th>
               <th>Saldo previsto*</th>
               <th>Status</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -57,10 +60,11 @@ export default async function Page() {
                 <td>{item.driver_cost !== null ? brl(item.driver_cost) : "Não informado"}</td>
                 <td>{item.freight_revenue !== null && item.driver_cost !== null ? brl(item.freight_revenue - item.driver_cost) : "—"}</td>
                 <td>{item.status === "planned" ? "Cadastrado" : item.status}</td>
+                <td><RecordControl category="trip" workspace="prime" record={item}/></td>
               </tr>
             ))}
             {data.trips.length === 0 && (
-              <tr><td colSpan={9}>Nenhum frete cadastrado ainda. Informe apenas o que souber à IA.</td></tr>
+              <tr><td colSpan={10}>Nenhum frete cadastrado ainda. Informe apenas o que souber à IA.</td></tr>
             )}
           </tbody>
         </table>
