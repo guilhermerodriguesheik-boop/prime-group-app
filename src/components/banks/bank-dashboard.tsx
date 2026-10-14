@@ -3,9 +3,9 @@
 import Script from "next/script";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowDownLeft, ArrowUpRight, Banknote, CheckCircle2, ChevronDown,
+  ArrowDownLeft, ArrowUpRight, CheckCircle2, ChevronDown,
   CircleAlert, Clock3, CreditCard, FileUp, Landmark, LockKeyhole,
-  Plus, RefreshCw, Search, ShieldCheck, Trash2, Wallet, X,
+  Plus, RefreshCw, ShieldCheck, Trash2, Wallet, X,
 } from "lucide-react";
 
 type Workspace={id:string;kind:string;name:string};
@@ -61,7 +61,6 @@ export function BankDashboard(){
   const visibleConnections=showArchived?archivedConnections:activeConnections;
   const accountMap=useMemo(()=>new Map((data?.accounts||[]).map(a=>[a.id,a])),[data]);
   const visibleAccounts=useMemo(()=>data?.accounts.filter(a=>visibleConnections.some(c=>c.id===a.connection_id))||[],[data,visibleConnections]);
-  const sumBalances=visibleAccounts.filter(a=>a.kind==="BANK"&&a.currency==="BRL").reduce((s,a)=>s+Number(a.balance||0),0);
   const pendingVisible=(data?.transactions||[]).filter(t=>t.review_status==="pending").length;
 
   const load=useCallback(async()=>{
