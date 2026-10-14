@@ -2,6 +2,7 @@ import { Output, generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { summarizeFiscalXml } from "@/lib/assistant/fiscal-xml";
+import { chooseAiProfile } from "@/lib/ai/cost-routing";
 
 type Obj = Record<string, unknown>;
 type Event = {
@@ -299,11 +300,16 @@ async function understand(message: string, context: Obj, media?: {
     "No máximo 3 ações, não invente números ou nomes e nunca liste credenciais.",
   ].join("\n");
 
+  const profile = chooseAiProfile({
+    message, hasVisual: Boolean(media && (media.mime.startsWith("image/") || media.mime === "application/pdf")),
+    channel: "whatsapp",
+  });
   const response = await generateText({
-    model:openai(process.env.PRIME_AGENT_MODEL?.trim()||"gpt-6-astra"),
+    model:openai(profile.model),
     output:Output.object({schema}),
     system,messages:[{role:"user",content:userContent}],
-    maxOutputTokens:2200,timeout:36000,maxRetries:0,
+    providerOptions: { openai: { store: false, reasoningEffort: profile.reasoningEffort } },
+    maxOutputTokens:profile.maxOutputTokens,timeout:36000,maxRetries:0,
   });
   return response.output;
 }
