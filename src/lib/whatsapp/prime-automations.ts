@@ -1,4 +1,5 @@
 import { sendScheduledWhatsAppMessage } from "@/lib/whatsapp/worker";
+import {ensurePluggyWebhooks} from "@/lib/banks/webhook-setup";
 
 type OutboxItem={id:string;phone:string;message:string};
 function settings(){
@@ -36,9 +37,15 @@ export async function runPrimeOutbox(){
  return {claimed:items.length,sent,failed};
 }
 export async function runPrimeDailyJobs(){
+ let pluggyEvents:unknown;
+ try{pluggyEvents=await ensurePluggyWebhooks();}
+ catch(error){
+  console.error("Pluggy webhook setup pending",error instanceof Error?error.message:"unknown");
+  pluggyEvents={configured:false};
+ }
  const bills=await primeRpc<number>("prime_materialize_bills",{});
  const reports=await primeRpc<number>("prime_queue_scheduled_reports",{});
  const collections=await primeRpc<number>("prime_queue_contact_collections",{});
  const messages=await runPrimeOutbox();
- return {bills,reports,collections,messages};
+ return {pluggyEvents,bills,reports,collections,messages};
 }
