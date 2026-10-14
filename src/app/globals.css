@@ -197,3 +197,29 @@ tbody tr:hover{background:var(--panel2)}
   .bank-connection-actions .button{flex-basis:42%}
 }
 @media(max-width:385px){.bank-metrics{grid-template-columns:1fr}.bank-filters{grid-template-columns:1fr}.bank-input.search{grid-column:span 1}}
+
+
+/* Contextual record creation, edit and safe removal. */
+.record-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0 21px}
+.record-actions{display:inline-flex;gap:5px;flex-wrap:wrap;align-items:center}
+.record-trigger{display:inline-flex;align-items:center;gap:6px;width:auto!important}
+.record-danger{display:inline-flex;align-items:center;gap:6px;color:var(--danger)!important;border-color:color-mix(in srgb,var(--danger) 24%,var(--line))}
+.record-danger:hover{background:color-mix(in srgb,var(--danger) 8%,var(--panel))}
+.record-modal-backdrop{position:fixed;inset:0;background:rgba(5,18,35,.65);z-index:100;display:grid;place-items:center;padding:15px;backdrop-filter:blur(4px)}
+.record-modal{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:22px;width:min(540px,100%);max-height:91dvh;overflow:auto;box-shadow:0 20px 70px rgba(0,0,0,.22)}
+.record-modal-head{display:flex;justify-content:space-between;gap:13px;align-items:center;margin-bottom:14px}
+.record-modal-head h3{font-size:17px;margin:0;letter-spacing:-.03em}
+.record-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.record-field{display:grid;align-content:start;gap:6px;font-size:12px;font-weight:600;color:var(--text);min-width:0}
+.record-field input:not([type=checkbox]),.record-field select,.record-field textarea{width:100%;min-width:0;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:8px;padding:10px 11px;font-size:13px}
+.record-field input[type=checkbox]{accent-color:var(--accent);width:19px;height:19px}
+.record-field textarea{resize:vertical}
+.record-field:has(textarea),.record-field:has(input[type=checkbox]){grid-column:span 2}
+.record-form .metric-foot,.record-form .record-error,.record-form .record-modal-foot{grid-column:span 2}
+.record-modal-foot{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:14px}
+.record-error{border:1px solid var(--danger);border-radius:9px;padding:10px;background:var(--panel2);color:var(--danger);font-size:12px;line-height:1.45}
+.record-directory{display:block;transition:transform .13s,border-color .13s}
+.record-directory:hover{transform:translateY(-2px);border-color:var(--accent)}
+.record-alert-settings{margin-top:12px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:12px}
+.record-alert-settings b{color:var(--pos)}
+@media(max-width:650px){.record-form{grid-template-columns:1fr}.record-form .record-field,.record-form .metric-foot,.record-form .record-error,.record-form .record-modal-foot{grid-column:1}.record-modal{padding:16px}.record-toolbar>.record-actions{flex:1 1 calc(50% - 10px)}.record-toolbar>.record-actions>.button{width:100%!important}.record-actions .record-danger{width:auto}}
