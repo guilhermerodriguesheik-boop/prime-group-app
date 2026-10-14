@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
 
 export function DocumentUploader({ workspaces }: { workspaces: { id: string; name: string }[] }) {
+  const router=useRouter();
   const [workspaceId, setWorkspaceId] = useState(workspaces[0]?.id ?? "");
   const [documentType, setDocumentType] = useState("comprovante");
   const [status, setStatus] = useState("");
@@ -41,7 +43,8 @@ export function DocumentUploader({ workspaces }: { workspaces: { id: string; nam
         throw dbError;
       }
 
-      setStatus("Documento enviado com sucesso. Atualize a página para vê-lo na lista.");
+      setStatus("Documento enviado com sucesso.");
+      router.refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Falha no envio.");
     } finally {

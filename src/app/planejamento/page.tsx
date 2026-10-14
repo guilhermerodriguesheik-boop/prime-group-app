@@ -1,11 +1,18 @@
 import Link from "next/link";
 import { Header, Metric, SectionTitle } from "@/components/ui";
+import { RecordControl } from "@/components/records/record-control";
+import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { setWhatsappReminderPreference } from "@/app/actions/local-records";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, shortDate, workspaceLabel } from "@/lib/finance/format";
 import { concluirLembrete } from "./actions";
 
 export default async function Page() {
   const data = await getFinanceSnapshot();
+  const db=await createClient() as unknown as SupabaseClient;
+  const {data:whatsappPref}=await db.from("whatsapp_reminder_preferences").select("enabled").eq("user_id",data.user.id).maybeSingle();
+  const alertsOn=Boolean(whatsappPref?.enabled);
   const monthlyExpenses = data.recurringEntries
     .filter((item) => item.active && item.type === "expense" && item.frequency === "monthly")
     .reduce((sum, item) => sum + Number(item.amount), 0);
@@ -24,10 +31,14 @@ export default async function Page() {
   return (
     <>
       <Header title="Planejamento" subtitle="Previsão de caixa, compromissos e recorrências." />
-      <div className="quick">
-        <Link href="/cadastros">Nova recorrência</Link>
-        <Link href="/cadastros">Nova conta a pagar</Link>
-        <Link href="/cadastros">Novo recebível</Link>
+      <div className="record-toolbar">
+        <RecordControl category="recurring" workspace="personal" label="Nova recorrência pessoal"/>
+        <RecordControl category="recurring" workspace="prime" label="Nova recorrência Prime"/>
+        <RecordControl category="payable" workspace="personal" label="Conta a pagar pessoal"/>
+        <RecordControl category="payable" workspace="prime" label="Conta a pagar Prime"/>
+        <RecordControl category="receivable" workspace="personal" label="Recebível pessoal"/>
+        <RecordControl category="receivable" workspace="prime" label="Recebível Prime"/>
+        <RecordControl category="reminder" workspace="personal" label="Novo lembrete"/>
       </div>
 
       <div className="grid grid-4">
@@ -40,13 +51,18 @@ export default async function Page() {
       <SectionTitle title="Lembretes de pagamentos" hint={dueAlerts.length ? `${dueAlerts.length} aviso(s) aguardando atenção` : "avisos no próprio aplicativo"} />
       <div className="notice">
         {evolutionGoConfigured
-          ? "WhatsApp integrado pela Evolution Go para mensagens. Os lembretes de pagamentos são exibidos no Prime Finance; o envio automático de avisos de vencimento por WhatsApp ainda não foi implementado."
-          : "Os lembretes de pagamentos são exibidos no Prime Finance. O envio automático de avisos de vencimento pelo WhatsApp ainda não foi implementado."}
-        {" "}Marcar um lembrete como concluído não dá baixa financeira na conta.
+          ? "O canal Evolution Go está configurado. Avisos automáticos são enviados pelo WhatsApp 3 dias antes e no dia do vencimento, para o número vinculado, quando estiverem ativados."
+          : "O canal Evolution Go precisa estar configurado para enviar alertas automáticos; lembretes continuam disponíveis no aplicativo."}
+        {" "}Finalizar um lembrete não dá baixa financeira na conta.
+        <form action={setWhatsappReminderPreference} className="record-alert-settings">
+          <span>Alertas no WhatsApp: <b>{alertsOn?"ativados":"desativados"}</b> • Envio diário às 7h (horário de Brasília)</span>
+          <input type="hidden" name="enabled" value={alertsOn?"no":"yes"} />
+          <button type="submit" className="button compact">{alertsOn?"Desativar avisos":"Ativar avisos"}</button>
+        </form>
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Descrição</th><th>Ambiente</th><th>Valor</th><th>Avisar em</th><th>Vencimento</th><th>Situação</th><th>Ação</th></tr></thead>
+          <thead><tr><th>Descrição</th><th>Ambiente</th><th>Valor</th><th>Avisar em</th><th>Vencimento</th><th>Situação</th><th>Ações</th></tr></thead>
           <tbody>
             {pendingReminders.map((item) => (
               <tr key={item.id}>
@@ -59,8 +75,9 @@ export default async function Page() {
                 <td>
                   <form action={concluirLembrete}>
                     <input type="hidden" name="reminder_id" value={item.id} />
-                    <button className="button" type="submit">Concluir aviso</button>
+                    <button className="button compact" type="submit">Concluir aviso</button>
                   </form>
+                  <RecordControl category="reminder" workspace={data.workspaceMap.get(item.workspace_id)?.kind as "prime"|"personal"|"interest"||"personal"} record={item}/>
                 </td>
               </tr>
             ))}
@@ -72,7 +89,7 @@ export default async function Page() {
       <SectionTitle title="Contas a pagar · próximos 30 dias" hint="inclui parcelas e boletos cadastrados" />
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Descrição</th><th>Ambiente</th><th>Vencimento</th><th>Saldo a pagar</th><th>Situação</th></tr></thead>
+          <thead><tr><th>Descrição</th><th>Ambiente</th><th>Vencimento</th><th>Saldo a pagar</th><th>Situação</th><th>Ações</th></tr></thead>
           <tbody>
             {upcomingPayables.map((item) => (
               <tr key={item.id}>
@@ -81,9 +98,10 @@ export default async function Page() {
                 <td>{shortDate(item.due_date)}</td>
                 <td>{brl(Math.max(0, Number(item.amount) - Number(item.paid_amount)))}</td>
                 <td><span className={`badge ${item.due_date < today ? "red" : "orange"}`}>{item.due_date < today ? "Atrasada" : "Em aberto"}</span></td>
+                <td><RecordControl category="payable" workspace={data.workspaceMap.get(item.workspace_id)?.kind as "prime"|"personal"|"interest"||"personal"} record={item}/></td>
               </tr>
             ))}
-            {upcomingPayables.length === 0 && <tr><td colSpan={5}>Nenhuma conta a pagar próxima cadastrada.</td></tr>}
+            {upcomingPayables.length === 0 && <tr><td colSpan={6}>Nenhuma conta a pagar próxima cadastrada.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -91,7 +109,7 @@ export default async function Page() {
       <SectionTitle title="Recorrências ativas" />
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Ambiente</th><th>Descrição</th><th>Tipo</th><th>Frequência</th><th>Vencimento</th><th>Valor</th></tr></thead>
+          <thead><tr><th>Ambiente</th><th>Descrição</th><th>Tipo</th><th>Frequência</th><th>Vencimento</th><th>Valor</th><th>Ações</th></tr></thead>
           <tbody>
             {data.recurringEntries.map((item) => (
               <tr key={item.id}>
@@ -101,13 +119,22 @@ export default async function Page() {
                 <td>{item.frequency}</td>
                 <td>{item.due_day ? "dia " + item.due_day : "—"}</td>
                 <td className={item.type === "income" ? "positive" : undefined}>{item.type === "expense" ? "− " : ""}{brl(item.amount)}</td>
+                <td><RecordControl category="recurring" workspace={data.workspaceMap.get(item.workspace_id)?.kind as "prime"|"personal"|"interest"||"personal"} record={item}/></td>
               </tr>
             ))}
-            {data.recurringEntries.length === 0 && <tr><td colSpan={6}>Nenhuma recorrência cadastrada.</td></tr>}
+            {data.recurringEntries.length === 0 && <tr><td colSpan={7}>Nenhuma recorrência cadastrada.</td></tr>}
           </tbody>
         </table>
       </div>
 
+      <SectionTitle title="Recebíveis cadastrados" />
+      <div className="table-wrap"><table><thead><tr><th>Descrição</th><th>Ambiente</th><th>Vencimento</th><th>Saldo a receber</th><th>Situação</th><th>Ações</th></tr></thead>
+        <tbody>{data.receivables.filter(item=>["open","partial","overdue"].includes(item.status)).slice(0,40).map(item=><tr key={item.id}>
+          <td>{item.description}</td><td>{workspaceLabel(data.workspaceMap.get(item.workspace_id)?.kind??"")}</td>
+          <td>{shortDate(item.due_date)}</td><td>{brl(Math.max(0,Number(item.amount)-Number(item.received_amount)))}</td>
+          <td>{item.status}</td>
+          <td><RecordControl category="receivable" workspace={data.workspaceMap.get(item.workspace_id)?.kind as "prime"|"personal"|"interest"||"personal"} record={item}/></td>
+        </tr>)}</tbody></table></div>
       <SectionTitle title="Risco imediato" />
       <div className="grid grid-2">
         <Metric label="A receber em atraso" value={brl(data.overdueReceivables)} tone={data.overdueReceivables > 0 ? "warning" : undefined} />

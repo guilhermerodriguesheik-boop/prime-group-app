@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Header, SectionTitle } from "@/components/ui";
+import { PartialRecordControl } from "@/components/records/partial-record-control";
 import { createClient } from "@/lib/supabase/server";
 
 const envLabels: Record<string,string> = {
@@ -44,10 +45,11 @@ export default async function Page() {
         Quando você fornecer informações adicionais, peça à IA para transformar a anotação em um lançamento apropriado.
         Fretes com dados suficientes são cadastrados diretamente em <Link href="/viagens">Viagens</Link>.
       </div>
+      <div className="record-toolbar"><PartialRecordControl workspaces={workspaceResult.data??[]}/></div>
       <SectionTitle title="Informações guardadas" hint={records.length + " anotações abertas"} />
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Registrado em</th><th>Assunto</th><th>Ambiente</th><th>Informação informada</th><th>Tipo</th></tr></thead>
+          <thead><tr><th>Registrado em</th><th>Assunto</th><th>Ambiente</th><th>Informação informada</th><th>Tipo</th><th>Ações</th></tr></thead>
           <tbody>
             {records.map((record) => {
               const ws = record.workspace_id ? workspaces.get(record.workspace_id) : null;
@@ -58,10 +60,11 @@ export default async function Page() {
                   <td>{ws ? (envLabels[ws.kind] ?? ws.name) : "Ainda não classificado"}</td>
                   <td style={{ maxWidth: 420, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{record.original_text}</td>
                   <td>{kindLabels[record.record_kind] ?? record.record_kind}</td>
+                  <td><PartialRecordControl record={record} workspaces={workspaceResult.data??[]}/></td>
                 </tr>
               );
             })}
-            {records.length === 0 && <tr><td colSpan={5}>Nenhuma anotação pendente. Seus fretes estão na seção Viagens.</td></tr>}
+            {records.length === 0 && <tr><td colSpan={6}>Nenhuma anotação pendente. Seus fretes estão na seção Viagens.</td></tr>}
           </tbody>
         </table>
       </div>

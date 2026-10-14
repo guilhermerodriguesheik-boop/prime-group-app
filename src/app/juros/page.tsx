@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Header, Metric, SectionTitle } from "@/components/ui";
+import { RecordControl } from "@/components/records/record-control";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, shortDate } from "@/lib/finance/format";
 
@@ -13,6 +14,7 @@ const typeNames: Record<string, string> = {
 export default async function Page() {
   const data = await getFinanceSnapshot();
   const people = new Map(data.counterparties.map((item) => [item.id, item.name]));
+  const interestPeople=data.counterparties.filter(item=>data.workspaceMap.get(item.workspace_id)?.kind==="interest");
   const loans = data.loans.filter((item) => item.direction === "receivable" && item.status !== "cancelled");
   const paymentsFor = (id: string) => data.loanPayments.filter((payment) => payment.loan_id === id);
   const monthlyState = new Map(data.interestOnlyStatus.map((item) => [item.loan_id, item]));
@@ -34,10 +36,11 @@ export default async function Page() {
   return (
     <>
       <Header title="Empréstimos e juros" subtitle="Capital emprestado, amortizações, juros recebidos e vencimentos separados da Prime Group e das contas pessoais." />
-      <div className="quick">
-        <Link href="/assistente">Conversar com a IA</Link>
-        <Link href="/cadastros">Cadastrar pelo formulário</Link>
-        <Link href="/planejamento">Lembretes de cobrança</Link>
+      <div className="record-toolbar">
+        <RecordControl category="counterparty" workspace="interest" label="Novo devedor"/>
+        <RecordControl category="loan" workspace="interest" label="Novo empréstimo" lookups={{counterparties:interestPeople}}/>
+        <Link className="button" href="/assistente">Cadastrar pela IA</Link>
+        <Link className="button" href="/planejamento">Vencimentos</Link>
       </div>
 
       <div className="notice">
@@ -68,7 +71,7 @@ export default async function Page() {
           <thead>
             <tr><th>Devedor</th><th>Capital original</th><th>Capital devolvido</th>
               <th>Capital devedor</th><th>Taxa combinada</th><th>Próximo juro previsto</th><th>Juro vencido</th><th>Multa acumulada</th><th>Próximo vencimento</th><th>Quitação hoje</th><th>Início</th>
-              <th>Devolução do capital</th><th>Situação</th></tr>
+              <th>Devolução do capital</th><th>Situação</th><th>Ações</th></tr>
           </thead>
           <tbody>
             {loans.map((loan) => {
@@ -100,14 +103,21 @@ export default async function Page() {
                       {expired ? "Vencido" : loan.status === "draft" ? "Planejado" : loan.status === "settled" ? "Quitado" : "Ativo"}
                     </span>
                   </td>
+                  <td><RecordControl category="loan" workspace="interest" record={loan}/></td>
                 </tr>
               );
             })}
-            {loans.length === 0 && <tr><td colSpan={13}>Nenhum empréstimo cadastrado. Inicie uma conversa com a IA ou use o formulário.</td></tr>}
+            {loans.length === 0 && <tr><td colSpan={14}>Nenhum empréstimo cadastrado. Inicie uma conversa com a IA ou use o formulário.</td></tr>}
           </tbody>
         </table>
       </div>
 
+
+      <SectionTitle title="Devedores e credores cadastrados"/>
+      <div className="table-wrap"><table><thead><tr><th>Nome</th><th>Contato</th><th>Tipo</th><th>Ações</th></tr></thead><tbody>
+        {interestPeople.map(item=><tr key={item.id}><td>{item.name}</td><td>{item.phone||"—"}</td><td>{item.kind}</td><td><RecordControl category="counterparty" workspace="interest" record={item}/></td></tr>)}
+        {!interestPeople.length&&<tr><td colSpan={4}>Nenhum devedor cadastrado.</td></tr>}
+      </tbody></table></div>
       <SectionTitle title="Recebimentos dos empréstimos" />
       <div className="table-wrap">
         <table>
