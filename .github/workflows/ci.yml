@@ -29,5 +29,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: AI economy tests
+        run: npm run test:ai
+
       - name: Build
         run: npm run build
