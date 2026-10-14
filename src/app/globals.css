@@ -322,3 +322,9 @@ td{font-variant-numeric:tabular-nums}
 @media(max-width:1200px){.premium-analytics-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:950px){.premium-analytics-grid{grid-template-columns:1fr}.premium-hero-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.premium-hero-strip,.premium-settings-grid,.premium-recurring-grid{grid-template-columns:1fr}.premium-form{grid-template-columns:1fr}.premium-chart-head{display:grid;gap:13px}.premium-chart{min-height:200px}.premium-chart-bars{height:155px}.premium-hero-strip strong{font-size:22px}}
+
+.bank-transaction-actions{display:flex;align-items:center;gap:7px;min-width:200px;flex-wrap:wrap}
+.bank-transaction-actions .premium-disclosure{margin:0;min-width:135px;flex:1}
+.bank-classify-form{display:grid;gap:8px;min-width:180px;margin-top:12px}
+.bank-classify-form .bank-input,.bank-classify-form .bank-select{width:100%}
+.bank-classify-form .button{min-width:100%}
