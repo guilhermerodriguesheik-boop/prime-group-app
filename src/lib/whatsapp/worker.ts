@@ -106,6 +106,14 @@ async function sendText(to: string, body: string) {
   if (!response.ok) throw new Error("Meta send HTTP " + response.status);
 }
 
+
+// Automatic reminders may use only the already-configured Evolution Go provider.
+// Do not route scheduled financial notifications through legacy Meta configuration.
+export async function sendScheduledWhatsAppMessage(to:string,body:string) {
+  if(!isEvolutionGoProvider())throw new Error("Canal Evolution Go não está ativo.");
+  return sendText(to,body);
+}
+
 async function mediaFromMeta(id: string) {
   const token = process.env.META_WHATSAPP_ACCESS_TOKEN;
   if (!token) throw new Error("Meta token missing");
