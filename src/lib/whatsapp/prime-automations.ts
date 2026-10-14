@@ -48,6 +48,7 @@ export async function runPrimeDailyJobs(){
  const bills=await primeRpc<number>("prime_materialize_bills",{});
  const reports=await primeRpc<number>("prime_queue_scheduled_reports",{});
  const collections=await primeRpc<number>("prime_queue_contact_collections",{});
+ const payroll=await primeRpc<number>("prime_queue_friday_payroll",{});
  const messages=await runPrimeOutbox();
- return {pluggyEvents,bills,reports,collections,messages};
+ return {pluggyEvents,bills,reports,collections,payroll,messages};
 }
