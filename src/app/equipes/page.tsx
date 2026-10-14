@@ -54,8 +54,9 @@ export default async function Page(){
   const total=items.reduce((sum,a)=>sum+Number(a.amount),0);
   const lines=items.map(a=>{const t=tripMap.get(a.trip_id);return "• "+shortDate(t?.service_date||"")+" · "+(t?.origin||"Origem")+" → "+(t?.destination||"Destino")+" · "+(a.role==="driver"?"Motorista":"Ajudante")+" · "+brl(Number(a.amount));});
   const message="Prime Group · Fechamento semanal\n"+person.name+"\n"+shortDate(first)+" a "+shortDate(last)+"\n\n"+lines.join("\n")+"\n\nTotal combinado: "+brl(total)+"\nConferir antes de considerar como pago.";
-  const phone=(person.phone||"").replace(/\D/g,"");
-  const valid=/^[0-9]{10,15}$/.test(phone);
+  const digits=(person.phone||"").replace(/\D/g,"");
+  const phone=digits.length===10||digits.length===11?"55"+digits:digits;
+  const valid=/^[0-9]{12,15}$/.test(phone);
   return <article key={id} className="card premium-obligation"><div className="premium-obligation-head"><strong>{person.name}</strong><span className="bank-inline-badge good">{items.length} fretes</span></div>
    <div className="premium-obligation-value">{brl(total)}</div><div className="metric-foot">Relatório de fretes e dias: {items.length} serviços concluídos nesta semana.</div>
    <div className="premium-mini-list">{lines.map(l=><div key={l}>{l}</div>)}</div>
