@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Pencil,Plus,Trash2,X } from "lucide-react";
 import { removeLocalRecord,saveLocalRecord } from "@/app/actions/local-records";
 
-export type RecordType="transaction"|"payable"|"receivable"|"account"|"card"|"vehicle"|"trip"|"counterparty"|"recurring"|"reminder"|"loan";
+export type RecordType="transaction"|"payable"|"receivable"|"account"|"card"|"vehicle"|"trip"|"counterparty"|"recurring"|"reminder"|"loan"|"document";
 export type WorkspaceType="prime"|"personal"|"interest";
 type Datum=Record<string,unknown>;
 type Lookup={counterparties?:{id:string;name:string}[]};
@@ -32,6 +32,7 @@ const configs:Record<RecordType,{title:string;create:Field[];edit?:Field[]}>={
  counterparty:{title:"pessoa / empresa",create:[f("name","Nome",true),f("kind","Tipo",true,"select",[["borrower","Devedor"],["customer","Cliente"],["supplier","Fornecedor"],["lender","Credor"],["driver","Motorista"],["other","Outro"]]),f("phone","Telefone"),f("email","E-mail"),f("document","CPF/CNPJ")]},
  recurring:{title:"recorrência",create:[f("name","Descrição",true),f("type","Tipo",true,"select",[["expense","Despesa"],["income","Receita"]]),f("amount","Valor (R$)",true,"number"),f("frequency","Frequência",true,"select",[["monthly","Mensal"],["weekly","Semanal"],["quarterly","Trimestral"],["yearly","Anual"]]),f("due_day","Dia do vencimento",false,"number"),f("starts_on","A partir de",true,"date"),f("ends_on","Até",false,"date")]},
  reminder:{title:"lembrete",create:[f("description","Descrição",true),f("amount","Valor (R$)",false,"number"),f("due_date","Vencimento",true,"date")]},
+ document:{title:"documento",create:[f("filename","Nome do arquivo",true),f("document_type","Classificação")]},
  loan:{title:"contrato de empréstimo",create:[
    f("counterparty_id","Devedor",true,"select"),f("principal","Capital (R$)",true,"number"),
    f("interest_type","Tipo",true,"select",[["simple","Juros simples"],["compound","Juros compostos"],["fixed","Juros fixos"]]),
