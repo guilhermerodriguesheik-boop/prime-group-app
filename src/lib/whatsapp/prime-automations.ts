@@ -20,21 +20,23 @@ export async function primeRpc<T>(name:string,parameters:Record<string,unknown>)
 }
 export async function runPrimeOutbox(){
  if(process.env.WHATSAPP_PROVIDER!=="evolution_go")return {sent:0,disabled:true};
- const items=await primeRpc<OutboxItem[]>("prime_claim_outbox",{p_limit:12});
- let sent=0,failed=0;
- for(const item of items){
+ const items=await primeRpc<OutboxItem[]>("prime_claim_outbox",{p_limit:8});
+ // Independent notifications: bounded parallel dispatch avoids exceeding
+ // the Vercel function deadline when several people have due notices.
+ const results=await Promise.all(items.map(async item=>{
   try{
    if(!/^[0-9]{10,15}$/.test(item.phone))throw new Error("Invalid linked recipient");
    await sendScheduledWhatsAppMessage(item.phone,item.message);
    await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
-   sent++;
+   return true;
   }catch(err){
    const reason=err instanceof Error?err.message:"Unavailable";
    await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:false,p_error:reason}).catch(()=>undefined);
-   failed++;
+   return false;
   }
- }
- return {claimed:items.length,sent,failed};
+ }));
+ const sent=results.filter(Boolean).length;
+ return {claimed:items.length,sent,failed:results.length-sent};
 }
 export async function runPrimeDailyJobs(){
  let pluggyEvents:unknown;
