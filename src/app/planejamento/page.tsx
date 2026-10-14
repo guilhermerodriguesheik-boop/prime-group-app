@@ -15,6 +15,8 @@ export default async function Page() {
   const forecast30 = data.cash + data.receivable30 - data.payable30;
   const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const next30 = new Date(Date.parse(`${today}T12:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10);
+  const evolutionGoConfigured = process.env.WHATSAPP_PROVIDER === "evolution_go" &&
+    Boolean(process.env.EVOLUTION_GO_API_URL && process.env.EVOLUTION_GO_INSTANCE_NAME && process.env.EVOLUTION_GO_TOKEN);
   const pendingReminders = data.paymentReminders.filter((item) => item.status === "pending");
   const dueAlerts = pendingReminders.filter((item) => item.remind_on <= today);
   const upcomingPayables = data.payables.filter((item) => ["open", "partial", "overdue"].includes(item.status) && item.due_date <= next30).slice(0, 40);
@@ -37,7 +39,10 @@ export default async function Page() {
 
       <SectionTitle title="Lembretes de pagamentos" hint={dueAlerts.length ? `${dueAlerts.length} aviso(s) aguardando atenção` : "avisos no próprio aplicativo"} />
       <div className="notice">
-        Os lembretes são exibidos quando você acessa o Prime Finance. Alertas automáticos pelo WhatsApp ainda dependem da ativação da integração com a Meta. Marcar um lembrete como concluído não dá baixa financeira na conta.
+        {evolutionGoConfigured
+          ? "WhatsApp integrado pela Evolution Go para mensagens. Os lembretes de pagamentos são exibidos no Prime Finance; o envio automático de avisos de vencimento por WhatsApp ainda não foi implementado."
+          : "Os lembretes de pagamentos são exibidos no Prime Finance. O envio automático de avisos de vencimento pelo WhatsApp ainda não foi implementado."}
+        {" "}Marcar um lembrete como concluído não dá baixa financeira na conta.
       </div>
       <div className="table-wrap">
         <table>
