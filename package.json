@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:ai": "node --experimental-strip-types --test tests/ai-cost-routing.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.125",
