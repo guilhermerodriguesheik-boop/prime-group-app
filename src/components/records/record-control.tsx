@@ -7,7 +7,7 @@ import { removeLocalRecord,saveLocalRecord } from "@/app/actions/local-records";
 export type RecordType="transaction"|"payable"|"receivable"|"account"|"card"|"vehicle"|"trip"|"counterparty"|"recurring"|"reminder"|"loan"|"document";
 export type WorkspaceType="prime"|"personal"|"interest";
 type Datum=Record<string,unknown>;
-type Lookup={counterparties?:{id:string;name:string}[]};
+type Lookup={counterparties?:{id:string;name:string}[];accounts?:{id:string;name:string}[];cards?:{id:string;name:string}[];vehicles?:{id:string;nickname:string}[]};
 type Props={
   category:RecordType;workspace:WorkspaceType;record?:Datum;
   lookups?:Lookup;label?:string;
@@ -17,9 +17,11 @@ const f=(key:string,label:string,required=false,type?:Field["type"],options?:Fie
 const configs:Record<RecordType,{title:string;create:Field[];edit?:Field[]}>={
  transaction:{title:"lançamento",create:[
   f("description","Descrição",true),f("amount","Valor (R$)",true,"number"),
-  f("type","Tipo",true,"select",[["expense","Despesa paga"],["income","Receita recebida"]]),
-  f("occurred_at","Data",true,"date"),
- ]},
+  f("entry_mode","Tipo",true,"select",[["expense","Despesa paga"],["income","Receita recebida"],["card_purchase","Compra no cartão"],["card_payment","Pagamento de fatura"]]),
+  f("occurred_at","Data",true,"date"),f("account_id","Conta de saída/entrada",false,"select"),
+  f("card_id","Cartão (para compras/faturas)",false,"select"),f("vehicle_id","Veículo",false,"select"),
+ ],edit:[f("description","Descrição",true),f("amount","Valor (R$)",true,"number"),
+  f("type","Tipo",true,"select",[["expense","Despesa"],["income","Receita"]]),f("occurred_at","Data",true,"date")]},
  payable:{title:"conta a pagar",create:[f("description","Descrição / credor",true),f("amount","Valor (R$)",true,"number"),f("due_date","Vencimento",true,"date")]},
  receivable:{title:"conta a receber",create:[f("description","Descrição / devedor",true),f("amount","Valor (R$)",true,"number"),f("due_date","Vencimento",true,"date")]},
  account:{title:"conta / carteira",create:[f("name","Nome",true),f("institution","Instituição"),f("account_type","Tipo de conta",true,"select",
@@ -30,7 +32,7 @@ const configs:Record<RecordType,{title:string;create:Field[];edit?:Field[]}>={
  trip:{title:"frete / viagem",create:[f("customer_name","Cliente"),f("origin","Origem"),f("destination","Destino"),f("driver_name","Motorista"),f("service_date","Data",false,"date"),f("freight_revenue","Valor do frete (R$)",false,"number"),f("driver_cost","Motorista (R$)",false,"number")],
  edit:[f("customer_name","Cliente"),f("origin","Origem"),f("destination","Destino"),f("driver_name","Motorista"),f("service_date","Data",false,"date"),f("freight_revenue","Valor do frete (R$)",false,"number"),f("driver_cost","Motorista (R$)",false,"number"),f("distance_km","Distância (km)",false,"number"),f("reference","Referência"),f("status","Situação",true,"select",[["planned","Planejado"],["in_progress","Em andamento"],["completed","Concluído"],["cancelled","Cancelado"]])]},
  counterparty:{title:"pessoa / empresa",create:[f("name","Nome",true),f("kind","Tipo",true,"select",[["borrower","Devedor"],["customer","Cliente"],["supplier","Fornecedor"],["lender","Credor"],["driver","Motorista"],["other","Outro"]]),f("phone","Telefone"),f("email","E-mail"),f("document","CPF/CNPJ")]},
- recurring:{title:"recorrência",create:[f("name","Descrição",true),f("type","Tipo",true,"select",[["expense","Despesa"],["income","Receita"]]),f("amount","Valor (R$)",true,"number"),f("frequency","Frequência",true,"select",[["monthly","Mensal"],["weekly","Semanal"],["quarterly","Trimestral"],["yearly","Anual"]]),f("due_day","Dia do vencimento",false,"number"),f("starts_on","A partir de",true,"date"),f("ends_on","Até",false,"date")]},
+ recurring:{title:"recorrência",create:[f("name","Descrição",true),f("type","Tipo",true,"select",[["expense","Despesa"],["income","Receita"]]),f("amount","Valor (R$)",true,"number"),f("frequency","Frequência",true,"select",[["monthly","Mensal"],["weekly","Semanal"],["quarterly","Trimestral"],["yearly","Anual"],["custom","Personalizado"]]),f("due_day","Dia do vencimento",false,"number"),f("starts_on","A partir de",true,"date"),f("ends_on","Até",false,"date")]},
  reminder:{title:"lembrete",create:[f("description","Descrição",true),f("amount","Valor (R$)",false,"number"),f("due_date","Vencimento",true,"date")]},
  document:{title:"documento",create:[f("filename","Nome do arquivo",true),f("document_type","Classificação")]},
  loan:{title:"contrato de empréstimo",create:[
@@ -109,6 +111,9 @@ export function RecordControl({category,workspace,record,lookups,label}:Props){
            const isSelect=field.type==="select";
            let options=field.options;
            if(field.key==="counterparty_id")options=lookups?.counterparties?.map(x=>[x.id,x.name])||[];
+           if(field.key==="account_id")options=lookups?.accounts?.map(x=>[x.id,x.name])||[];
+           if(field.key==="card_id")options=lookups?.cards?.map(x=>[x.id,x.name])||[];
+           if(field.key==="vehicle_id")options=lookups?.vehicles?.map(x=>[x.id,x.nickname])||[];
            return <label className="record-field" key={field.key}>{field.label}
              {isSelect?<select name={field.key} defaultValue={value||options?.[0]?.[0]||""} required={field.required}>
                 {!field.required&&<option value="">Não informado</option>}
