@@ -8,7 +8,7 @@ import {
   createRecurringEntry,createTransaction,createVehicle,
 } from "@/app/cadastros/actions";
 
-const kinds=["transaction","payable","receivable","account","card","vehicle","trip","counterparty","recurring","reminder","loan"] as const;
+const kinds=["transaction","payable","receivable","account","card","vehicle","trip","counterparty","recurring","reminder","loan","document"] as const;
 type Kind=typeof kinds[number];
 const wsKinds=["prime","personal","interest"] as const;
 const fields:Record<Kind,readonly string[]>={
@@ -23,11 +23,12 @@ const fields:Record<Kind,readonly string[]>={
   recurring:["name","type","amount","frequency","due_day","starts_on","ends_on"],
   reminder:["description","amount","due_date"],
   loan:["maturity_date","notes"],
+  document:["filename","document_type"],
 };
 const sourceTable:Record<Kind,string>={
  transaction:"transactions",payable:"payables",receivable:"receivables",account:"accounts",card:"cards",
  vehicle:"vehicles",trip:"trips",counterparty:"counterparties",recurring:"recurring_entries",
- reminder:"payment_reminders",loan:"loans",
+ reminder:"payment_reminders",loan:"loans",document:"documents",
 };
 const numeric=new Set(["amount","opening_balance","credit_limit","closing_day","due_day","year",
  "odometer_km","estimated_value","freight_revenue","driver_cost","distance_km"]);
@@ -49,7 +50,7 @@ async function authorized(kind:string){
  return {db,user,workspace};
 }
 function invalid(message:string):never{throw Error(message)}
-const refresh=()=>["/","/prime","/pessoal","/contas","/juros","/frota","/viagens","/planejamento","/relatorios","/cadastros"].forEach(x=>revalidatePath(x));
+const refresh=()=>["/documentos","/registros","/","/prime","/pessoal","/contas","/juros","/frota","/viagens","/planejamento","/relatorios","/cadastros"].forEach(x=>revalidatePath(x));
 export async function saveLocalRecord(formData:FormData){
  const category=txt(formData,"category") as Kind;
  const workspace=txt(formData,"workspace");
@@ -89,6 +90,8 @@ export async function saveLocalRecord(formData:FormData){
      };
      if(values.freight_revenue!==null&&(!Number.isFinite(values.freight_revenue)||values.freight_revenue<0))invalid("Valor de frete inválido.");
      const {error}=await db.from("trips").insert(values);if(error)throw Error(error.message);
+   }else if(category==="document"){
+     invalid("Envie documentos pela seção Documentos.");
    }else if(category==="reminder"){
      const due=parseDate(txt(formData,"due_date"));
      const remindDate=new Date(due+"T12:00:00Z");remindDate.setUTCDate(remindDate.getUTCDate()-3);
@@ -158,6 +161,14 @@ export async function removeLocalRecord(formData:FormData){
  const {data:row,error}=await db.from(table).select("*").eq("workspace_id",w.id).eq("id",id).maybeSingle();
  if(error||!row)invalid("Registro não encontrado.");
  if(txt(formData,"confirm")!=="EXCLUIR")invalid("Confirme a exclusão.");
+ if(category==="document"){
+   if(row.related_id)invalid("Documento vinculado a um registro financeiro não pode ser excluído.");
+   const {data:removed,error:removeError}=await db.from("documents").delete().eq("id",id).eq("workspace_id",w.id).select("id").maybeSingle();
+   if(removeError||!removed)invalid("Não foi possível excluir o documento.");
+   const {error:storageError}=await db.storage.from("documents").remove([String(row.storage_path)]);
+   if(storageError)invalid("Cadastro apagado, mas a remoção do arquivo do armazenamento falhou.");
+   revalidatePath("/documentos");return {ok:true};
+ }
  if(category==="transaction"&&(row.source!=="manual"||row.status==="reconciled"))invalid("Lançamento vinculado: use o estorno contábil.");
  if(category==="payable"&&Number(row.paid_amount)>0)invalid("Conta com pagamento não pode ser excluída. Faça o estorno primeiro.");
  if(category==="receivable"&&Number(row.received_amount)>0)invalid("Recebível com recebimento não pode ser excluído. Faça o estorno primeiro.");
