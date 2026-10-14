@@ -63,9 +63,13 @@ export async function pluggyApiKey(): Promise<string> {
   if(!data.apiKey)throw new Error("A Pluggy não retornou credencial temporária.");
   return data.apiKey;
 }
-export async function pluggyConnectToken(key:string, userId:string) {
+export async function pluggyConnectToken(key:string, userId:string, itemId?:string) {
   const response=await request<{accessToken:string}>("/connect_token",key,{
-    method:"POST",body:JSON.stringify({options:{clientUserId:userId}}),
+    method:"POST",
+    body:JSON.stringify({
+      ...(itemId?{itemId}:{}),
+      options:{clientUserId:userId},
+    }),
   });
   if (!response.accessToken) throw new Error("Token de conexão indisponível.");
   return response.accessToken;
