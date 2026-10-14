@@ -18,7 +18,7 @@ type Statement={id:string;bank_account_id:string;occurred_on:string;description:
 type Data={configured:boolean;mode:string;archivedView:boolean;workspaces:Workspace[];
   connections:Connection[];accounts:BankAccount[];transactions:Statement[]};
 type WidgetOptions={
-  connectToken:string;includeSandbox:boolean;selectedConnectorId?:number;connectorIds?:number[];products?:string[];
+  connectToken:string;includeSandbox:boolean;updateItem?:string;selectedConnectorId?:number;connectorIds?:number[];products?:string[];
   onSuccess:(data:{item:{id:string}})=>void;onError:(error:{message:string})=>void;onClose?:()=>void;
 };
 type WidgetCtor=new (args:WidgetOptions)=>{init:()=>void};
@@ -120,11 +120,49 @@ export function BankDashboard(){
       widget.init();
     }catch(e){setNotice(e instanceof Error?e.message:"Erro ao abrir autorização.");setBusy("");}
   }
+  async function refreshAtBank(connection:Connection){
+    if(connection.provider!=="pluggy"||connection.status==="disconnected"||connection.archived_at)return;
+    const pluggy=(window as Window & {PluggyConnect?:WidgetCtor}).PluggyConnect;
+    if(!sdkReady||!pluggy){
+      setNotice("A janela de atualização bancária ainda está carregando. Atualize a página e tente novamente.");
+      return;
+    }
+    setBusy(connection.id);setNotice("");
+    try{
+      const response=await fetch("/api/banks/token",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({workspaceId:connection.workspace_id,connectionId:connection.id}),
+      });
+      const body=await response.json();
+      if(!response.ok)throw new Error(body.error||"Não foi possível atualizar a conta.");
+      if(!body.updateItem)throw new Error("Item bancário não identificado.");
+      const widget=new pluggy({
+        connectToken:body.accessToken,
+        includeSandbox:false,
+        updateItem:body.updateItem,
+        onSuccess:()=>{
+          setNotice("A Pluggy concluiu a consulta ao banco. Importando os extratos disponíveis...");
+          void sync(connection.id,true);
+        },
+        onError:(error)=>{
+          setNotice(error.message||"Não foi possível atualizar a conexão no banco.");
+          setBusy("");
+        },
+        onClose:()=>setBusy(""),
+      });
+      widget.init();
+    }catch(e){
+      setNotice(e instanceof Error?e.message:"Falha ao solicitar atualização ao banco.");
+      setBusy("");
+    }
+  }
   async function sync(id:string,force=false){
     setBusy(id);
     try{
       const result=await post({action:"sync",id,force});
-      setNotice(result.cached?"Extratos já estão atualizados.":"Extratos importados em modo de leitura. Revise antes de conciliar.");
+      setNotice(result.cached
+        ?"Os dados já disponíveis na Pluggy foram consultados recentemente. Isso não significa que o Itaú já enviou novos Pix."
+        :"Consulta concluída: os dados disponíveis na Pluggy foram importados. Um Pix recente só aparece após o banco fornecê-lo à Pluggy.");
       await load();
     }catch(e){setNotice(e instanceof Error?e.message:"Falha ao atualizar extratos.");await load();}
     finally{setBusy("");}
@@ -194,7 +232,7 @@ export function BankDashboard(){
       catch(e){setNotice("Algumas conexões não atualizaram: "+(e instanceof Error?e.message:"Erro desconhecido"));}
     }
     await load();setBusy("");
-    if(ok===toSync.length)setNotice(ok+" conexão(ões) atualizada(s).");
+    if(ok===toSync.length)setNotice("Dados disponíveis na Pluggy consultados em "+ok+" conexão(ões). Esta ação não força uma nova sincronização bancária.");
   }
   const latest=activeConnections.map(c=>c.last_synced_at).filter((v):v is string=>!!v).sort().at(-1)||null;
   return <div className="bank-page">
@@ -209,7 +247,7 @@ export function BankDashboard(){
       </div>
       <div className="bank-toolbar">
         <button type="button" className="button bank-button" disabled={!!busy} onClick={()=>void syncAll()}>
-          <RefreshCw size={15}/> Atualizar tudo
+          <RefreshCw size={15}/> Consultar Pluggy
         </button>
         <button type="button" className="button primary bank-button" onClick={()=>document.getElementById("bank-connect")?.scrollIntoView({behavior:"smooth"})}>
           <Plus size={16}/> Conectar banco
@@ -301,7 +339,7 @@ export function BankDashboard(){
             {c.last_error&&<div className="bank-risk" style={{marginTop:10}}>{c.last_error}</div>}
             <div className="bank-connection-actions">
               {!c.archived_at&&c.provider==="pluggy"&&<button type="button" className="button bank-button" disabled={!!busy||c.status==="disconnected"}
-                onClick={()=>void sync(c.id,true)}><RefreshCw size={14}/>{busy===c.id?"Atualizando...":"Atualizar"}</button>}
+                onClick={()=>void refreshAtBank(c)}><RefreshCw size={14}/>{busy===c.id?"Atualizando...":"Atualizar no banco"}</button>}
               {!c.archived_at&&<button type="button" className="button bank-button" disabled={!!busy}
                 onClick={()=>void toggle(c)}>{c.status==="disconnected"?"Reativar":"Pausar"}</button>}
               <button type="button" className="button bank-button danger" disabled={!!busy} onClick={()=>openDelete(c)}>
