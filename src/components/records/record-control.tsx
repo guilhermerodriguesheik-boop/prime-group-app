@@ -21,7 +21,7 @@ const configs:Record<RecordType,{title:string;create:Field[];edit?:Field[]}>={
   f("occurred_at","Data",true,"date"),f("account_id","Conta de saída/entrada",false,"select"),
   f("card_id","Cartão (para compras/faturas)",false,"select"),f("vehicle_id","Veículo",false,"select"),
  ],edit:[f("description","Descrição",true),f("amount","Valor (R$)",true,"number"),
-  f("type","Tipo",true,"select",[["expense","Despesa"],["income","Receita"]]),f("occurred_at","Data",true,"date")]},
+  f("type","Tipo",true,"select",[["expense","Despesa"],["income","Receita"],["card_payment","Pagamento de fatura"]]),f("occurred_at","Data",true,"date")]},
  payable:{title:"conta a pagar",create:[f("description","Descrição / credor",true),f("amount","Valor (R$)",true,"number"),f("due_date","Vencimento",true,"date")]},
  receivable:{title:"conta a receber",create:[f("description","Descrição / devedor",true),f("amount","Valor (R$)",true,"number"),f("due_date","Vencimento",true,"date")]},
  account:{title:"conta / carteira",create:[f("name","Nome",true),f("institution","Instituição"),f("account_type","Tipo de conta",true,"select",
