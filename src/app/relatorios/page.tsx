@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Header, Metric, SectionTitle } from "@/components/ui";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, pct, workspaceLabel } from "@/lib/finance/format";
+import {PremiumTrend,makeWeeklyTrend} from "@/components/premium/analytics";
 
 export default async function Page() {
   const data = await getFinanceSnapshot();
@@ -15,7 +16,7 @@ export default async function Page() {
       <div className="quick">
         <Link href="/api/export/transactions">Exportar lançamentos CSV</Link>
         <Link href="/planejamento">Ver planejamento</Link>
-        <Link href="/assistente">Analisar com IA</Link>
+        <Link href="/assistente">Analisar com IA</Link><Link href="/configuracoes">Configurar relatórios pelo WhatsApp</Link>
       </div>
 
       <div className="grid grid-4">
@@ -25,7 +26,10 @@ export default async function Page() {
         <Metric label="Margem consolidada" value={totalIncome > 0 ? pct(result / totalIncome) : "—"} />
       </div>
 
-      <SectionTitle title="Resultado por ambiente" />
+<div className="premium-analytics-grid"><PremiumTrend title="Tendência da Prime Group" points={makeWeeklyTrend(data.transactions,new Set(data.workspaces.filter(w=>w.kind==="prime").map(w=>w.id)))}/>
+  <PremiumTrend title="Tendência pessoal" points={makeWeeklyTrend(data.transactions,new Set(data.workspaces.filter(w=>w.kind==="personal").map(w=>w.id)))}/></div>
+  <div className="notice">Relatórios programados para sábado e último dia do mês às 20h50 (Brasília). Resultado gerencial baseado em lançamentos confirmados, sujeito ao horário de corte. Extratos ainda em conferência não são considerados como lucro.</div>
+  <SectionTitle title="Resultado por ambiente" />
       <div className="table-wrap">
         <table>
           <thead><tr><th>Ambiente</th><th>Receitas</th><th>Despesas</th><th>Resultado</th><th>Margem</th></tr></thead>
