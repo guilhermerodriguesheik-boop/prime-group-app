@@ -103,7 +103,11 @@ export function WhatsAppLinkPanel() {
       <p className="metric-foot">
         Depois de ativado: texto, áudio, foto e XML/PDF; informações incompletas viram registros
         parciais. Recebimentos/contas só são gravados como pagamentos quando houver dados suficientes.
-        O canal QR Code é não oficial e pode sofrer desconexões ou bloqueio do número. O canal Meta tem cobrança própria.
+        {viaGo
+          ? "A Evolution Go é o canal atual de mensagens. Alertas automáticos de vencimento exigem uma rotina de agendamento separada, ainda não habilitada."
+          : viaQr
+            ? "O canal QR Code é não oficial e pode sofrer desconexões ou bloqueio do número."
+            : "O canal oficial da Meta tem regras e custos próprios."}
       </p>
     </div>
   );
