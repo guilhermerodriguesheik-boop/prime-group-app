@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test:ai": "node --experimental-strip-types --test tests/ai-cost-routing.test.mjs",
-    "test:fiscal": "node --experimental-strip-types --test tests/fiscal.test.mjs"
+    "test:fiscal": "node --experimental-strip-types --test tests/fiscal.test.mjs",
+    "test:pluggy": "node --experimental-strip-types --test tests/pluggy-webhook.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.125",
