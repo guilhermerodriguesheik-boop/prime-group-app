@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { meuPluggyConnector, personalBankUserAllowed, pluggyApiKey, pluggyConnectToken, pluggyReady } from "@/lib/banks/pluggy";
 
 export const runtime="nodejs";
@@ -7,7 +8,7 @@ export async function POST(request:Request) {
   const origin=request.headers.get("origin");
   if(origin && origin!==new URL(request.url).origin)
     return NextResponse.json({error:"Origem inválida."},{status:403});
-  const supabase=await createClient();
+  const supabase=await createClient() as unknown as SupabaseClient;
   const {data:{user}}=await supabase.auth.getUser();
   if(!user)return NextResponse.json({error:"Faça login."},{status:401});
   if(!personalBankUserAllowed(user.id))return NextResponse.json({error:"Integração reservada ao titular."},{status:403});
@@ -37,7 +38,7 @@ export async function POST(request:Request) {
     if(error||!connection||connection.archived_at||connection.status==="disconnected")
       return NextResponse.json({error:"Conexão indisponível para atualização."},{status:403});
     updateItem=connection.provider_item_id;
-    if(!/^[0-9a-f-]{36}$/i.test(updateItem))
+    if(!updateItem || !/^[0-9a-f-]{36}$/i.test(updateItem))
       return NextResponse.json({error:"Item inválido na Pluggy."},{status:400});
   }
   try{
