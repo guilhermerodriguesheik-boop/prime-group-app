@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3, Building2, CalendarDays, CreditCard, FileText, Landmark,
   LayoutDashboard, LogOut, Menu, Moon, Percent, Settings2, ShieldCheck,
-  Sparkles, Sun, Truck, UserRound, Wallet, X, ClipboardList, Route,
+  Sparkles, Sun, Truck, UserRound, X, ClipboardList, Route,
 } from "lucide-react";
 
 const nav = [
@@ -26,7 +26,6 @@ const nav = [
   ]},
   {label:"Ferramentas",items:[
     {label:"Assistente IA",href:"/assistente",icon:Sparkles},
-    {label:"Cadastros",href:"/cadastros",icon:Wallet},
     {label:"Documentos",href:"/documentos",icon:FileText},
     {label:"Registros parciais",href:"/registros",icon:ClipboardList},
     {label:"Integrações",href:"/integracoes",icon:Settings2},
