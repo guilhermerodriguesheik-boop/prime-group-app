@@ -1,4 +1,5 @@
--- Normalize opted-in Brazilian recipient numbers to E.164 before WhatsApp dispatch.\ncreate or replace function public.prime_claim_outbox(p_secret text,p_limit int default 12)
+-- Normalize opted-in Brazilian recipient numbers to E.164 before WhatsApp dispatch.
+create or replace function public.prime_claim_outbox(p_secret text,p_limit int default 12)
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare response jsonb;
 begin
