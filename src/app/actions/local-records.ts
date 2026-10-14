@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createAccount,createCard,createCounterparty,createLoan,createPayable,createReceivable,
   createRecurringEntry,createTransaction,createVehicle,
@@ -39,7 +40,7 @@ function txt(data:FormData,k:string){const v=data.get(k);return typeof v==="stri
 function numericValue(raw:string){const n=Number(raw.includes(",")?raw.replace(/\./g,"").replace(",","."):raw);return Number.isFinite(n)?n:NaN;}
 function parseDate(raw:string){if(!/^\d{4}-\d{2}-\d{2}$/.test(raw)||isNaN(Date.parse(raw+"T12:00:00Z")))throw Error("Data inválida.");return raw;}
 async function authorized(kind:string){
- const db=await createClient();
+ const db=await createClient() as unknown as SupabaseClient;
  const {data:{user}}=await db.auth.getUser();
  if(!user)throw Error("Faça login.");
  if(!wsKinds.includes(kind as typeof wsKinds[number]))throw Error("Ambiente inválido.");
@@ -121,7 +122,8 @@ export async function saveLocalRecord(formData:FormData){
    const raw=txt(formData,field);
    if(["description","name","nickname"].includes(field)&&!raw)invalid("Informe o nome ou descrição.");
    if(field==="status"){
-     if(category!=="vehicle"||!options.status.includes(raw))continue;
+     const allowed=category==="vehicle"?options.status:["planned","in_progress","completed","cancelled"];
+   if(!["vehicle","trip"].includes(category)||!allowed.includes(raw))invalid("Situação inválida.");
    }else if(options[field]&&!options[field].includes(raw))invalid("Opção inválida.");
    if(field.endsWith("_date")||field==="starts_on"||field==="ends_on"||field==="occurred_at"||field==="maturity_date"||field==="service_date"){
      if(raw)parseDate(raw);
@@ -141,8 +143,6 @@ export async function saveLocalRecord(formData:FormData){
    const remindDate=new Date(due+"T12:00:00Z");remindDate.setUTCDate(remindDate.getUTCDate()-3);
    patch.remind_on=remindDate.toISOString().slice(0,10);
    if(previous.status!=="pending")invalid("Só é possível editar lembretes pendentes.");
- }
- if(category==="vehicle"&&patch.status==="inactive"&&previous.status==="active"){ // permitted: historical trips remain.
  }
  const {error}=await db.from(table).update(patch).eq("id",rowId).eq("workspace_id",w.id);
  if(error)throw Error(error.message);
