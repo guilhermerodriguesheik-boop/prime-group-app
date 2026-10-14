@@ -92,7 +92,7 @@ export async function removeCrewAssignment(f:FormData){
 export async function savePremiumNotifications(f:FormData){
  const {db,user}=await session();
  const keys=["bank_alerts","weekly_reports","monthly_reports"] as const;
- const value:Object={user_id:user.id,updated_at:new Date().toISOString()};
+ const value:Record<string,unknown>={user_id:user.id,updated_at:new Date().toISOString()};
  const payload:Record<string,unknown>={...value};
  for(const key of keys)payload[key]=f.get(key)==="on";
  const {error}=await db.from("prime_notification_settings").upsert(payload,{onConflict:"user_id"});
