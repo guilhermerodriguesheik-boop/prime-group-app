@@ -366,8 +366,6 @@ export type Database = {
           phone?: string | null
           whatsapp_consent?: boolean
           whatsapp_authorized_at?: string | null
-          whatsapp_consent?: boolean
-          whatsapp_authorized_at?: string | null
           updated_at?: string
           workspace_id: string
         }
@@ -380,6 +378,8 @@ export type Database = {
           name?: string
           notes?: string | null
           phone?: string | null
+          whatsapp_consent?: boolean
+          whatsapp_authorized_at?: string | null
           updated_at?: string
           workspace_id?: string
         }
