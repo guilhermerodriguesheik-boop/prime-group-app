@@ -127,6 +127,8 @@ export async function saveLocalRecord(formData:FormData){
    if(field==="status"){
      const allowed=category==="vehicle"?options.status:["planned","in_progress","completed","cancelled"];
    if(!["vehicle","trip"].includes(category)||!allowed.includes(raw))invalid("Situação inválida.");
+   }else if(field==="type"&&category==="transaction"){
+     if(!["income","expense","card_payment"].includes(raw))invalid("Tipo de lançamento inválido.");
    }else if(options[field]&&!options[field].includes(raw))invalid("Opção inválida.");
    if(field.endsWith("_date")||field==="starts_on"||field==="ends_on"||field==="occurred_at"||field==="maturity_date"||field==="service_date"){
      if(raw)parseDate(raw);
@@ -138,8 +140,11 @@ export async function saveLocalRecord(formData:FormData){
      patch[field]=n;
    }else patch[field]=raw||null;
  }
- if(category==="transaction" && (patch.type!=="income"&&patch.type!=="expense")){
-   invalid("Apenas receita e despesa manual podem ser editadas.");
+ if(category==="transaction"){
+   const valid=previous.type==="card_payment"
+     ? patch.type==="card_payment"
+     : (patch.type===previous.type||["income","expense"].includes(String(patch.type)));
+   if(!valid)invalid("Não altere a natureza de pagamento de fatura; ajuste somente os demais campos.");
  }
  if(category==="reminder"){
    const due=String(patch.due_date);
