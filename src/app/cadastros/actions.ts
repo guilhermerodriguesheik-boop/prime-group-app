@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 function textValue(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -164,13 +165,15 @@ export async function createCounterparty(formData: FormData) {
   const { supabase } = await context();
   const workspace = textValue(formData, "workspace") as "prime" | "personal" | "interest";
   const id = await workspaceId(workspace);
-  const { error } = await supabase.from("counterparties").insert({
+  const { error } = await (supabase as unknown as SupabaseClient).from("counterparties").insert({
     workspace_id: id,
     name: textValue(formData, "name"),
     document: textValue(formData, "document") || null,
     phone: textValue(formData, "phone") || null,
     email: textValue(formData, "email") || null,
     kind: textValue(formData, "kind") || "other",
+    whatsapp_consent: formData.get("whatsapp_consent")==="yes",
+    whatsapp_authorized_at:formData.get("whatsapp_consent")==="yes"?new Date().toISOString():null,
   });
   if (error) throw error;
   refreshAll();
