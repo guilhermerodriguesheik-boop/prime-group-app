@@ -1,6 +1,9 @@
 import {pluggyApiKey} from "@/lib/banks/pluggy";
 
-const events=["item/updated","transactions/created"] as const;
+// Pluggy only guarantees itemId on item/* notifications.
+// transactions/created reports transactionIds, not itemId, so our importer
+// deliberately subscribes to item/updated, which fires on completed sync.
+const events=["item/updated"] as const;
 export async function ensurePluggyWebhooks(){
  const secret=process.env.PLUGGY_WEBHOOK_SECRET||"";
  const site=process.env.NEXT_PUBLIC_SITE_URL||"";
