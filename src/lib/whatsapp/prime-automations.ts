@@ -38,6 +38,7 @@ export async function runPrimeOutbox(){
 export async function runPrimeDailyJobs(){
  const bills=await primeRpc<number>("prime_materialize_bills",{});
  const reports=await primeRpc<number>("prime_queue_scheduled_reports",{});
+ const collections=await primeRpc<number>("prime_queue_contact_collections",{});
  const messages=await runPrimeOutbox();
- return {bills,reports,messages};
+ return {bills,reports,collections,messages};
 }
