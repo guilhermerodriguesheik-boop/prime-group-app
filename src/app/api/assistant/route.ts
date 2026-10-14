@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAssistantTools } from "@/lib/assistant/actions";
 import { loadAssistantDocuments } from "@/lib/assistant/documents";
+import { chooseAiProfile, estimateAiCostUsd } from "@/lib/ai/cost-routing";
 
 export const runtime = "nodejs";
 
@@ -224,9 +225,8 @@ export async function POST(request: Request) {
   const hasVisualFiles = documents.some((item) => item.imageData || item.pdfData);
   // The model receives actual PDF files for native visual reading of scans.
   // PRIME_VISION_MODEL can override the base model for images and PDFs.
-  const modelName = hasVisualFiles
-    ? process.env.PRIME_VISION_MODEL?.trim() || process.env.PRIME_AGENT_MODEL?.trim() || "gpt-6-astra"
-    : process.env.PRIME_AGENT_MODEL?.trim() || "gpt-6-astra";
+  const aiProfile = chooseAiProfile({ message: effectiveMessage, hasVisual: hasVisualFiles });
+  const modelName = aiProfile.model;
   const model = openai(modelName);
 
   const textPart = `PEDIDO ATUAL:
@@ -274,8 +274,8 @@ ${documentText || "(nenhum conteúdo textual extraído)"}`;
   try {
     const result = await generateText({
       model,
-      providerOptions: { openai: { store: false, parallelToolCalls: false, reasoningEffort: "medium" } },
-      maxOutputTokens: 8192,
+      providerOptions: { openai: { store: false, parallelToolCalls: false, reasoningEffort: aiProfile.reasoningEffort } },
+      maxOutputTokens: aiProfile.maxOutputTokens,
       timeout: 120_000,
       maxRetries: 1,
       system: `Você é o agente financeiro e operacional do Prime Finance.
@@ -344,7 +344,9 @@ REGRAS DE CONFIABILIDADE:
       content: result.text || "Ação concluída.",
       metadata: {
         model: modelName,
+        tier: aiProfile.tier,
         usage: result.usage ?? null,
+        estimated_cost_usd_upper_bound: estimateAiCostUsd(modelName, result.usage),
         actions: actions.map((action) => ({
           type: action.type,
           label: action.label,
