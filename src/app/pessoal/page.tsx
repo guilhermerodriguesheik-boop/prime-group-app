@@ -8,7 +8,7 @@ export default async function Page(){
   const data=await getFinanceSnapshot();
   const personalAccounts=data.accounts.filter(a=>data.workspaceMap.get(a.workspace_id)?.kind==="personal");
   return <><Header title="Pessoal" subtitle="Seu dinheiro separado da Prime."/>
-  <div className="record-toolbar"><RecordControl category="transaction" workspace="personal" label="Novo lançamento"/><RecordControl category="payable" workspace="personal" label="Nova conta a pagar"/><RecordControl category="receivable" workspace="personal" label="Novo recebível"/><Link className="button" href="/contas">Contas</Link></div>
+  <div className="record-toolbar"><RecordControl category="transaction" workspace="personal" label="Novo lançamento" lookups={{accounts:data.accounts.filter(x=>data.workspaceMap.get(x.workspace_id)?.kind==="personal"),cards:data.cards.filter(x=>data.workspaceMap.get(x.workspace_id)?.kind==="personal")}}/><RecordControl category="payable" workspace="personal" label="Nova conta a pagar"/><RecordControl category="receivable" workspace="personal" label="Novo recebível"/><RecordControl category="counterparty" workspace="personal" label="Nova pessoa"/><Link className="button" href="/contas">Contas</Link></div>
   <div className="grid grid-4"><Metric label="Receitas do mês" value={brl(data.personal.income)} tone="positive"/><Metric label="Gastos do mês" value={brl(data.personal.expense)}/><Metric label="Resultado" value={brl(data.personal.result)} tone={data.personal.result>=0?"positive":"warning"}/><Metric label="Contas cadastradas" value={String(personalAccounts.length)}/></div>
   <SectionTitle title="Movimentações pessoais"/>
   <div className="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Tipo</th><th>Valor</th><th>Ações</th></tr></thead><tbody>
@@ -18,5 +18,9 @@ export default async function Page(){
   <SectionTitle title="Contas pessoais a pagar e receber"/><div className="table-wrap"><table><thead><tr><th>Tipo</th><th>Descrição</th><th>Vencimento</th><th>Valor</th><th>Ações</th></tr></thead><tbody>
   {data.payables.filter(x=>data.workspaceMap.get(x.workspace_id)?.kind==="personal").slice(0,25).map(x=><tr key={x.id}><td>A pagar</td><td>{x.description}</td><td>{shortDate(x.due_date)}</td><td>{brl(Number(x.amount)-Number(x.paid_amount))}</td><td><RecordControl category="payable" workspace="personal" record={x}/></td></tr>)}
   {data.receivables.filter(x=>data.workspaceMap.get(x.workspace_id)?.kind==="personal").slice(0,25).map(x=><tr key={x.id}><td>A receber</td><td>{x.description}</td><td>{shortDate(x.due_date)}</td><td>{brl(Number(x.amount)-Number(x.received_amount))}</td><td><RecordControl category="receivable" workspace="personal" record={x}/></td></tr>)}
+  </tbody></table></div>
+  <SectionTitle title="Pessoas cadastradas" />
+  <div className="table-wrap"><table><thead><tr><th>Nome</th><th>Tipo</th><th>Contato</th><th>Ações</th></tr></thead><tbody>
+  {data.counterparties.filter(x=>data.workspaceMap.get(x.workspace_id)?.kind==="personal").map(x=><tr key={x.id}><td>{x.name}</td><td>{x.kind}</td><td>{x.phone||"—"}</td><td><RecordControl category="counterparty" workspace="personal" record={x}/></td></tr>)}
   </tbody></table></div></>
 }
