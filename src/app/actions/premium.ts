@@ -25,9 +25,11 @@ export async function saveRecurringBill(f:FormData){
  const kind=txt(f,"workspace"),ws=await workspace(db,user.id,kind);
  const id=txt(f,"id"),description=txt(f,"description").slice(0,180);
  const amount=number(txt(f,"amount")),day=Number(txt(f,"due_day"));
+ const frequency=txt(f,"frequency")||"monthly";
+ if(!["weekly","monthly","quarterly","yearly"].includes(frequency))throw Error("Frequência inválida.");
  const starts_on=asDate(txt(f,"starts_on"));
  const ends_on=txt(f,"ends_on")?asDate(txt(f,"ends_on")):null;
- if(description.length<2||!Number.isInteger(day)||day<1||day>31)throw Error("Informe descrição e dia de vencimento.");
+ if(description.length<2||!Number.isInteger(day)||day<1||day>(frequency==="weekly"?7:31))throw Error("Informe descrição e dia de vencimento.");
  if(ends_on&&ends_on<starts_on)throw Error("Data final anterior ao início.");
  const cp=txt(f,"counterparty_id")||null;
  if(cp){
@@ -35,7 +37,7 @@ export async function saveRecurringBill(f:FormData){
   const {data:c}=await db.from("counterparties").select("id").eq("id",cp).eq("workspace_id",ws).maybeSingle();
   if(!c)throw Error("Credor não pertence a esse ambiente.");
  }
- const values={workspace_id:ws,description,amount,due_day:day,starts_on,ends_on,counterparty_id:cp,
+ const values={workspace_id:ws,description,amount,due_day:day,frequency,starts_on,ends_on,counterparty_id:cp,
   active:txt(f,"active")!=="no",updated_at:new Date().toISOString()};
  if(id){
   if(!uuid.test(id))throw Error("Cadastro inválido.");
