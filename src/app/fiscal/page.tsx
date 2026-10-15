@@ -2,6 +2,9 @@ import { Header, SectionTitle } from "@/components/ui";
 import { FiscalImportForm } from "@/components/fiscal/import-form";
 import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
 import { FiscalAiPanel } from "@/components/fiscal/fiscal-ai-panel";
+import { FiscalAiReview } from "@/components/fiscal/ai-review";
+import { GmailConnector } from "@/components/fiscal/gmail-connector";
+import { gmailStatus } from "@/lib/fiscal/gmail";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
 import { mdfeTransmissionBlockers } from "@/lib/fiscal/preflight";
 import { fiscalIntegrationState } from "@/lib/fiscal/focus";
@@ -22,6 +25,12 @@ export default async function FiscalPage() {
   if(!user)redirect("/login");
   const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
   const db=client as unknown as SupabaseClient;
+  const gmail=ws ? await gmailStatus(ws.id).catch(()=>null) : null;
+  const [vehiclesResult,driversResult,profileResult]=await Promise.all([
+    ws?db.from("vehicles").select("id,nickname,plate").eq("workspace_id",ws.id).eq("status","active"):Promise.resolve({data:[]}),
+    ws?db.from("drivers").select("id,name,document").eq("workspace_id",ws.id).eq("active",true):Promise.resolve({data:[]}),
+    ws?db.from("fiscal_transport_profiles").select("rntrc").eq("workspace_id",ws.id).maybeSingle():Promise.resolve({data:null}),
+  ]);
   const {data:rows,error}=ws
     ? await db.from("fiscal_drafts").select("id,document_type,cargo_reference,ciot,freight_value,status,created_at,checklist,fiscal_nfe_inbox(invoice_number,sender_name,recipient_name,origin_city,destination_city,goods_value)")
        .eq("workspace_id",ws.id).order("created_at",{ascending:false}).limit(100)
@@ -37,7 +46,9 @@ export default async function FiscalPage() {
       Modo de preparação: não há emissão fiscal ativa. CT-e e MDF-e nesta tela são RASCUNHOS,
       sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
     </div>
-    <div className="quick"><a href="/motoristas">Motoristas cadastrados</a><a href="/frota">Veículos</a><a href="/assistente">Analisar com IA</a></div><div style={{marginTop:18}}><OrtobomCargoForm/></div>
+    <div className="quick"><a href="/motoristas">Motoristas cadastrados</a><a href="/frota">Veículos</a><a href="/cadastros/transporte">RNTRC e transporte</a><a href="/assistente">Analisar com IA</a></div>
+    {ws&&<div style={{marginTop:18}}><GmailConnector connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/></div>}
+    <div style={{marginTop:18}}><OrtobomCargoForm/></div>
     <SectionTitle title="Inteligência artificial — cargas e frota"/>
     <FiscalAiPanel/>
     <div className="notice" style={{marginTop:12}}>
@@ -55,7 +66,7 @@ export default async function FiscalPage() {
     <div className="table-wrap">
       <table><thead><tr>
        <th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem e destino</th>
-       <th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th>
+       <th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>IA</th>
       </tr></thead><tbody>
         {ctes.map(x=><tr key={x.id}>
           <td>{new Date(x.created_at).toLocaleDateString("pt-BR")}</td>
@@ -66,12 +77,16 @@ export default async function FiscalPage() {
           <td>{money(x.freight_value)}</td>
           <td>{x.ciot||"—"}</td>
           <td>{x.status==="draft"?"RASCUNHO — não emitido":x.status}</td>
+          <td><FiscalAiReview draftId={x.id}/></td>
         </tr>)}
-        {ctes.length===0&&<tr><td colSpan={8}>Nenhum CT-e em preparação.</td></tr>}
+        {ctes.length===0&&<tr><td colSpan={9}>Nenhum CT-e em preparação.</td></tr>}
       </tbody></table>
     </div>
     <SectionTitle title="Manifesto MDF-e — preparação" hint="Associado à carga da Ortobom"/>
-    <MdfeDraftForm cteDrafts={choices}/>
+    <MdfeDraftForm cteDrafts={choices}
+      vehicles={(vehiclesResult.data||[]).filter(v=>v.plate).map(v=>({id:v.id,name:v.nickname,plate:v.plate as string}))}
+      drivers={(driversResult.data||[]).filter(d=>d.document).map(d=>({id:d.id,name:d.name,cpf:d.document as string}))}
+      rntrc={(profileResult.data as {rntrc:string|null}|null)?.rntrc||""}/>
     <div className="table-wrap" style={{marginTop:18}}>
       <table><thead><tr><th>Data</th><th>Carga</th><th>Placa</th><th>Percurso</th><th>Situação</th></tr></thead><tbody>
       {manifests.map(x=><tr key={x.id}>

@@ -35,6 +35,9 @@ jobs:
       - name: Fiscal parser tests
         run: npm run test:fiscal
 
+      - name: Ortobom parser tests
+        run: npm run test:ortobom
+
       - name: Pluggy webhook contract tests
         run: npm run test:pluggy
 
