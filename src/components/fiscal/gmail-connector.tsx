@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-type Props={connected:boolean;lastSync:string|null;lastError:string|null};
-export function GmailConnector({connected,lastSync,lastError}:Props){
+type Props={connected:boolean;ready:boolean;lastSync:string|null;lastError:string|null};
+export function GmailConnector({connected,ready,lastSync,lastError}:Props){
   const router=useRouter();
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
@@ -26,8 +26,9 @@ export function GmailConnector({connected,lastSync,lastError}:Props){
     <p>Conta: lgtransporteelogistica@gmail.com. Importa XML, número da carga, CIOT e frete,
       agrupa várias NF-es na mesma carga e evita importações repetidas.</p>
     <div className="record-toolbar">
-      <a className="button" href="/api/fiscal/gmail/connect">{connected?"Reconectar Gmail":"Conectar Gmail uma vez"}</a>
-      <button className="button" type="button" disabled={!connected||busy} onClick={sync}>
+      {ready&&<a className="button" href="/api/fiscal/gmail/connect">{connected?"Reconectar Gmail":"Conectar Gmail uma vez"}</a>}
+      {!ready&&<p className="notice">Importação automática ainda não configurada no servidor. Os formulários de XML continuam disponíveis.</p>}
+      <button className="button" type="button" disabled={!connected||!ready||busy} onClick={sync}>
         {busy?"Lendo mensagens...":"Importar e-mails agora"}
       </button>
     </div>
