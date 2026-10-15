@@ -483,3 +483,20 @@ html[data-theme="dark"] .fiscal-gmail-icon{background:#223b61;border-color:#3854
 @media(max-width:1100px){.home-workflow-strip{grid-template-columns:1fr}.home-workflow-actions{grid-template-columns:repeat(3,minmax(0,1fr))}.home-workflow-actions>a{align-items:flex-start;flex-wrap:wrap}.home-workflow-actions>a>span{flex-basis:65%}}
 @media(max-width:850px){.toolbar-shortcut{display:none}.home-workflow-actions{grid-template-columns:1fr}.home-workflow-actions>a{flex-wrap:nowrap}}
 @media(max-width:700px){.home-workflow-strip{padding:24px 20px;border-radius:17px}.home-workflow-copy h2{font-size:26px}}
+
+
+/* Verificação real de integração e checklist de habilitação fiscal. */
+.fiscal-readiness-section{margin-top:6px}.fiscal-readiness-section h2{font-size:clamp(20px,2vw,25px);margin:7px 0 17px;letter-spacing:-.04em}
+.fiscal-readiness-panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:clamp(18px,2.5vw,28px)}
+.fiscal-readiness-head{display:flex;justify-content:space-between;align-items:start;gap:20px}
+.fiscal-readiness-head strong{font-size:15px}.fiscal-readiness-head p{font-size:12px;line-height:1.5;color:var(--muted);margin:5px 0 0}
+.fiscal-readiness-head>span{white-space:nowrap;color:var(--accent);font-size:12px;font-weight:770}
+.fiscal-readiness-progress{height:7px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:17px 0 23px}
+.fiscal-readiness-progress>span{display:block;height:100%;border-radius:99px;background:var(--pos)}
+.fiscal-readiness-items{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:17px 23px}
+.fiscal-readiness-item{display:flex;align-items:flex-start;gap:10px;border-top:1px solid var(--line);padding-top:15px}
+.fiscal-readiness-icon{flex-shrink:0;margin-top:1px;color:var(--muted)}
+.fiscal-readiness-icon.done{color:var(--pos)}.fiscal-readiness-icon.blocked{color:var(--danger)}
+.fiscal-readiness-item strong{font-size:12px;line-height:1.4}.fiscal-readiness-item p{font-size:11px;color:var(--muted);line-height:1.6;margin:4px 0 0}
+@media(max-width:1100px){.fiscal-readiness-items{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.fiscal-readiness-items{grid-template-columns:1fr}.fiscal-readiness-head{flex-direction:column;gap:7px}}

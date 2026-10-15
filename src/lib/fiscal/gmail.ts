@@ -4,8 +4,16 @@ import { createClient as createAdminClient, type SupabaseClient } from "@supabas
 import { createClient as createUserClient } from "@/lib/supabase/server";
 import { parseAuthorizedNfeXml } from "@/lib/fiscal/nfe";
 import { isOrtobomSender, parseOrtobomEmail } from "@/lib/fiscal/ortobom-email";
+import { probeGoogleClient, type GoogleClientStatus } from "@/lib/fiscal/google-credential";
 
 export const GMAIL_ACCOUNT = "lgtransporteelogistica@gmail.com";
+let clientStatusCache:{time:number;value:GoogleClientStatus}|null=null;
+export async function gmailClientStatus():Promise<GoogleClientStatus>{
+ if(clientStatusCache&&Date.now()-clientStatusCache.time<180_000)return clientStatusCache.value;
+ const value=await probeGoogleClient(process.env.GOOGLE_GMAIL_CLIENT_ID,process.env.GOOGLE_GMAIL_CLIENT_SECRET);
+ clientStatusCache={time:Date.now(),value};
+ return value;
+}
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export type GmailOAuthFailure = "invalid_client"|"invalid_grant"|"token_denied"|"missing_refresh"|"wrong_google_account"|"supabase_access"|"database_write"|"gmail_profile"|"session_or_workspace"|"unexpected";
 export class GmailOAuthError extends Error {
