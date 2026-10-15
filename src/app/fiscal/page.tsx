@@ -70,6 +70,13 @@ export default async function FiscalPage() {
       {manifests.length===0&&<tr><td colSpan={5}>Nenhum manifesto preparado.</td></tr>}
       </tbody></table>
     </div>
+    <SectionTitle title="Conexão com o autorizador fiscal"/>
+    <div className="notice">
+      Focus NFe CT-e/MDF-e — homologação: {fiscalIntegrationState().homologacao?"credencial configurada":"sem credencial"};
+      produção: {fiscalIntegrationState().producao?"credencial configurada":"sem credencial"}.
+      Os rascunhos desta tela não são documentos autorizados. A integração de emissão
+      e os retornos da SEFAZ precisam estar habilitados no ambiente da empresa.
+    </div>
     <SectionTitle title="Pendências para emissão fiscal real"/>
     <div className="notice">
       <ul style={{margin:"8px 0 0",paddingLeft:20}}>
