@@ -8,7 +8,8 @@ const BASES:Record<FiscalEnvironment,string>={
   producao:"https://api.focusnfe.com.br",
 };
 export class FiscalProviderError extends Error {
-  constructor(message:string,public readonly statusCode=502){super(message);this.name="FiscalProviderError";}
+  readonly statusCode:number;
+  constructor(message:string,statusCode=502){super(message);this.name="FiscalProviderError";this.statusCode=statusCode;}
 }
 function tokenFor(environment:FiscalEnvironment):string{
   const value=environment==="producao" ? process.env.FOCUS_NFE_PRODUCTION_TOKEN : process.env.FOCUS_NFE_HOMOLOGATION_TOKEN;
