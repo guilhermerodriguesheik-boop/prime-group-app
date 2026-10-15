@@ -1,8 +1,8 @@
 /** Dados extraídos de um e-mail da Ortobom. Não são confirmação de pagamento. */
 export type OrtobomFreight = { cargoReference: string | null; ciot: string | null; freightValue: number | null };
 export function parseOrtobomEmail(subject: string, body: string): OrtobomFreight {
-  const cargo = subject.match(/arquivos\s+da\s+carga\s*0*([0-9]{4,12})/i)
-    || body.match(/arquivos\s+da\s+carga\s*0*([0-9]{4,12})/i);
+  const cargo = subject.match(/arquivos\s+da\s+carga\s*([0-9]{5,12})/i)
+    || body.match(/arquivos\s+da\s+carga\s*([0-9]{5,12})/i);
   // O campo CIOT pode conter 11 ou 12 algarismos, dependendo do comprovante.
   const ciot = body.match(/\bCIOT\s*[:#\-]?\s*(\d[\d.\s-]{9,16}\d)\b/i);
   const ciotDigits = ciot ? ciot[1].replace(/\D/g, "") : "";
