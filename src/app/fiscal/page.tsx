@@ -1,6 +1,7 @@
 import { Header, SectionTitle } from "@/components/ui";
 import { FiscalImportForm } from "@/components/fiscal/import-form";
 import { GmailConnector } from "@/components/fiscal/gmail-connector";
+import { FiscalAiReview } from "@/components/fiscal/ai-review";
 import { gmailStatus } from "@/lib/fiscal/gmail";
 import Link from "next/link";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
@@ -22,8 +23,7 @@ export default async function FiscalPage() {
   if(!user)redirect("/login");
   const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
   const db=client as unknown as SupabaseClient;
-  const {data:owned}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
-  const gmail=owned ? await gmailStatus(owned.id).catch(()=>null) : null;
+  const gmail=ws ? await gmailStatus(ws.id).catch(()=>null) : null;
   const [vehiclesResult,driversResult,profileResult] = await Promise.all([
     ws ? db.from("vehicles").select("id,nickname,plate").eq("workspace_id",ws.id).eq("status","active") : Promise.resolve({data:[]}),
     ws ? db.from("drivers").select("id,name,document").eq("workspace_id",ws.id).eq("active",true) : Promise.resolve({data:[]}),
@@ -45,14 +45,14 @@ export default async function FiscalPage() {
       sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
     </div>
     <div className="quick"><Link href="/cadastros/transporte">Motoristas, veículos e RNTRC (ANTT)</Link><Link href="/assistente">Conferir pendências com a IA</Link></div>
-    <div style={{marginTop:18}}>{owned && <GmailConnector connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/>}</div>
+    <div style={{marginTop:18}}>{ws && <GmailConnector connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/>}</div>
     <div style={{marginTop:18}}><FiscalImportForm/></div>
     <SectionTitle title="Rascunhos de CT-e" />
     {error&&<div className="notice">Banco fiscal indisponível: {error.message}</div>}
     <div className="table-wrap">
       <table><thead><tr>
        <th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem e destino</th>
-       <th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th>
+       <th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>IA</th>
       </tr></thead><tbody>
         {ctes.map(x=><tr key={x.id}>
           <td>{new Date(x.created_at).toLocaleDateString("pt-BR")}</td>
@@ -63,8 +63,9 @@ export default async function FiscalPage() {
           <td>{money(x.freight_value)}</td>
           <td>{x.ciot||"—"}</td>
           <td>{x.status==="draft"?"RASCUNHO — não emitido":x.status}</td>
+          <td><FiscalAiReview draftId={x.id}/></td>
         </tr>)}
-        {ctes.length===0&&<tr><td colSpan={8}>Nenhum CT-e em preparação.</td></tr>}
+        {ctes.length===0&&<tr><td colSpan={9}>Nenhum CT-e em preparação.</td></tr>}
       </tbody></table>
     </div>
     <SectionTitle title="Manifesto MDF-e — preparação" hint="Associado à carga da Ortobom"/>
