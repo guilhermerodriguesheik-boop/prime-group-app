@@ -3,6 +3,7 @@ import { FiscalImportForm } from "@/components/fiscal/import-form";
 import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
 import { FiscalAiPanel } from "@/components/fiscal/fiscal-ai-panel";
 import { FiscalAiReview } from "@/components/fiscal/ai-review";
+import { CteSendReview } from "@/components/fiscal/cte-send-review";
 import { GmailConnector } from "@/components/fiscal/gmail-connector";
 import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
 import { fiscalReadiness } from "@/lib/fiscal/readiness";
@@ -128,7 +129,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">02 / DOCUMENTOS</span><h2>Fila de CT-e</h2><p>Lista real das cargas cadastradas; rascunhos não equivalem a documentos autorizados.</p></div><span className="fiscal-count">{ctes.length} {ctes.length===1?"registro":"registros"}</span></div>
           {error&&<div className="fiscal-alert fiscal-alert-error">Consulta fiscal indisponível: {error.message}</div>}
           <div className="table-wrap fiscal-data-table">
-            <table><thead><tr><th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem / destino</th><th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>Revisão</th></tr></thead>
+            <table><thead><tr><th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem / destino</th><th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>Revisão</th><th>Envio SEFAZ</th></tr></thead>
               <tbody>{ctes.map(x=><tr key={x.id}>
                 <td>{new Date(x.created_at).toLocaleDateString("pt-BR")}</td>
                 <td><strong className="fiscal-cargo-id">{x.cargo_reference||"—"}</strong></td>
@@ -143,9 +144,9 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
                   </span>:
                   <span className="fiscal-draft-status">{x.status==="draft"?"Rascunho":x.status==="review_pending"?"Pendente de revisão":x.status}</span>}
                 </td>
-                <td><FiscalAiReview draftId={x.id}/></td>
+                <td><FiscalAiReview draftId={x.id}/></td><td><CteSendReview draftId={x.id}/></td>
               </tr>)}
-              {ctes.length===0&&<tr><td colSpan={9} className="fiscal-empty">Nenhuma carga importada. Comece conectando o Gmail ou enviando os XMLs.</td></tr>}</tbody>
+              {ctes.length===0&&<tr><td colSpan={10} className="fiscal-empty">Nenhuma carga importada. Comece conectando o Gmail ou enviando os XMLs.</td></tr>}</tbody>
             </table>
           </div>
         </section>
