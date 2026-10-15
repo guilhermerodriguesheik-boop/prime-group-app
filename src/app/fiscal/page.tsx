@@ -20,10 +20,15 @@ export default async function FiscalPage() {
   const client = await createClient();
   const {data:{user}}=await client.auth.getUser();
   if(!user)redirect("/login");
-  const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").single();
+  const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
   const db=client as unknown as SupabaseClient;
   const {data:owned}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
   const gmail=owned ? await gmailStatus(owned.id).catch(()=>null) : null;
+  const [vehiclesResult,driversResult,profileResult] = await Promise.all([
+    ws ? db.from("vehicles").select("id,nickname,plate").eq("workspace_id",ws.id).eq("status","active") : Promise.resolve({data:[]}),
+    ws ? db.from("drivers").select("id,name,document").eq("workspace_id",ws.id).eq("active",true) : Promise.resolve({data:[]}),
+    ws ? db.from("fiscal_transport_profiles").select("rntrc").eq("workspace_id",ws.id).maybeSingle() : Promise.resolve({data:null}),
+  ]);
   const {data:rows,error}=ws
     ? await db.from("fiscal_drafts").select("id,document_type,cargo_reference,ciot,freight_value,status,created_at,checklist,fiscal_nfe_inbox(invoice_number,sender_name,recipient_name,origin_city,destination_city,goods_value)")
        .eq("workspace_id",ws.id).order("created_at",{ascending:false}).limit(100)
@@ -63,7 +68,10 @@ export default async function FiscalPage() {
       </tbody></table>
     </div>
     <SectionTitle title="Manifesto MDF-e — preparação" hint="Associado à carga da Ortobom"/>
-    <MdfeDraftForm cteDrafts={choices}/>
+    <MdfeDraftForm cteDrafts={choices}
+      vehicles={(vehiclesResult.data||[]).filter(v=>v.plate).map(v=>({id:v.id,name:v.nickname,plate:v.plate as string}))}
+      drivers={(driversResult.data||[]).filter(d=>d.document).map(d=>({id:d.id,name:d.name,cpf:d.document as string}))}
+      rntrc={(profileResult.data as {rntrc:string|null}|null)?.rntrc||""}/>
     <div className="table-wrap" style={{marginTop:18}}>
       <table><thead><tr><th>Data</th><th>Carga</th><th>Placa</th><th>Percurso</th><th>Situação</th></tr></thead><tbody>
       {manifests.map(x=><tr key={x.id}>
