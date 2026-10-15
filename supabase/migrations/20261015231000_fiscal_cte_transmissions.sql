@@ -17,3 +17,11 @@ create table if not exists public.fiscal_cte_transmissions (
 create index if not exists fiscal_cte_transmissions_workspace_idx on public.fiscal_cte_transmissions(workspace_id,created_at desc);
 alter table public.fiscal_cte_transmissions enable row level security;
 revoke all on public.fiscal_cte_transmissions from anon,authenticated;
+grant select on public.fiscal_cte_transmissions to authenticated;
+create policy "Owner can read only own CT-e transmission status"
+ on public.fiscal_cte_transmissions for select to authenticated
+ using (exists (
+  select 1 from public.workspaces w
+  where w.id=fiscal_cte_transmissions.workspace_id and w.owner_id=auth.uid() and w.kind='prime'
+ ));
+
