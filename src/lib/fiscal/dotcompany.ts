@@ -99,7 +99,15 @@ export async function dotcompanyRequest(args:{
  return {status:response.status,data:isRecord(parsed)?parsed:{}};
 }
 export async function dotcompanyHealth(token:string|undefined,fetcher:typeof fetch=fetch){
- return dotcompanyRequest({token,path:"/api/v1/usage",fetcher});
+ try {
+  const result=await dotcompanyRequest({token,path:"/api/v1/usage",fetcher});
+  return {...result,endpoint:"usage" as const};
+ } catch(error){
+  // usage.report may be disabled on a key even when emitter.list is allowed.
+  if(!(error instanceof DotCompanyError)||error.status!==403)throw error;
+  const result=await dotcompanyRequest({token,path:"/api/v1/emitters",fetcher});
+  return {...result,endpoint:"emitters" as const};
+ }
 }
 export async function dotcompanyEmitSandbox(input:{
  kind:TransportKind;draftId:string;token:string|undefined;payload:ApiData;fetcher?:typeof fetch;

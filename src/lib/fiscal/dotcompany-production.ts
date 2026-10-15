@@ -23,23 +23,36 @@ export async function checkDotCompanyProduction(
    cache:"no-store",signal:AbortSignal.timeout(12000),
   });
  };
- let res:Response;
- try{res=await fetchUrl(PATHS[0]);}
+ let usage:Response;
+ try{usage=await fetchUrl(PATHS[0]);}
  catch{return {...base,emitterLookup:"unavailable",reason:"Falha de rede ao consultar a DotCompany."};}
- if(!res.ok){
-  return {...base,status:res.status,reason:res.status===401?"Chave de produção inválida ou revogada.":
-   res.status===403?"Permissão insuficiente na chave de produção.":"A autenticação da DotCompany respondeu com erro."};
+ if(usage.status===401)return {...base,status:401,reason:"Chave de produção inválida ou revogada."};
+ // A DotCompany authorizes usage.report and emitter.list independently.
+ // If usage.report is disabled, listing emitters is still a safe read-only handshake.
+ if(!usage.ok&&usage.status!==403)return {...base,status:usage.status,
+  reason:"A consulta à DotCompany retornou HTTP "+usage.status+"."};
+ let emitters:Response;
+ try{emitters=await fetchUrl(PATHS[1]);}
+ catch{
+  return {...base,authenticated:usage.ok,status:usage.status,emitterLookup:"unavailable",
+   reason:usage.ok?undefined:"Consulta de consumo sem permissão e listagem de emissores indisponível.",
+   message:usage.ok?"API autenticada pelo consumo, mas o endpoint de emissores não respondeu.":undefined};
  }
- // Never expose credits, company or token from provider JSON in this diagnostic.
- try{
-  const emitters=await fetchUrl(PATHS[1]);
-  return {...base,authenticated:true,status:res.status,
-   emitterLookup:emitters.ok?"ok":emitters.status===401||emitters.status===403?"denied":"unavailable",
-   message:emitters.ok?
-    "API de produção autenticada e endpoint de emissores acessível. Isso não garante credenciamento ou autorização na SEFAZ.":
-    "API de produção autenticada. Confirme as permissões e a situação do emissor no painel DotCompany."};
- }catch{
-  return {...base,authenticated:true,status:res.status,emitterLookup:"unavailable",
-   message:"API de produção autenticada, porém a consulta de emissores não respondeu."};
+ if(emitters.ok){
+  return {...base,authenticated:true,status:emitters.status,emitterLookup:"ok",
+   message:usage.ok?
+    "API de produção autenticada e listagem de emissores acessível. O credenciamento fiscal ainda precisa ser validado.":
+    "API de produção autenticada pela listagem de emissores. O endpoint de consumo exige o escopo usage.report."};
  }
+ if(usage.ok){
+  return {...base,authenticated:true,status:usage.status,
+   emitterLookup:emitters.status===401||emitters.status===403?"denied":"unavailable",
+   message:"API de produção autenticada pela consulta de consumo. A listagem de emissores está indisponível."};
+ }
+ return {...base,status:emitters.status,
+  emitterLookup:emitters.status===401||emitters.status===403?"denied":"unavailable",
+  reason:emitters.status===401?
+   "Credencial rejeitada pela listagem de emissores.":
+   "Esta chave não tem permissão para consultar consumo (usage.report) nem listar emissores (emitter.list)."};
+
 }

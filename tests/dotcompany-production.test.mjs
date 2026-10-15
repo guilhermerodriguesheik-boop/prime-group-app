@@ -37,3 +37,21 @@ test("Invalid production credentials return a sanitized failure",async()=>{
  assert.equal(result.status,401);
  assert.equal(JSON.stringify(result).includes("bad secret"),false);
 });
+
+test("Production auth falls back to emitter.list when usage.report scope is absent",async()=>{
+ let calls=0;
+ const r=await checkDotCompanyProduction(key,false,async(url,opts)=>{
+  calls++;assert.equal(opts.method,"GET");
+  return new Response("{}",{status:calls===1?403:200});
+ });
+ assert.equal(r.authenticated,true);
+ assert.equal(r.emitterLookup,"ok");
+ assert.match(r.message,/usage.report/);
+ assert.equal(r.productionEnabled,false);
+});
+test("Production check refuses to declare success if both free reads lack scope",async()=>{
+ const r=await checkDotCompanyProduction(key,false,async()=>new Response("{}",{status:403}));
+ assert.equal(r.authenticated,false);
+ assert.equal(r.emitterLookup,"denied");
+ assert.match(r.reason,/usage.report/);
+});

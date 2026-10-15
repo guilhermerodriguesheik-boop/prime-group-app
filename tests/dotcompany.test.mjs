@@ -50,3 +50,18 @@ test("DotCompany: invalid CT-e does not reach the network",async()=>{
  await assert.rejects(dotcompanyEmitSandbox({kind:"cte",draftId:uuid,token,payload:{},fetcher:async()=>{called=true;throw Error("unexpected")}}),e=>e.code?.startsWith("PRECHECK_"));
  assert.equal(called,false);
 });
+
+test("DotCompany: sandbox health falls back to free emitter listing when usage.report is denied",async()=>{
+ const paths=[];
+ const mock=async (url,opts)=>{
+  assert.equal(opts.method,"GET");paths.push(url);
+  return new Response("{}",{status:paths.length===1?403:200});
+ };
+ const status=await dotcompanyHealth(token,mock);
+ assert.equal(status.status,200);
+ assert.equal(status.endpoint,"emitters");
+ assert.deepEqual(paths,[
+  "https://erp.dotcompany.com.br/api/v1/usage",
+  "https://erp.dotcompany.com.br/api/v1/emitters",
+ ]);
+});
