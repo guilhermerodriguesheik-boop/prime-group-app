@@ -1,0 +1,69 @@
+"use client";
+import {useState} from "react";
+import {CheckCircle2,PlugZap,ShieldAlert,RefreshCw,ClipboardCheck} from "lucide-react";
+type CheckResult={configured?:boolean;connected?:boolean;environment?:string;
+ reason?:string;message?:string};
+type Preview={ready:boolean;invoiceCount:number;freightValue:number|null;
+ goodsValue:number;missing:string[];canTransmit:boolean;notice:string};
+export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
+ const [busy,setBusy]=useState(false);
+ const [result,setResult]=useState<CheckResult|null>(null);
+ const [draftId,setDraftId]=useState(drafts[0]?.id||"");
+ const [preview,setPreview]=useState<Preview|null>(null);
+ const [error,setError]=useState("");
+ async function check(){
+  setBusy(true);setError("");setResult(null);
+  try{
+   const r=await fetch("/api/fiscal/dotcompany/status",{cache:"no-store"});
+   const v=await r.json() as CheckResult;
+   setResult(v);
+   if(!r.ok)setError(v.reason||"Erro ao consultar o provedor.");
+  }catch{setError("Não foi possível alcançar o serviço de diagnóstico.")}
+  finally{setBusy(false)}
+ }
+ async function preflight(){
+  if(!draftId)return;
+  setBusy(true);setError("");setPreview(null);
+  try{
+   const r=await fetch("/api/fiscal/dotcompany/preflight",{
+    method:"POST",headers:{"Content-Type":"application/json","x-prime-action":"dotcompany-preflight"},
+    body:JSON.stringify({draftId}),
+   });
+   const v=await r.json() as Preview&{error?:string};
+   if(!r.ok)throw Error(v.error||"Falha na pré-conferência.");
+   setPreview(v);
+  }catch(e){setError(e instanceof Error?e.message:"Falha ao conferir a carga.")}
+  finally{setBusy(false)}
+ }
+ return <section className="fiscal-dotcompany card">
+  <div className="fiscal-dotcompany-heading">
+   <div><span className="fiscal-section-kicker">API FISCAL / NOVA INTEGRAÇÃO</span>
+    <h3>DotCompany</h3>
+    <p>Conexão Sandbox para testes de CT-e e MDF-e. Não emite documentos fiscais reais.</p>
+   </div><span className="fiscal-gmail-state waiting">Homologação</span>
+  </div>
+  <div className="fiscal-dotcompany-actions">
+   <button className="button primary" type="button" onClick={check} disabled={busy}>
+     <PlugZap size={15}/> {busy?"Verificando...":"Testar chave e conexão"}
+   </button>
+   <a href="https://erp.dotcompany.com.br/api-dev" target="_blank" rel="noopener noreferrer">Painel do emissor ↗</a>
+  </div>
+  {result?.connected&&<p className="fiscal-inline-alert" role="status"><CheckCircle2 size={16}/> API Sandbox autenticada. O cadastro do emissor e a emissão fiscal ainda dependem de homologação.</p>}
+  {error&&<p role="alert" className="fiscal-inline-alert"><ShieldAlert size={16}/>{error}</p>}
+  {drafts.length>0&&<div className="fiscal-dotcompany-preflight">
+    <label>Conferir uma carga sem emitir
+     <select value={draftId} onChange={e=>{setDraftId(e.target.value);setPreview(null)}}>
+      {drafts.map(v=><option key={v.id} value={v.id}>{v.label}</option>)}
+     </select>
+    </label>
+    <button className="button" type="button" disabled={busy||!draftId} onClick={preflight}><ClipboardCheck size={15}/> Pré-conferir CT-e</button>
+   </div>}
+  {preview&&<div className="fiscal-dotcompany-result" role="status">
+    <strong>{preview.invoiceCount} NF-e vinculada(s) — frete {preview.freightValue===null?"não informado":preview.freightValue.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</strong>
+    <p>Mercadorias: {preview.goodsValue.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})} (não confundir com o frete).</p>
+    <strong>Antes de emitir:</strong>
+    <ul>{preview.missing.map((m,i)=><li key={i}>{m}</li>)}</ul>
+    <small>{preview.notice}</small>
+   </div>}
+ </section>;
+}

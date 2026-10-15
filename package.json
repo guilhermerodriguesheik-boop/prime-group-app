@@ -11,6 +11,7 @@
     "test:fiscal": "node --experimental-strip-types --test tests/fiscal.test.mjs",
     "test:ortobom": "node --experimental-strip-types --test tests/ortobom-email.test.mjs",
     "test:fiscal-readiness": "node --experimental-strip-types --test tests/fiscal-readiness.test.mjs",
+    "test:dotcompany": "node --experimental-strip-types --test tests/dotcompany.test.mjs",
     "test:pluggy": "node --experimental-strip-types --test tests/pluggy-webhook.test.mjs"
   },
   "dependencies": {

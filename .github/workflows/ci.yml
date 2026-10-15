@@ -41,6 +41,9 @@ jobs:
       - name: Google OAuth and fiscal readiness tests
         run: npm run test:fiscal-readiness
 
+      - name: DotCompany sandbox adapter contract tests
+        run: npm run test:dotcompany
+
       - name: Pluggy webhook contract tests
         run: npm run test:pluggy
 

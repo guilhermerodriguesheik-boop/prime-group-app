@@ -7,6 +7,7 @@ import { GmailConnector } from "@/components/fiscal/gmail-connector";
 import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
 import { fiscalReadiness } from "@/lib/fiscal/readiness";
 import { FiscalReadinessPanel } from "@/components/fiscal/readiness-panel";
+import { DotcompanyPanel } from "@/components/fiscal/dotcompany-panel";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
 import { mdfeTransmissionBlockers, canPrepareNewCte } from "@/lib/fiscal/preflight";
 import { fiscalIntegrationState } from "@/lib/fiscal/focus";
@@ -119,6 +120,10 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
             </aside>
           </div>
         </section>
+        <section id="fiscal-provider">
+          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">AUTORIZADOR / SANDBOX</span><h2>Integração fiscal DotCompany</h2><p>Valide a chave e confira os documentos sem solicitar uma emissão real.</p></div></div>
+          <DotcompanyPanel drafts={ctes.map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem referência")+" · "+(x.status==="draft"?"rascunho":"verificação")}))}/>
+        </section>
         <section id="cte-queue">
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">02 / DOCUMENTOS</span><h2>Fila de CT-e</h2><p>Lista real das cargas cadastradas; rascunhos não equivalem a documentos autorizados.</p></div><span className="fiscal-count">{ctes.length} {ctes.length===1?"registro":"registros"}</span></div>
           {error&&<div className="fiscal-alert fiscal-alert-error">Consulta fiscal indisponível: {error.message}</div>}
@@ -199,7 +204,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
           })}/>
         </section>
         <footer className="fiscal-compliance">
-          <div><span className="fiscal-section-kicker">EMISSÃO CONTROLADA</span><h3>Conferência fiscal e credenciamento</h3><p>Os CT-e e MDF-e desta tela são rascunhos, sem número, XML assinado ou protocolo SEFAZ. A IA ajuda a revisar, mas não transmite documentos.</p><p>Focus NFe: homologação {fiscalIntegrationState().homologacao?"configurada":"não configurada"} · produção {fiscalIntegrationState().producao?"configurada":"não configurada"}.</p></div>
+          <div><span className="fiscal-section-kicker">EMISSÃO CONTROLADA</span><h3>Conferência fiscal e credenciamento</h3><p>Os CT-e e MDF-e desta tela são rascunhos, sem número, XML assinado ou protocolo SEFAZ. A IA ajuda a revisar, mas não transmite documentos.</p><p>DotCompany: {process.env.DOTCOMPANY_SANDBOX_API_KEY?.startsWith("dc_test_")?"chave Sandbox configurada":"chave Sandbox ausente"} · transmissão de produção desabilitada. Focus NFe (legado): homologação {fiscalIntegrationState().homologacao?"configurada":"não configurada"} · produção {fiscalIntegrationState().producao?"configurada":"não configurada"}.</p></div>
           <div><ul>{mdfeTransmissionBlockers().map(reason=><li key={reason}>{reason}</li>)}</ul><a href="https://consultapublica.antt.gov.br/Site/ConsultaRNTRC.aspx" target="_blank" rel="noopener noreferrer">Consultar RNTRC na ANTT ↗</a></div>
         </footer>
       </div>
