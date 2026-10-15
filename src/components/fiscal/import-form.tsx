@@ -6,7 +6,7 @@ const initialState: FiscalImportState = { ok: false, message: "" };
 export function FiscalImportForm() {
   const [state, action, pending] = useActionState(importFiscalNfe, initialState);
   return (
-    <form action={action} className="card" style={{display:"grid",gap:14,maxWidth:740}}>
+    <form action={action} className="card fiscal-form">
       <h3>Importar nota da Ortobom</h3>
       <p>Cria apenas um rascunho de CT-e; nao envia documento fiscal a SEFAZ.</p>
       <label style={{display:"grid",gap:5}}>

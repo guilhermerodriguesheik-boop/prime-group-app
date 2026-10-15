@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3, Building2, CalendarDays, CreditCard, FileText, Landmark,
   LayoutDashboard, LogOut, Menu, Moon, Percent, Settings2, ShieldCheck,
-  Sparkles, Sun, Truck, UserRound, X, ClipboardList, Route, UsersRound, Repeat2, BellRing,
+  Sparkles, Sun, Truck, UserRound, X, ClipboardList, Route, UsersRound, Repeat2, BellRing, FileCheck2,
 } from "lucide-react";
 
 const nav = [
@@ -23,6 +23,7 @@ const nav = [
     {label:"Relatórios",href:"/relatorios",icon:BarChart3},
     {label:"Empréstimos e juros",href:"/juros",icon:Percent},
     {label:"Viagens e fretes",href:"/viagens",icon:Route},
+    {label:"Emissor fiscal",href:"/fiscal",icon:FileCheck2},
     {label:"Equipe e pagamentos",href:"/equipes",icon:UsersRound},
     {label:"Frota",href:"/frota",icon:Truck},
   ]},
@@ -115,7 +116,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="shell-content">
         <header className="app-toolbar">
           <div className="toolbar-location"><span className="toolbar-dot"/> PRIME <span className="toolbar-separator">/</span> <strong>{currentLabel}</strong></div>
-          <div className="toolbar-actions">{themeButton("theme-button")}</div>
+          <div className="toolbar-actions">
+            <Link href="/fiscal" className={"toolbar-shortcut"+(pathname.startsWith("/fiscal")?" selected":"")}><FileCheck2 size={16}/> Fiscal</Link>
+            <Link href="/assistente" className={"toolbar-shortcut"+(pathname.startsWith("/assistente")?" selected":"")}><Sparkles size={16}/> Assistente IA</Link>
+            {themeButton("theme-button")}
+          </div>
         </header>
         <main className="main">{children}</main>
       </div>

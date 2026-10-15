@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArrowUpRight, FileCheck2, Landmark, Route } from "lucide-react";
 import { Header, Metric, SectionTitle } from "@/components/ui";
 import { CommandCenter } from "@/components/assistant/command-center";
 import { getFinanceSnapshot } from "@/lib/finance/data";
@@ -20,13 +21,27 @@ export default async function Home() {
   return (
     <>
       <Header title="Visão geral" subtitle="Prime + pessoal + recebíveis, sem misturar as contabilidades." />
-      <CommandCenter workspaces={data.workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, kind: workspace.kind }))} />
+      <section className="home-workflow-strip">
+        <div className="home-workflow-copy">
+          <div className="home-workflow-overline"><span/> PRIME OPERATIONS / WORKSPACE PRIVADO</div>
+          <h2>Controle financeiro e logística, conectados.</h2>
+          <p>Priorize sua operação. Os módulos da transportadora e os dados pessoais continuam separados no banco.</p>
+        </div>
+        <nav className="home-workflow-actions" aria-label="Atalhos principais">
+          <Link href="/fiscal"><FileCheck2 size={19}/><span><strong>Emissor fiscal</strong><small>Cargas, XML e manifestos</small></span><ArrowUpRight size={16}/></Link>
+          <Link href="/viagens"><Route size={19}/><span><strong>Viagens e fretes</strong><small>Rotas e resultado operacional</small></span><ArrowUpRight size={16}/></Link>
+          <Link href="/bancos"><Landmark size={19}/><span><strong>Conciliação bancária</strong><small>Contas e movimentações</small></span><ArrowUpRight size={16}/></Link>
+        </nav>
+      </section>
       <div className="grid grid-4">
         <Metric label="Caixa consolidado" value={brl(data.cash)} foot="saldo inicial + movimentos realizados" />
         <Metric label="A receber · 30 dias" value={brl(data.receivable30)} foot="recebíveis em aberto" tone="positive" />
         <Metric label="A pagar · 30 dias" value={brl(data.payable30)} foot="obrigações em aberto" tone={data.payable30 > 0 ? "warning" : undefined} />
         <Metric label="Resultado do mês" value={brl(data.prime.result + data.personal.result + data.interest.result)} foot="receitas menos despesas realizadas" tone={(data.prime.result + data.personal.result + data.interest.result) >= 0 ? "positive" : "warning"} />
       </div>
+
+      <div className="home-intelligence-heading"><div><span>INTELIGÊNCIA DA PRIME</span><h2>Seu assistente financeiro</h2><p>Converse sobre fretes, despesas, comprovantes e decisões do dia a dia.</p></div><Link href="/assistente">Abrir assistente completo <ArrowUpRight size={15}/></Link></div>
+      <CommandCenter workspaces={data.workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, kind: workspace.kind }))} />
 
       {(data.overdueReceivables > 0 || data.overduePayables > 0) && (
         <div className="notice attention">

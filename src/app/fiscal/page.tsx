@@ -1,4 +1,4 @@
-import { Header, SectionTitle } from "@/components/ui";
+import { Header } from "@/components/ui";
 import { FiscalImportForm } from "@/components/fiscal/import-form";
 import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
 import { FiscalAiPanel } from "@/components/fiscal/fiscal-ai-panel";
@@ -19,7 +19,22 @@ type Draft = {
   fiscal_nfe_inbox:{invoice_number:string;sender_name:string;recipient_name:string;origin_city:string;destination_city:string;goods_value:number}|null;
 };
 const money = (n:number|null)=>n===null?"Nao informado":n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-export default async function FiscalPage() {
+export default async function FiscalPage({searchParams}:{searchParams:Promise<{gmail?:string;reason?:string}>}) {
+  const query=await searchParams;
+  const oauthMessages:Record<string,string>={
+    invalid_state:"A sessão de conexão expirou ou o cookie foi bloqueado. Tente novamente a partir deste mesmo navegador.",
+    not_authorized:"O Google não concluiu a autorização de leitura. Verifique o usuário de teste e permita a leitura do Gmail.",
+    invalid_client:"O Google rejeitou a credencial OAuth. O ID e a chave do cliente precisam ser conferidos na Vercel.",
+    invalid_grant:"O código de autorização expirou ou foi usado antes. Inicie uma nova conexão.",
+    token_denied:"O Google recusou a troca do código. Confira o cliente OAuth e a URI de redirecionamento.",
+    missing_refresh:"O Google não forneceu acesso contínuo. Revogue o acesso anterior ao Prime Finance na Conta Google e tente conectar novamente.",
+    wrong_google_account:"Você autorizou outra conta. Escolha lgtransporteelogistica@gmail.com no Google.",
+    supabase_access:"A chave de acesso administrativo do Supabase ainda não está operante no servidor.",
+    database_write:"O Gmail foi autorizado, mas o Supabase rejeitou o armazenamento da conexão. O sistema precisa corrigir o acesso ao banco.",
+    gmail_profile:"O Gmail não confirmou a conta autorizada. Verifique se a API Gmail está habilitada no Google Cloud.",
+    session_or_workspace:"Seu login do Prime Finance não foi reconhecido no retorno do Google. Entre novamente no aplicativo e repita a conexão.",
+    unexpected:"A conexão encontrou um erro inesperado e não foi gravada.",
+  };
   const client = await createClient();
   const {data:{user}}=await client.auth.getUser();
   if(!user)redirect("/login");
@@ -27,6 +42,7 @@ export default async function FiscalPage() {
   const db=client as unknown as SupabaseClient;
   const gmail=ws ? await gmailStatus(ws.id).catch(()=>null) : null;
   const gmailReady=Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.GOOGLE_GMAIL_CLIENT_ID&&process.env.GOOGLE_GMAIL_CLIENT_SECRET&&process.env.GMAIL_TOKEN_ENCRYPTION_KEY&&process.env.APP_BASE_URL);
+  const {count:invoiceCount}=ws?await db.from("fiscal_nfe_inbox").select("id",{count:"exact",head:true}).eq("workspace_id",ws.id):{count:0};
   const [vehiclesResult,driversResult,profileResult]=await Promise.all([
     ws?db.from("vehicles").select("id,nickname,plate").eq("workspace_id",ws.id).eq("status","active"):Promise.resolve({data:[]}),
     ws?db.from("drivers").select("id,name,document").eq("workspace_id",ws.id).eq("active",true):Promise.resolve({data:[]}),
@@ -41,80 +57,109 @@ export default async function FiscalPage() {
   const manifests=drafts.filter(x=>x.document_type==="mdfe");
   const choices=ctes.filter(x=>x.status==="draft")
     .map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem numero")+" — NF-e "+(x.fiscal_nfe_inbox?.invoice_number||"nao informada")}));
-  return <>
-    <Header title="Prime Emissor Fiscal" subtitle="NF-e Ortobom, rascunhos de CT-e e preparação de MDF-e da Prime Group."/>
-    <div className="notice">
-      Modo de preparação: não há emissão fiscal ativa. CT-e e MDF-e nesta tela são RASCUNHOS,
-      sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
-    </div>
-    <div className="quick"><a href="/motoristas">Motoristas cadastrados</a><a href="/frota">Veículos</a><a href="/cadastros/transporte">RNTRC e transporte</a><a href="/assistente">Analisar com IA</a></div>
-    {ws&&<div style={{marginTop:18}}><GmailConnector ready={gmailReady} connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/></div>}
-    <div style={{marginTop:18}}><OrtobomCargoForm/></div>
-    <SectionTitle title="Inteligência artificial — cargas e frota"/>
-    <FiscalAiPanel/>
-    <div className="notice" style={{marginTop:12}}>
-      Importação automática de novos e-mails: conector Google Apps Script disponível,
-      aguardando ativação na conta Gmail e credenciais do servidor.
-      Para conferir o registro ANTT, consulte{" "}
-      <a target="_blank" rel="noopener noreferrer" href="https://consultapublica.antt.gov.br/Site/ConsultaRNTRC.aspx">
-        RNTRC por transportador ou placa
-      </a>.
-    </div>
-    <SectionTitle title="Importação individual de NF-e"/>
-    <FiscalImportForm/>
-    <SectionTitle title="Rascunhos de CT-e" />
-    {error&&<div className="notice">Banco fiscal indisponível: {error.message}</div>}
-    <div className="table-wrap">
-      <table><thead><tr>
-       <th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem e destino</th>
-       <th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>IA</th>
-      </tr></thead><tbody>
-        {ctes.map(x=><tr key={x.id}>
-          <td>{new Date(x.created_at).toLocaleDateString("pt-BR")}</td>
-          <td>{x.cargo_reference||"—"}</td>
-          <td>{x.fiscal_nfe_inbox?.invoice_number||"—"}</td>
-          <td>{x.fiscal_nfe_inbox?.origin_city||"—"} → {x.fiscal_nfe_inbox?.destination_city||"—"}</td>
-          <td>{money(x.fiscal_nfe_inbox?.goods_value??null)}</td>
-          <td>{money(x.freight_value)}</td>
-          <td>{x.ciot||"—"}</td>
-          <td>{x.status==="draft"?"RASCUNHO — não emitido":x.status}</td>
-          <td><FiscalAiReview draftId={x.id}/></td>
-        </tr>)}
-        {ctes.length===0&&<tr><td colSpan={9}>Nenhum CT-e em preparação.</td></tr>}
-      </tbody></table>
-    </div>
-    <SectionTitle title="Manifesto MDF-e — preparação" hint="Associado à carga da Ortobom"/>
-    <MdfeDraftForm cteDrafts={choices}
-      vehicles={(vehiclesResult.data||[]).filter(v=>v.plate).map(v=>({id:v.id,name:v.nickname,plate:v.plate as string}))}
-      drivers={(driversResult.data||[]).filter(d=>d.document).map(d=>({id:d.id,name:d.name,cpf:d.document as string}))}
-      rntrc={(profileResult.data as {rntrc:string|null}|null)?.rntrc||""}/>
-    <div className="table-wrap" style={{marginTop:18}}>
-      <table><thead><tr><th>Data</th><th>Carga</th><th>Placa</th><th>Percurso</th><th>Situação</th></tr></thead><tbody>
-      {manifests.map(x=><tr key={x.id}>
-        <td>{new Date(x.created_at).toLocaleDateString("pt-BR")}</td>
-        <td>{x.cargo_reference||"—"}</td>
-        <td>{x.checklist?.vehicle_plate||"—"}</td>
-        <td>{x.checklist?.origin_uf||"—"} → {x.checklist?.destination_uf||"—"}</td>
-        <td>RASCUNHO — não emitido</td>
-      </tr>)}
-      {manifests.length===0&&<tr><td colSpan={5}>Nenhum manifesto preparado.</td></tr>}
-      </tbody></table>
-    </div>
-    <SectionTitle title="Conexão com o autorizador fiscal"/>
-    <div className="notice">
-      Focus NFe CT-e/MDF-e — homologação: {fiscalIntegrationState().homologacao?"credencial configurada":"sem credencial"};
-      produção: {fiscalIntegrationState().producao?"credencial configurada":"sem credencial"}.
-      Os rascunhos desta tela não são documentos autorizados. A integração de emissão
-      e os retornos da SEFAZ precisam estar habilitados no ambiente da empresa.
-    </div>
-    <SectionTitle title="Pendências para emissão fiscal real"/>
-    <div className="notice">
-      <ul style={{margin:"8px 0 0",paddingLeft:20}}>
-        {mdfeTransmissionBlockers().map(reason=><li key={reason}>{reason}</li>)}
-      </ul>
-      Também devem ser revisados tomador, CFOP, tributos, município IBGE, número/série,
-      credenciamento e os arquivos XSD vigentes. Nunca usamos o valor da mercadoria como frete.
-      A IA pode auxiliar o preenchimento, mas não autoriza documentos sozinha.
-    </div>
-  </>;
+  const pending=ctes.filter(x=>x.status==="draft").length;
+  return (
+    <>
+      <Header title="Emissor Fiscal" subtitle="Operações de transporte, importação Ortobom e preparação de documentos da Prime Group." />
+      <div className="fiscal-workspace">
+        <section className="fiscal-hero" aria-label="Visão geral fiscal">
+          <div className="fiscal-hero-content">
+            <span className="fiscal-overline"><span className="fiscal-pulse"/> PRIME GROUP / CENTRAL FISCAL</span>
+            <h2>Da carga recebida ao manifesto, em um só lugar.</h2>
+            <p>Organize NF-e da Ortobom, CIOT, fretes e documentos da operação. Os arquivos importados ficam disponíveis para conferência antes de qualquer emissão.</p>
+            <div className="fiscal-hero-cta">
+              <a href="#gmail-integration" className="fiscal-hero-button">Conectar cargas <span aria-hidden="true">↗</span></a>
+              <a href="#cte-queue" className="fiscal-hero-textlink">Ver fila de CT-e <span aria-hidden="true">→</span></a>
+            </div>
+          </div>
+          <div className="fiscal-hero-metrics">
+            <div><span>CT-e em preparação</span><strong>{pending.toLocaleString("pt-BR")}</strong><small>Rascunhos sem autorização fiscal</small></div>
+            <div><span>NF-e carregadas</span><strong>{(invoiceCount||0).toLocaleString("pt-BR")}</strong><small>XMLs das notas armazenados</small></div>
+            <div><span>MDF-e em preparação</span><strong>{manifests.length.toLocaleString("pt-BR")}</strong><small>Manifestos ainda não transmitidos</small></div>
+          </div>
+        </section>
+        {query.gmail==="connected"&&gmail&&<div className="fiscal-alert fiscal-alert-success" role="status"><strong>Gmail autorizado e vinculado.</strong><span>Você já pode importar os e-mails da Ortobom.</span></div>}
+        {query.gmail==="connection_failed"&&<div className="fiscal-alert fiscal-alert-error" role="alert">
+          <strong>Não foi possível concluir a conexão com o Google.</strong>
+          <span>{oauthMessages[query.reason||"unexpected"]||oauthMessages.unexpected}</span>
+          <small>Código do diagnóstico: {query.reason||"unexpected"}</small>
+        </div>}
+        {query.gmail==="setup_required"&&<div className="fiscal-alert fiscal-alert-error" role="alert">Entre com a conta proprietária do Prime Finance antes de conectar o Gmail.</div>}
+        {query.gmail==="connected"&&!gmail&&<div className="fiscal-alert fiscal-alert-error" role="alert">O Google retornou ao aplicativo, mas não foi localizado o registro da conexão no banco.</div>}
+        <nav className="fiscal-jump-links" aria-label="Atalhos de operações fiscais">
+          <a href="#gmail-integration">01 · Integração de cargas</a>
+          <a href="#cte-queue">02 · Documentos CT-e</a>
+          <a href="#fiscal-assistant">03 · Conferência por IA</a>
+          <a href="#mdfe-manifest">04 · Manifestos MDF-e</a>
+        </nav>
+        <section id="gmail-integration">
+          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">01 / CONEXÃO DE DADOS</span><h2>Importação de cargas</h2><p>Receba os XMLs sem digitar novamente os dados da viagem.</p></div><span className={"fiscal-connection-status "+(gmail?"is-live":"is-pending")}>{gmail?"Gmail vinculado":"Conexão pendente"}</span></div>
+          <div className="fiscal-connect-layout">
+            {ws&&<GmailConnector ready={gmailReady} connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/>}
+            <aside className="fiscal-playbook">
+              <span className="fiscal-small-label">FLUXO DA OPERAÇÃO</span>
+              <h3>Uma carga. Um frete. Todas as notas.</h3>
+              <ol className="fiscal-steps">
+                <li><span>01</span><div><strong>Receber da Ortobom</strong><small>XMLs, referência da carga, valor e CIOT.</small></div></li>
+                <li><span>02</span><div><strong>Conferir com IA</strong><small>Revisar divergências antes de preparar o CT-e.</small></div></li>
+                <li><span>03</span><div><strong>Vincular veículo e motorista</strong><small>Preencher o MDF-e com os cadastros da Prime.</small></div></li>
+              </ol>
+              <a href="/cadastros/transporte" className="fiscal-playbook-link">Abrir cadastro de transporte <span>↗</span></a>
+            </aside>
+          </div>
+        </section>
+        <section id="cte-queue">
+          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">02 / DOCUMENTOS</span><h2>Fila de CT-e</h2><p>Lista real das cargas cadastradas; rascunhos não equivalem a documentos autorizados.</p></div><span className="fiscal-count">{ctes.length} {ctes.length===1?"registro":"registros"}</span></div>
+          {error&&<div className="fiscal-alert fiscal-alert-error">Consulta fiscal indisponível: {error.message}</div>}
+          <div className="table-wrap fiscal-data-table">
+            <table><thead><tr><th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem / destino</th><th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>Revisão</th></tr></thead>
+              <tbody>{ctes.map(x=><tr key={x.id}>
+                <td>{new Date(x.created_at).toLocaleDateString("pt-BR")}</td>
+                <td><strong className="fiscal-cargo-id">{x.cargo_reference||"—"}</strong></td>
+                <td>{x.fiscal_nfe_inbox?.invoice_number||"—"}</td>
+                <td>{x.fiscal_nfe_inbox?.origin_city||"—"} → {x.fiscal_nfe_inbox?.destination_city||"—"}</td>
+                <td>{money(x.fiscal_nfe_inbox?.goods_value??null)}</td>
+                <td><strong>{money(x.freight_value)}</strong></td>
+                <td>{x.ciot||"—"}</td>
+                <td><span className="fiscal-draft-status">{x.status==="draft"?"Rascunho":x.status}</span></td>
+                <td><FiscalAiReview draftId={x.id}/></td>
+              </tr>)}
+              {ctes.length===0&&<tr><td colSpan={9} className="fiscal-empty">Nenhuma carga importada. Comece conectando o Gmail ou enviando os XMLs.</td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
+        <div className="fiscal-dual-grid">
+          <section id="fiscal-assistant">
+            <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">03 / INTELIGÊNCIA OPERACIONAL</span><h2>Conferência por IA</h2><p>Pergunte sobre cargas, notas, CIOT, motoristas e veículos.</p></div></div>
+            <FiscalAiPanel/>
+          </section>
+          <section id="manual-import">
+            <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">ALTERNATIVA / IMPORTAÇÃO MANUAL</span><h2>Enviar documentos</h2><p>Utilize quando uma carga ainda não estiver no Gmail.</p></div></div>
+            <div className="fiscal-manual-panel">
+              <details><summary>Importar carga com múltiplas NF-e <span>+</span></summary><OrtobomCargoForm/></details>
+              <details><summary>Importar uma NF-e individual <span>+</span></summary><FiscalImportForm/></details>
+            </div>
+          </section>
+        </div>
+        <section id="mdfe-manifest">
+          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">04 / VIAGEM</span><h2>Preparação do MDF-e</h2><p>Vincule a carga ao veículo e motorista. A emissão real depende de integração fiscal homologada.</p></div><a className="fiscal-outline-link" href="/cadastros/transporte">Gerenciar cadastros ↗</a></div>
+          <div className="fiscal-manifest-grid">
+            <MdfeDraftForm cteDrafts={choices}
+              vehicles={(vehiclesResult.data||[]).filter(v=>v.plate).map(v=>({id:v.id,name:v.nickname,plate:v.plate as string}))}
+              drivers={(driversResult.data||[]).filter(d=>d.document).map(d=>({id:d.id,name:d.name,cpf:d.document as string}))}
+              rntrc={(profileResult.data as {rntrc:string|null}|null)?.rntrc||""}/>
+            <aside className="fiscal-manifest-list">
+              <h3>Manifestos preparados</h3>
+              {manifests.length===0?<p>Os manifestos ficarão listados aqui assim que você preparar uma viagem.</p>:
+                <div className="fiscal-manifest-items">{manifests.map(x=><div key={x.id} className="fiscal-manifest-item"><strong>{x.cargo_reference||"Sem referência"}</strong><span>{x.checklist?.vehicle_plate||"Placa pendente"}</span><small>{x.checklist?.origin_uf||"UF"} → {x.checklist?.destination_uf||"UF"} · Rascunho</small></div>)}</div>}
+            </aside>
+          </div>
+        </section>
+        <footer className="fiscal-compliance">
+          <div><span className="fiscal-section-kicker">EMISSÃO CONTROLADA</span><h3>Conferência fiscal e credenciamento</h3><p>Os CT-e e MDF-e desta tela são rascunhos, sem número, XML assinado ou protocolo SEFAZ. A IA ajuda a revisar, mas não transmite documentos.</p><p>Focus NFe: homologação {fiscalIntegrationState().homologacao?"configurada":"não configurada"} · produção {fiscalIntegrationState().producao?"configurada":"não configurada"}.</p></div>
+          <div><ul>{mdfeTransmissionBlockers().map(reason=><li key={reason}>{reason}</li>)}</ul><a href="https://consultapublica.antt.gov.br/Site/ConsultaRNTRC.aspx" target="_blank" rel="noopener noreferrer">Consultar RNTRC na ANTT ↗</a></div>
+        </footer>
+      </div>
+    </>
+  );
 }
