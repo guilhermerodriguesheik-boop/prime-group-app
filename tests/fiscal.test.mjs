@@ -75,3 +75,16 @@ test("simula emissao CT-e na homologacao sem enviar nada a SEFAZ",async()=>{
   assert.ok(captured[0].url.startsWith("https://homologacao.focusnfe.com.br/v2/cte?ref="));
  }finally {if(previous===undefined)delete process.env.FOCUS_NFE_HOMOLOGATION_TOKEN;else process.env.FOCUS_NFE_HOMOLOGATION_TOKEN=previous;}
 });
+
+import {parseOrtobomEmail} from "../src/lib/fiscal/ortobom-email.ts";
+test("Ortobom email groups XML invoices without multiplying freight",()=>{
+ const one=parseOrtobomEmail("Fw: Arquivos da carga 030061.","R$ 1.800,00 CIOT 520036566690\nDe: faturamentorj.qm@ortobom.com.br");
+ assert.equal(one.cargoReference,"030061");
+ assert.equal(one.freightValue,1800);
+ assert.equal(one.ciot,"520036566690");
+ assert.equal(one.verifiedOrtobom,true);
+ const two=parseOrtobomEmail("Fw: Arquivos da carga 030198.","R$ 3.420,00\nCIOT 20038706271\nDe: faturamentorj.qm@ortobom.com.br");
+ assert.equal(two.cargoReference,"030198");
+ assert.equal(two.freightValue,3420);
+ assert.equal(two.ciot,"20038706271");
+});
