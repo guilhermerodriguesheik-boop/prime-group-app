@@ -4,7 +4,9 @@ import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
 import { FiscalAiPanel } from "@/components/fiscal/fiscal-ai-panel";
 import { FiscalAiReview } from "@/components/fiscal/ai-review";
 import { GmailConnector } from "@/components/fiscal/gmail-connector";
-import { gmailStatus } from "@/lib/fiscal/gmail";
+import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
+import { fiscalReadiness } from "@/lib/fiscal/readiness";
+import { FiscalReadinessPanel } from "@/components/fiscal/readiness-panel";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
 import { mdfeTransmissionBlockers } from "@/lib/fiscal/preflight";
 import { fiscalIntegrationState } from "@/lib/fiscal/focus";
@@ -40,7 +42,10 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
   if(!user)redirect("/login");
   const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
   const db=client as unknown as SupabaseClient;
-  const gmail=ws ? await gmailStatus(ws.id).catch(()=>null) : null;
+  const [gmail,googleClient]=await Promise.all([
+    ws?gmailStatus(ws.id).catch(()=>null):Promise.resolve(null),
+    gmailClientStatus(),
+  ]);
   const gmailReady=Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.GOOGLE_GMAIL_CLIENT_ID&&process.env.GOOGLE_GMAIL_CLIENT_SECRET&&process.env.GMAIL_TOKEN_ENCRYPTION_KEY&&process.env.APP_BASE_URL);
   const {count:invoiceCount}=ws?await db.from("fiscal_nfe_inbox").select("id",{count:"exact",head:true}).eq("workspace_id",ws.id):{count:0};
   const [vehiclesResult,driversResult,profileResult]=await Promise.all([
@@ -95,7 +100,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
         <section id="gmail-integration">
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">01 / CONEXÃO DE DADOS</span><h2>Importação de cargas</h2><p>Receba os XMLs sem digitar novamente os dados da viagem.</p></div><span className={"fiscal-connection-status "+(gmail?"is-live":"is-pending")}>{gmail?"Gmail vinculado":"Conexão pendente"}</span></div>
           <div className="fiscal-connect-layout">
-            {ws&&<GmailConnector ready={gmailReady} connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/>}
+            {ws&&<GmailConnector ready={gmailReady} clientStatus={googleClient} connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/>}
             <aside className="fiscal-playbook">
               <span className="fiscal-small-label">FLUXO DA OPERAÇÃO</span>
               <h3>Uma carga. Um frete. Todas as notas.</h3>
@@ -154,6 +159,19 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
                 <div className="fiscal-manifest-items">{manifests.map(x=><div key={x.id} className="fiscal-manifest-item"><strong>{x.cargo_reference||"Sem referência"}</strong><span>{x.checklist?.vehicle_plate||"Placa pendente"}</span><small>{x.checklist?.origin_uf||"UF"} → {x.checklist?.destination_uf||"UF"} · Rascunho</small></div>)}</div>}
             </aside>
           </div>
+        </section>
+        <section className="fiscal-readiness-section" aria-label="Condições de emissão fiscal">
+          <span className="fiscal-section-kicker">CONTROLES DE EMISSÃO</span>
+          <h2>O que já está pronto e o que ainda depende de homologação</h2>
+          <FiscalReadinessPanel steps={fiscalReadiness({
+             gmailConnected:Boolean(gmail),gmailClientAccepted:googleClient==="accepted",
+             gmailClientRejected:googleClient==="rejected",nfeCount:invoiceCount||0,cteDraftCount:ctes.length,
+             hasDriver:!!driversResult.data?.length,hasVehicle:!!vehiclesResult.data?.length,
+             rntrcProvided:Boolean((profileResult.data as {rntrc:string|null}|null)?.rntrc),
+             focusHomologation:fiscalIntegrationState().homologacao,
+             focusProduction:fiscalIntegrationState().producao,
+             authorizedCteCount:0,fiscalDataReviewed:false,
+          })}/>
         </section>
         <footer className="fiscal-compliance">
           <div><span className="fiscal-section-kicker">EMISSÃO CONTROLADA</span><h3>Conferência fiscal e credenciamento</h3><p>Os CT-e e MDF-e desta tela são rascunhos, sem número, XML assinado ou protocolo SEFAZ. A IA ajuda a revisar, mas não transmite documentos.</p><p>Focus NFe: homologação {fiscalIntegrationState().homologacao?"configurada":"não configurada"} · produção {fiscalIntegrationState().producao?"configurada":"não configurada"}.</p></div>

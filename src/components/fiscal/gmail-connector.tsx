@@ -2,8 +2,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCheck, CircleAlert, Inbox, MailCheck, RefreshCw, ShieldCheck } from "lucide-react";
-type Props={connected:boolean;ready:boolean;lastSync:string|null;lastError:string|null};
-export function GmailConnector({connected,ready,lastSync,lastError}:Props){
+import type { GoogleClientStatus } from "@/lib/fiscal/google-credential";
+type Props={connected:boolean;ready:boolean;clientStatus:GoogleClientStatus;lastSync:string|null;lastError:string|null};
+export function GmailConnector({connected,ready,clientStatus,lastSync,lastError}:Props){
   const router=useRouter();
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
@@ -29,11 +30,13 @@ export function GmailConnector({connected,ready,lastSync,lastError}:Props){
     </div>
     <p className="fiscal-gmail-description">O Prime Finance encontra os XMLs das cargas, identifica frete e CIOT e reúne várias notas da mesma viagem sem duplicar o frete.</p>
     <div className="fiscal-gmail-actions">
-      {ready&&<a className="button primary" href="/api/fiscal/gmail/connect">{connected?"Renovar conexão Google":"Conectar Gmail"}<ArrowRight size={16}/></a>}
+      {ready&&clientStatus!=="rejected"&&<a className="button primary" href="/api/fiscal/gmail/connect">{connected?"Renovar conexão Google":"Conectar Gmail"}<ArrowRight size={16}/></a>}
       <button className="button" type="button" disabled={!connected||!ready||busy} onClick={sync}>
         <RefreshCw size={16} className={busy?"fiscal-spin":undefined}/>{busy?"Importando...":"Importar e-mails"}
       </button>
     </div>
+    {clientStatus==="rejected"&&<p role="alert" className="fiscal-inline-alert"><CircleAlert size={15}/> Diagnóstico do servidor: o Google rejeita o ID ou segredo OAuth atual. É necessário substituir a chave do cliente Google na Vercel; clicar novamente em conectar não resolve.</p>}
+    {clientStatus==="unknown"&&!connected&&<p role="status" className="fiscal-inline-alert">A verificação automática da credencial Google está temporariamente indisponível. A conexão poderá ser tentada quando o Google responder.</p>}
     {!ready&&<p role="status" className="fiscal-inline-alert">A conexão automática precisa de credenciais do servidor. O envio manual continua disponível.</p>}
     {lastSync&&<p className="fiscal-gmail-meta"><MailCheck size={14}/> Última sincronização: {new Date(lastSync).toLocaleString("pt-BR")}</p>}
     {lastError&&<p role="status" className="fiscal-inline-alert"><CircleAlert size={15}/> {lastError}</p>}
