@@ -1,7 +1,9 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 type Props={connected:boolean;lastSync:string|null;lastError:string|null};
 export function GmailConnector({connected,lastSync,lastError}:Props){
+  const router=useRouter();
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState("");
   async function sync(){
@@ -15,7 +17,7 @@ export function GmailConnector({connected,lastSync,lastError}:Props){
       setMessage("Lidos: "+data.scanned+" e-mails; cargas importadas: "+data.imported+
         "; NF-es: "+data.invoices+"; pendências: "+data.errors+
         ". Os documentos ficam em rascunho.");
-      window.location.reload();
+      router.refresh();
     }catch(error){setMessage(error instanceof Error?error.message:"Falha na sincronização.");}
     finally{setBusy(false);}
   }
