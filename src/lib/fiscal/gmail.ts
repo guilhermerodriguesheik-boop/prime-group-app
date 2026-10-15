@@ -125,7 +125,7 @@ async function gmailJson<T>(token:string,path:string):Promise<T>{
   return res.json() as Promise<T>;
 }
 type GmailPart={mimeType?:string;filename?:string;body?:{data?:string;attachmentId?:string;size?:number};parts?:GmailPart[]};
-type GmailMessage={id:string;payload?:GmailPart&{headers?:Array<{name:string;value:string}>};snippet?:string};
+type GmailMessage={id:string;labelIds?:string[];payload?:GmailPart&{headers?:Array<{name:string;value:string}>};snippet?:string};
 function walk(p:GmailPart):GmailPart[] {return [p,...(p.parts||[]).flatMap(walk)];}
 function decodeBase64(value:string):string {return Buffer.from(value,"base64url").toString("utf8");}
 function header(message:GmailMessage,name:string){
@@ -150,11 +150,12 @@ async function xmlAttachment(token:string,message:GmailMessage,part:GmailPart){
   return xml;
 }
 export type FiscalGmailSync={scanned:number;imported:number;invoices:number;skipped:number;errors:number};
-async function importMessage(db:SupabaseClient,token:string,workspaceId:string,ownerId:string,msgId:string) {
+async function importMessage(db:SupabaseClient,token:string,workspaceId:string,ownerId:string,msgId:string,requireInbox=false) {
   const {data:seen}=await db.from("fiscal_gmail_messages").select("id").eq("workspace_id",workspaceId)
     .eq("message_id",msgId).maybeSingle();
   if(seen)return {skipped:true,invoices:0};
   const message=await gmailJson<GmailMessage>(token,"/users/me/messages/"+encodeURIComponent(msgId)+"?format=full");
+  if(requireInbox&&!message.labelIds?.includes("INBOX"))throw Error("O e-mail não está mais na caixa de entrada.");
   if(!isOrtobomSender(header(message,"from")))return {skipped:true,invoices:0};
   const xmlParts=message.payload?walk(message.payload).filter(p=>
     /\.xml$/i.test(p.filename||"")&&["application/xml","text/xml","application/octet-stream"].includes(p.mimeType||"")
@@ -256,4 +257,57 @@ export async function syncAllGmailWorkspaces(){
     try{result.push({workspace_id:item.workspace_id,...await syncGmailWorkspace(item.workspace_id,item.owner_id)});}
     catch{result.push({workspace_id:item.workspace_id,error:"sync_failed"});}
   }return result;
+}
+
+/** Listagem manual: somente metadados de e-mails reais do Gmail da Ortobom,
+ * sem expor corpos, anexos ou tokens OAuth ao navegador. */
+export type FiscalInboxItem={
+ id:string;from:string;subject:string;date:string;snippet:string;imported:boolean;
+};
+async function gmailConnection(workspaceId:string,ownerId:string){
+ const db=admin();
+ const {data:conn,error}=await db.from("fiscal_gmail_connections")
+  .select("encrypted_refresh_token").eq("workspace_id",workspaceId).eq("owner_id",ownerId).maybeSingle();
+ if(error||!conn)throw Error("Conecte o Gmail da Ortobom primeiro.");
+ return {db,token:await accessToken(conn.encrypted_refresh_token)};
+}
+export async function listOrtobomInbox(workspaceId:string,ownerId:string):Promise<FiscalInboxItem[]>{
+ const {db,token}=await gmailConnection(workspaceId,ownerId);
+ const q=new URLSearchParams({q:"in:inbox from:ortobom.com.br",maxResults:"20"});
+ const data=await gmailJson<{messages?:Array<{id:string}>}>(token,"/users/me/messages?"+q.toString());
+ const mailIds=(data.messages||[]).map(x=>x.id).filter(id=>/^[a-zA-Z0-9_-]{8,40}$/.test(id));
+ if(!mailIds.length)return [];
+ const {data:seen,error}=await db.from("fiscal_gmail_messages").select("message_id")
+  .eq("workspace_id",workspaceId).in("message_id",mailIds);
+ if(error)throw Error("Não foi possível conferir as importações anteriores.");
+ const already=new Set((seen||[]).map(x=>x.message_id));
+ const batches=await Promise.allSettled(mailIds.map(async id=>{
+  const p=new URLSearchParams({format:"metadata"});
+  for(const name of ["From","Subject","Date"])p.append("metadataHeaders",name);
+  const mail=await gmailJson<GmailMessage>(token,"/users/me/messages/"+encodeURIComponent(id)+"?"+p);
+  if(!isOrtobomSender(header(mail,"From"))||!mail.labelIds?.includes("INBOX"))return null;
+  return {
+   id,from:header(mail,"From").slice(0,180),subject:header(mail,"Subject").slice(0,300),
+   date:header(mail,"Date").slice(0,120),snippet:(mail.snippet||"").slice(0,280),
+   imported:already.has(id),
+  } satisfies FiscalInboxItem;
+ }));
+ return batches.filter((v):v is PromiseFulfilledResult<FiscalInboxItem|null>=>v.status==="fulfilled")
+  .map(v=>v.value).filter((v):v is FiscalInboxItem=>v!==null);
+}
+export async function importSelectedOrtobomInbox(workspaceId:string,ownerId:string,ids:string[]):Promise<FiscalGmailSync>{
+ if(!Array.isArray(ids)||ids.length<1||ids.length>8||new Set(ids).size!==ids.length||
+    ids.some(id=>typeof id!=="string"||!/^[a-zA-Z0-9_-]{8,40}$/.test(id)))
+  throw Error("Selecione entre 1 e 8 e-mails válidos.");
+ const {db,token}=await gmailConnection(workspaceId,ownerId);
+ const result:FiscalGmailSync={scanned:0,imported:0,invoices:0,skipped:0,errors:0};
+ for(const id of ids){
+  result.scanned++;
+  try{
+   const imported=await importMessage(db,token,workspaceId,ownerId,id,true);
+   if(imported.skipped)result.skipped++;
+   else{result.imported++;result.invoices+=imported.invoices;}
+  }catch{result.errors++;}
+ }
+ return result;
 }
