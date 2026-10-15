@@ -63,7 +63,7 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
    </button>
    <a href="https://erp.dotcompany.com.br/api-dev" target="_blank" rel="noopener noreferrer">Painel do emissor ↗</a>
   </div>
-  {result?.connected&&<p className="fiscal-inline-alert" role="status"><CheckCircle2 size={16}/> API Sandbox autenticada. O cadastro do emissor e a emissão fiscal ainda dependem de homologação.</p>}
+  {result?.connected&&<p className="fiscal-inline-alert" role="status"><CheckCircle2 size={16}/> {result.message||"API Sandbox autenticada."} A emissão fiscal real continua desabilitada até validação.</p>}
   {error&&<p role="alert" className="fiscal-inline-alert"><ShieldAlert size={16}/>{error}</p>}
   <div className="fiscal-dotcompany-production">
    <div className="fiscal-dotcompany-heading">

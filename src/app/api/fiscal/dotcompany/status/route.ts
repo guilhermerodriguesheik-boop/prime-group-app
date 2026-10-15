@@ -18,7 +18,9 @@ export async function GET(){
   return NextResponse.json({configured:true,connected:true,environment:"sandbox",
    provider:"DotCompany",httpStatus:result.status,
    // Sem detalhes de conta, chaves ou resposta bruta do fornecedor.
-   message:"Autenticação da API confirmada pela consulta de consumo."},
+   message:result.endpoint==="usage"?
+   "Autenticação confirmada pela consulta de consumo.":
+   "Chave autenticada pela consulta de emissores. A consulta de consumo exige o escopo usage.report."},
    {headers:{"Cache-Control":"no-store"}});
  }catch(e){
   const error=e instanceof DotCompanyError?e.code:"NETWORK_UNAVAILABLE";
