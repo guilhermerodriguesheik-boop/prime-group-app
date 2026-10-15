@@ -57,3 +57,21 @@ test("chave CT-e valida tamanho e digito verificador",()=>{
  assert.equal(validCteAccessKey("123"),false);
  assert.equal(validCteAccessKey("1".repeat(44)),false);
 });
+
+import { fiscalReference, validateFiscalPayload, focusFiscalRequest } from "../src/lib/fiscal/focus.ts";
+test("referencia fiscal idempotente e CNPJ autorizado",()=>{
+ assert.equal(fiscalReference("cte","123e4567-e89b-42d3-a456-426614174000"),"prime-cte-123e4567e89b42d3a456426614174000");
+ assert.throws(()=>validateFiscalPayload("cte",{cnpj_emitente:"123"}, "42361401000117"),/CNPJ/);
+});
+test("simula emissao CT-e na homologacao sem enviar nada a SEFAZ",async()=>{
+ const previous=process.env.FOCUS_NFE_HOMOLOGATION_TOKEN;
+ process.env.FOCUS_NFE_HOMOLOGATION_TOKEN="token-de-teste";
+ try{
+  const captured=[];
+  const mock=async(url,options)=>{captured.push({url,method:options.method});return new Response(JSON.stringify({status:"processando_autorizacao"}),{status:202});};
+  const response=await focusFiscalRequest({kind:"cte",environment:"homologacao",operation:"emitir",reference:"prime-cte-001",payload:{cnpj_emitente:"42361401000117"}},mock);
+  assert.equal(response.statusCode,202);
+  assert.equal(captured.length,1);
+  assert.ok(captured[0].url.startsWith("https://homologacao.focusnfe.com.br/v2/cte?ref="));
+ }finally {if(previous===undefined)delete process.env.FOCUS_NFE_HOMOLOGATION_TOKEN;else process.env.FOCUS_NFE_HOMOLOGATION_TOKEN=previous;}
+});
