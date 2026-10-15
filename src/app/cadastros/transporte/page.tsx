@@ -26,6 +26,8 @@ export default async function Page(){
     <div className="quick">
       <a href="https://consultapublica.antt.gov.br/Site/ConsultaRNTRC.aspx"
          target="_blank" rel="noopener noreferrer">Consultar RNTRC / placa no portal oficial da ANTT ↗</a>
+      <a href="https://consultapublica.antt.gov.br/Site/ConsultaCIOT.aspx"
+         target="_blank" rel="noopener noreferrer">Validar CIOT no portal oficial da ANTT ↗</a>
       <Link href="/fiscal">Ir ao emissor fiscal</Link>
     </div>
     <div className="grid grid-2">
