@@ -521,3 +521,36 @@ html[data-theme="dark"] .fiscal-gmail-icon{background:#223b61;border-color:#3854
 .fiscal-dotcompany-result p,.fiscal-dotcompany-result li,.fiscal-dotcompany-result small{font-size:12px;color:var(--muted);line-height:1.55}
 .fiscal-dotcompany-result ul{padding-left:20px;display:grid;gap:5px;margin:0}
 @media(max-width:650px){.fiscal-dotcompany-heading{flex-direction:column}.fiscal-dotcompany-actions .button,.fiscal-dotcompany-preflight .button{width:100%}}
+
+/* Ortobom inbox chooser */
+.fiscal-manual-inbox{margin-top:17px;border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;gap:9px;max-height:510px;overflow:auto}
+.fiscal-inbox-heading{display:grid;gap:4px;padding-bottom:8px}
+.fiscal-inbox-heading strong{font-size:13px}.fiscal-inbox-heading small{color:var(--muted);font-size:11px}
+.fiscal-inbox-message{display:flex;align-items:start;gap:12px;padding:12px;border-radius:9px;border:1px solid var(--line);cursor:pointer}
+.fiscal-inbox-message input{margin:4px 0 0;accent-color:var(--accent)}
+.fiscal-inbox-message span{flex:1;min-width:0;display:grid;gap:4px}
+.fiscal-inbox-message strong{font-size:12px;overflow-wrap:anywhere}
+.fiscal-inbox-message small{font-size:10px;color:var(--muted);overflow-wrap:anywhere}
+.fiscal-inbox-message em{font-size:10px;font-style:normal;white-space:nowrap;color:var(--muted)}
+.fiscal-inbox-message.is-imported{opacity:.64}
+.fiscal-inbox-footer{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px}
+
+/* Fiscal transport confirmation review */
+.fiscal-review-backdrop{position:fixed;inset:0;background:rgba(3,17,29,.64);z-index:70;display:flex;justify-content:center;align-items:center;padding:12px}
+.fiscal-review-dialog{background:var(--panel,white);border:1px solid var(--line);border-radius:18px;max-width:790px;width:100%;max-height:94vh;overflow:auto;padding:clamp(16px,2.6vw,28px);box-shadow:0 24px 90px rgba(0,0,0,.25);display:grid;gap:16px}
+.fiscal-review-heading{display:flex;justify-content:space-between;gap:12px;align-items:start}
+.fiscal-review-heading h3{font-size:22px;letter-spacing:-.035em;margin:4px 0}
+.fiscal-review-heading p{color:var(--muted);font-size:12px}
+.fiscal-review-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fiscal-review-form label{display:grid;gap:7px;font-size:12px;font-weight:650;min-width:0}
+.fiscal-review-form input,.fiscal-review-form select{width:100%;min-width:0}
+.fiscal-review-form .span-two{grid-column:1/-1}
+.fiscal-review-form .fiscal-check-field{display:flex;align-items:start;gap:10px;font-weight:500;line-height:1.5}
+.fiscal-check-field input{width:auto;margin-top:2px}
+.fiscal-review-summary{background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:13px}
+.fiscal-review-summary strong{font-size:13px}
+.fiscal-review-summary p,.fiscal-review-summary li{font-size:12px;color:var(--muted);line-height:1.65}
+.fiscal-review-summary ul{padding-left:20px;margin:8px 0}
+.fiscal-review-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px}
+.fiscal-review-actions .button{display:inline-flex;align-items:center;gap:7px}
+@media(max-width:640px){.fiscal-review-form{grid-template-columns:1fr}.fiscal-review-form .span-two{grid-column:auto}}

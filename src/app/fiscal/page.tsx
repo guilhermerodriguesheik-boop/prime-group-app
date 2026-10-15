@@ -3,6 +3,7 @@ import { FiscalImportForm } from "@/components/fiscal/import-form";
 import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
 import { FiscalAiPanel } from "@/components/fiscal/fiscal-ai-panel";
 import { FiscalAiReview } from "@/components/fiscal/ai-review";
+import { CteSendReview } from "@/components/fiscal/cte-send-review";
 import { GmailConnector } from "@/components/fiscal/gmail-connector";
 import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
 import { fiscalReadiness } from "@/lib/fiscal/readiness";
@@ -64,6 +65,9 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
        .eq("workspace_id",ws.id).order("created_at",{ascending:false}).limit(100)
     : {data:[],error:null};
   const drafts=(rows??[]) as unknown as Draft[];
+  const {data:transmissions}=ws?await db.from("fiscal_cte_transmissions")
+    .select("draft_id,status,access_key,protocol").eq("workspace_id",ws.id):{data:[]};
+  const transmissionsByDraft=new Map((transmissions||[]).map(x=>[x.draft_id,x]));
   const ctes=drafts.filter(x=>x.document_type==="cte");
   const manifests=drafts.filter(x=>x.document_type==="mdfe");
   const choices=ctes.filter(x=>canPrepareNewCte(x.status,x.checklist))
@@ -128,7 +132,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">02 / DOCUMENTOS</span><h2>Fila de CT-e</h2><p>Lista real das cargas cadastradas; rascunhos não equivalem a documentos autorizados.</p></div><span className="fiscal-count">{ctes.length} {ctes.length===1?"registro":"registros"}</span></div>
           {error&&<div className="fiscal-alert fiscal-alert-error">Consulta fiscal indisponível: {error.message}</div>}
           <div className="table-wrap fiscal-data-table">
-            <table><thead><tr><th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem / destino</th><th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>Revisão</th></tr></thead>
+            <table><thead><tr><th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem / destino</th><th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>Revisão</th><th>Envio SEFAZ</th></tr></thead>
               <tbody>{ctes.map(x=><tr key={x.id}>
                 <td>{new Date(x.created_at).toLocaleDateString("pt-BR")}</td>
                 <td><strong className="fiscal-cargo-id">{x.cargo_reference||"—"}</strong></td>
@@ -137,15 +141,19 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
                 <td>{money(x.fiscal_nfe_inbox?.goods_value??null)}</td>
                 <td><strong>{money(x.freight_value)}</strong></td>
                 <td>{x.ciot||"—"}</td>
-                <td>{x.checklist?.do_not_issue_duplicate?
+                <td>{transmissionsByDraft.get(x.id)?
+                  <span className="fiscal-draft-status">{transmissionsByDraft.get(x.id)?.status==="authorized"?"CT-e autorizado":
+                    transmissionsByDraft.get(x.id)?.status==="indeterminate"?"Verificar na DotCompany":
+                    transmissionsByDraft.get(x.id)?.status==="rejected"?"Rejeitado na SEFAZ":"Transmissão em andamento"}</span>:
+                  x.checklist?.do_not_issue_duplicate?
                   <span className="fiscal-cte-external" title="Referência de DACTE externo identificada. O protocolo precisa de conferência SEFAZ.">
                     CT-e externo nº {x.checklist.previous_external_cte_number||"—"} · verificar
                   </span>:
                   <span className="fiscal-draft-status">{x.status==="draft"?"Rascunho":x.status==="review_pending"?"Pendente de revisão":x.status}</span>}
                 </td>
-                <td><FiscalAiReview draftId={x.id}/></td>
+                <td><FiscalAiReview draftId={x.id}/></td><td><CteSendReview draftId={x.id}/></td>
               </tr>)}
-              {ctes.length===0&&<tr><td colSpan={9} className="fiscal-empty">Nenhuma carga importada. Comece conectando o Gmail ou enviando os XMLs.</td></tr>}</tbody>
+              {ctes.length===0&&<tr><td colSpan={10} className="fiscal-empty">Nenhuma carga importada. Comece conectando o Gmail ou enviando os XMLs.</td></tr>}</tbody>
             </table>
           </div>
         </section>
