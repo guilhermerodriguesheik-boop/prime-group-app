@@ -1,6 +1,7 @@
 import { Header, SectionTitle } from "@/components/ui";
 import { FiscalImportForm } from "@/components/fiscal/import-form";
 import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
+import { FiscalAiPanel } from "@/components/fiscal/fiscal-ai-panel";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
 import { mdfeTransmissionBlockers } from "@/lib/fiscal/preflight";
 import { fiscalIntegrationState } from "@/lib/fiscal/focus";
@@ -37,6 +38,8 @@ export default async function FiscalPage() {
       sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
     </div>
     <div className="quick"><a href="/motoristas">Motoristas cadastrados</a><a href="/frota">Veículos</a><a href="/assistente">Analisar com IA</a></div><div style={{marginTop:18}}><OrtobomCargoForm/></div>
+    <SectionTitle title="Inteligência artificial — cargas e frota"/>
+    <FiscalAiPanel/>
     <div className="notice" style={{marginTop:12}}>
       Importação automática de novos e-mails: conector Google Apps Script disponível,
       aguardando ativação na conta Gmail e credenciais do servidor.
