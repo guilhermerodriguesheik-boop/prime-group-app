@@ -14,6 +14,7 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
  const [error,setError]=useState("");
  const [production,setProduction]=useState<ProductionResult|null>(null);
  const [checkingProduction,setCheckingProduction]=useState(false);
+ const [productionError,setProductionError]=useState("");
  async function check(){
   setBusy(true);setError("");setResult(null);
   try{
@@ -26,14 +27,14 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
  }
  async function checkProduction(){
   setCheckingProduction(true);
-  setError("");
+  setProductionError("");
   try{
    const r=await fetch("/api/fiscal/dotcompany/production-status",{cache:"no-store"});
    const v=await r.json() as ProductionResult;
    setProduction(v);
-   if(!r.ok&&v.reason)setError(v.reason);
+   if(v.reason)setProductionError(v.reason);
   }catch{
-   setProduction(null);setError("Não foi possível verificar a chave de produção.");
+   setProduction(null);setProductionError("Não foi possível verificar a chave de produção.");
   }finally{setCheckingProduction(false)}
  }
  async function preflight(){
@@ -64,7 +65,9 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
    <a href="https://erp.dotcompany.com.br/api-dev" target="_blank" rel="noopener noreferrer">Painel do emissor ↗</a>
   </div>
   {result?.connected&&<p className="fiscal-inline-alert" role="status"><CheckCircle2 size={16}/> {result.message||"API Sandbox autenticada."} A emissão fiscal real continua desabilitada até validação.</p>}
-  {error&&<p role="alert" className="fiscal-inline-alert"><ShieldAlert size={16}/>{error}</p>}
+  {error&&<p role="alert" className="fiscal-inline-alert"><ShieldAlert size={16}/>{
+    error==="INSUFFICIENT_API_SCOPE"?"Sandbox: chave sem permissão nas consultas de consumo e emissores. Na DotCompany, habilite usage.report ou emitter.list em Escopos.":error
+   }</p>}
   <div className="fiscal-dotcompany-production">
    <div className="fiscal-dotcompany-heading">
     <div><span className="fiscal-section-kicker">SEFAZ / PRODUÇÃO</span>
@@ -80,14 +83,20 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
     <a href="https://erp.dotcompany.com.br/api-dev/keys" target="_blank" rel="noopener noreferrer">Gerar chave dc_live_ ↗</a>
    </div>
    {production&&<div className="fiscal-dotcompany-result" role="status">
-    <strong>{production.authenticated?"Chave de produção autenticada":"Aguardando autenticação de produção"}</strong>
+    <strong>{production.authenticated?"Chave de produção autenticada":"Autenticação de produção ainda não comprovada"}</strong>
     <ul>
       <li>Credencial dc_live_: {production.configured?"cadastrada":"não cadastrada na Vercel"}</li>
-      <li>Autenticação com DotCompany: {production.authenticated?"confirmada":"não confirmada"}</li>
+      <li>Autenticação com DotCompany: {production.authenticated?"confirmada":"não comprovada pelos endpoints de consulta"}</li>
       <li>Consulta do emissor: {production.emitterLookup==="ok"?"endpoint acessível":production.emitterLookup==="denied"?"permissão insuficiente":production.emitterLookup==="unavailable"?"indisponível":"não realizada"}</li>
       <li>Transmissão CT-e: {production.productionEnabled?"habilitada mediante conferência completa e confirmação":"desabilitada até conclusão da homologação fiscal"}</li>
     </ul>
     <small>{production.message||"A confirmação de conexão não equivale a credenciamento SEFAZ nem a CT-e autorizado."}</small>
+   </div>}
+   {productionError&&<div className="fiscal-inline-alert" role="alert">
+    <ShieldAlert size={16}/>
+    <span>{productionError}
+     {production?.status===403&&" Abra a chave de PRODUÇÃO na DotCompany → Escopos e habilite usage.report e emitter.list. A falta dessas permissões impede o diagnóstico, mas não comprova que o token seja inválido."}
+    </span>
    </div>}
   </div>
   {drafts.length>0&&<div className="fiscal-dotcompany-preflight">
