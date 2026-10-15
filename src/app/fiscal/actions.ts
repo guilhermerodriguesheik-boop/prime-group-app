@@ -20,7 +20,7 @@ export async function importFiscalNfe(_state: FiscalImportState, formData: FormD
     const { data: auth, error: authError } = await supabase.auth.getUser();
     if (authError || !auth.user) return fail("Entre na sua conta para importar o XML.");
     const { data: workspace, error: wsError } = await supabase
-      .from("workspaces").select("id").eq("kind", "prime").single();
+      .from("workspaces").select("id").eq("kind", "prime").eq("owner_id",auth.user.id).maybeSingle();
     if (wsError || !workspace) return fail("Ambiente Prime Group nao encontrado.");
 
     const file = formData.get("xml");
@@ -99,7 +99,7 @@ export async function createMdfePreparation(
     const {data:{user},error:authError}=await supabase.auth.getUser();
     if(authError||!user)return fail("Entre na sua conta para criar o rascunho do manifesto.");
     const {data:workspace,error:workspaceError}=await supabase.from("workspaces")
-      .select("id").eq("kind","prime").single();
+      .select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
     if(workspaceError||!workspace)return fail("Ambiente Prime Group nao encontrado.");
     const input:MdfePreparationInput={
       cteDraftId:String(formData.get("cteDraftId")??""),
@@ -112,6 +112,20 @@ export async function createMdfePreparation(
     const issues=validateMdfePreparation(input);
     if(issues.length)return fail(issues.join(" "));
     const db=supabase as unknown as SupabaseClient;
+    const selectedVehicleId=String(formData.get("vehicleId")||"");
+    const selectedDriverId=String(formData.get("driverId")||"");
+    if(selectedVehicleId){
+      const {data:vehicle}=await db.from("vehicles").select("plate").eq("id",selectedVehicleId)
+        .eq("workspace_id",workspace.id).eq("status","active").maybeSingle();
+      if(!vehicle||normalizePlate(vehicle.plate||"")!==normalizePlate(input.plate))
+        return fail("Veículo não corresponde à placa cadastrada.");
+    }
+    if(selectedDriverId){
+      const {data:driver}=await db.from("drivers").select("document").eq("id",selectedDriverId)
+        .eq("workspace_id",workspace.id).eq("active",true).maybeSingle();
+      if(!driver||normalizeDigits(driver.document||"")!==normalizeDigits(input.driverCpf))
+        return fail("Motorista não corresponde ao CPF cadastrado.");
+    }
     const {data:cte,error:cteError}=await db.from("fiscal_drafts")
       .select("id,nfe_id,trip_id,vehicle_id,driver_id,cargo_reference,ciot")
       .eq("id",input.cteDraftId).eq("workspace_id",workspace.id)
@@ -126,7 +140,7 @@ export async function createMdfePreparation(
     if(existing)return {ok:true,message:"Ja existe um MDF-e em rascunho para este CT-e. Nenhum documento foi emitido."};
     const {error:insertError}=await db.from("fiscal_drafts").insert({
       workspace_id:workspace.id,created_by:user.id,document_type:"mdfe",
-      nfe_id:cte.nfe_id,trip_id:cte.trip_id,vehicle_id:cte.vehicle_id,driver_id:cte.driver_id,
+      nfe_id:cte.nfe_id,trip_id:cte.trip_id,vehicle_id:selectedVehicleId||cte.vehicle_id,driver_id:selectedDriverId||cte.driver_id,
       cargo_reference:cte.cargo_reference,ciot:cte.ciot,status:"draft",
       checklist:{
         source_cte_draft_id:input.cteDraftId,

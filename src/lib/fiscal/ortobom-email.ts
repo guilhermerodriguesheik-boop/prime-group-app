@@ -26,3 +26,9 @@ export function parseOrtobomEmail(subject:string,body:string):OrtobomEmailData{
     verifiedOrtobom:origin,
   };
 }
+
+/** Confirmar o endereço From retornado pelo Gmail antes de importar anexos. */
+export function isOrtobomSender(from:string):boolean {
+  const address=from.match(/<([^>]+)>/)?.[1]||from.trim();
+  return /^[^@\s]+@(?:[a-z0-9-]+\.)*ortobom\.com\.br$/i.test(address);
+}

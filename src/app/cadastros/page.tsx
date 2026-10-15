@@ -5,6 +5,7 @@ const sections=[
  {name:"Pessoal",description:"Movimentações e compromissos pessoais",href:"/pessoal"},
  {name:"Contas e cartões",description:"Contas bancárias internas, carteiras e cartões",href:"/contas"},
  {name:"Frota",description:"Cadastrar, editar e desativar veículos",href:"/frota"},
+ {name:"Cadastro de transporte",description:"Motoristas, veículos e RNTRC/ANTT",href:"/cadastros/transporte"},
  {name:"Fretes e viagens",description:"Incluir e administrar viagens",href:"/viagens"},
  {name:"Empréstimos e juros",description:"Devedores, contratos e cobranças",href:"/juros"},
  {name:"Planejamento",description:"Lembretes, contas, recebíveis e recorrências",href:"/planejamento"},

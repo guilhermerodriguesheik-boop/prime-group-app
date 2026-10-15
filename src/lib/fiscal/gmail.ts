@@ -1,0 +1,232 @@
+import "server-only";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createClient as createAdminClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient as createUserClient } from "@/lib/supabase/server";
+import { parseAuthorizedNfeXml } from "@/lib/fiscal/nfe";
+import { isOrtobomSender, parseOrtobomEmail } from "@/lib/fiscal/ortobom-email";
+
+export const GMAIL_ACCOUNT = "lgtransporteelogistica@gmail.com";
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+
+function admin(): SupabaseClient {
+  const url=process.env.NEXT_PUBLIC_SUPABASE_URL, key=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if(!url||!key) throw Error("Backend Supabase indisponível.");
+  return createAdminClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+}
+function encryptionKey(): Buffer {
+  const key=process.env.GMAIL_TOKEN_ENCRYPTION_KEY||"";
+  if(!/^[0-9a-f]{64}$/i.test(key)) throw Error("Configurar GMAIL_TOKEN_ENCRYPTION_KEY (64 dígitos hex).");
+  return Buffer.from(key,"hex");
+}
+function encryptToken(clear:string):string {
+  const iv=randomBytes(12), c=createCipheriv("aes-256-gcm",encryptionKey(),iv);
+  const ciphertext=Buffer.concat([c.update(clear,"utf8"),c.final()]);
+  return [iv,c.getAuthTag(),ciphertext].map(b=>b.toString("base64url")).join(".");
+}
+function decryptToken(value:string):string {
+  const p=value.split(".");if(p.length!==3)throw Error("Credencial inválida.");
+  const d=createDecipheriv("aes-256-gcm",encryptionKey(),Buffer.from(p[0],"base64url"));
+  d.setAuthTag(Buffer.from(p[1],"base64url"));
+  return Buffer.concat([d.update(Buffer.from(p[2],"base64url")),d.final()]).toString("utf8");
+}
+export function oauthConfig() {
+  const clientId=process.env.GOOGLE_GMAIL_CLIENT_ID;
+  const clientSecret=process.env.GOOGLE_GMAIL_CLIENT_SECRET;
+  const origin=process.env.APP_BASE_URL;
+  if(!clientId||!clientSecret||!origin||!origin.startsWith("https://"))
+    throw Error("Configurar Google OAuth e APP_BASE_URL HTTPS.");
+  return {clientId,clientSecret,redirectUri:new URL("/api/fiscal/gmail/callback",origin).toString()};
+}
+export async function ownerWorkspace() {
+  const db=await createUserClient();
+  const {data:{user},error}=await db.auth.getUser();
+  if(error||!user)throw Error("Faça login.");
+  const {data:workspace,error:workspaceError}=await db.from("workspaces").select("id,owner_id")
+    .eq("owner_id",user.id).eq("kind","prime").maybeSingle();
+  if(workspaceError||!workspace)throw Error("A conexão Gmail só pode ser configurada pelo proprietário Prime.");
+  return {workspaceId:workspace.id,ownerId:user.id};
+}
+export function googleAuthorizationUrl(state:string) {
+  const {clientId,redirectUri}=oauthConfig();
+  const params=new URLSearchParams({
+    client_id:clientId,redirect_uri:redirectUri,response_type:"code",
+    scope:GMAIL_SCOPE,access_type:"offline",prompt:"consent",
+    login_hint:GMAIL_ACCOUNT,state,
+  });
+  return "https://accounts.google.com/o/oauth2/v2/auth?"+params.toString();
+}
+type OAuthResponse={access_token?:string;refresh_token?:string;error?:string};
+async function fetchOAuth(params:URLSearchParams):Promise<OAuthResponse>{
+  const response=await fetch("https://oauth2.googleapis.com/token",{
+    method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},
+    body:params,cache:"no-store",
+  });
+  if(!response.ok)throw Error("Autorização do Google falhou ("+response.status+").");
+  return response.json() as Promise<OAuthResponse>;
+}
+export async function exchangeAuthorizationCode(code:string){
+  const {clientId,clientSecret,redirectUri}=oauthConfig();
+  const tokens=await fetchOAuth(new URLSearchParams({
+    grant_type:"authorization_code",code,client_id:clientId,client_secret:clientSecret,redirect_uri:redirectUri,
+  }));
+  if(!tokens.access_token||!tokens.refresh_token)throw Error("Google não retornou acesso offline. Reconecte a conta.");
+  const profile=await gmailJson<{emailAddress:string}>(tokens.access_token,"/users/me/profile");
+  if(profile.emailAddress.toLowerCase()!==GMAIL_ACCOUNT)
+    throw Error("Conta Google incorreta: use o e-mail da transportadora.");
+  const {workspaceId,ownerId}=await ownerWorkspace();
+  const {error}=await admin().from("fiscal_gmail_connections").upsert({
+    workspace_id:workspaceId,owner_id:ownerId,email:GMAIL_ACCOUNT,
+    encrypted_refresh_token:encryptToken(tokens.refresh_token),
+    next_page_token:null,last_error:null,
+  },{onConflict:"workspace_id"});
+  if(error)throw Error("Não foi possível salvar a conexão Gmail.");
+}
+async function accessToken(encrypted:string){
+  const {clientId,clientSecret}=oauthConfig();
+  const tokens=await fetchOAuth(new URLSearchParams({
+    grant_type:"refresh_token",refresh_token:decryptToken(encrypted),
+    client_id:clientId,client_secret:clientSecret,
+  }));
+  if(!tokens.access_token)throw Error("Google exige reconectar a conta.");
+  return tokens.access_token;
+}
+async function gmailJson<T>(token:string,path:string):Promise<T>{
+  const res=await fetch("https://gmail.googleapis.com/gmail/v1"+path,{
+    headers:{authorization:"Bearer "+token},cache:"no-store",
+  });
+  if(!res.ok)throw Error("Gmail indisponível ("+res.status+").");
+  return res.json() as Promise<T>;
+}
+type GmailPart={mimeType?:string;filename?:string;body?:{data?:string;attachmentId?:string;size?:number};parts?:GmailPart[]};
+type GmailMessage={id:string;payload?:GmailPart&{headers?:Array<{name:string;value:string}>};snippet?:string};
+function walk(p:GmailPart):GmailPart[] {return [p,...(p.parts||[]).flatMap(walk)];}
+function decodeBase64(value:string):string {return Buffer.from(value,"base64url").toString("utf8");}
+function header(message:GmailMessage,name:string){
+  return message.payload?.headers?.find(x=>x.name.toLowerCase()===name.toLowerCase())?.value||"";
+}
+function mailBody(message:GmailMessage):string{
+  const parts=message.payload?walk(message.payload):[];
+  const plain=parts.find(x=>x.mimeType==="text/plain"&&x.body?.data);
+  if(plain?.body?.data)return decodeBase64(plain.body.data);
+  const html=parts.find(x=>x.mimeType==="text/html"&&x.body?.data);
+  if(html?.body?.data)return decodeBase64(html.body.data).replace(/<[^>]*>/g," ").replace(/&nbsp;/g," ");
+  return message.snippet||"";
+}
+async function xmlAttachment(token:string,message:GmailMessage,part:GmailPart){
+  if((part.body?.size||0)>1024*1024)throw Error("Anexo XML excede 1MB.");
+  const raw=part.body?.data || (part.body?.attachmentId
+    ? (await gmailJson<{data?:string}>(token,"/users/me/messages/"+encodeURIComponent(message.id)+
+      "/attachments/"+encodeURIComponent(part.body.attachmentId))).data : "");
+  if(!raw)throw Error("Anexo XML vazio.");
+  const xml=decodeBase64(raw);
+  if(Buffer.byteLength(xml,"utf8")>1024*1024)throw Error("Anexo XML excede 1MB.");
+  return xml;
+}
+export type FiscalGmailSync={scanned:number;imported:number;invoices:number;skipped:number;errors:number};
+async function importMessage(db:SupabaseClient,token:string,workspaceId:string,ownerId:string,msgId:string) {
+  const {data:seen}=await db.from("fiscal_gmail_messages").select("id").eq("workspace_id",workspaceId)
+    .eq("message_id",msgId).maybeSingle();
+  if(seen)return {skipped:true,invoices:0};
+  const message=await gmailJson<GmailMessage>(token,"/users/me/messages/"+encodeURIComponent(msgId)+"?format=full");
+  if(!isOrtobomSender(header(message,"from")))return {skipped:true,invoices:0};
+  const xmlParts=message.payload?walk(message.payload).filter(p=>
+    /\.xml$/i.test(p.filename||"")&&["application/xml","text/xml","application/octet-stream"].includes(p.mimeType||"")
+  ):[];
+  if(xmlParts.length===0)return {skipped:true,invoices:0};
+  if(xmlParts.length>40)throw Error("E-mail com anexos demais para importação automática.");
+  const freight=parseOrtobomEmail(header(message,"subject"),mailBody(message));
+  // Sem valor/CIOT não se cria CT-e: XML da mercadoria não comprova valor de transporte.
+  if(!freight.ciot||!freight.freightValue||!freight.cargoReference)
+    throw Error("E-mail sem carga, CIOT ou valor do frete verificável.");
+  const invoices: Array<{id:string;key:string}>=[];
+  for(const part of xmlParts){
+    const raw=await xmlAttachment(token,message,part);
+    const parsed=parseAuthorizedNfeXml(raw);
+    if(parsed.senderCnpj!=="14294395000278"||
+       (parsed.cargoReference&&parsed.cargoReference!==freight.cargoReference))
+      throw Error("NF-e não pertence à carga informada pela Ortobom.");
+    const {data:row,error}=await db.from("fiscal_nfe_inbox").upsert({
+      workspace_id:workspaceId,created_by:ownerId,source_kind:"gmail",source_id:msgId,
+      access_key:parsed.accessKey,invoice_number:parsed.invoiceNumber,invoice_series:parsed.invoiceSeries,
+      issued_at:parsed.issuedAt,sender_name:parsed.senderName,sender_cnpj:parsed.senderCnpj,
+      recipient_name:parsed.recipientName,recipient_cnpj:parsed.recipientCnpj,
+      origin_city:parsed.originCity,origin_uf:parsed.originUf,
+      destination_city:parsed.destinationCity,destination_uf:parsed.destinationUf,
+      goods_value:parsed.goodsValue,gross_weight_kg:parsed.grossWeightKg,
+      package_quantity:parsed.packageQuantity,cargo_reference:freight.cargoReference,xml_content:raw,
+    },{onConflict:"workspace_id,access_key",ignoreDuplicates:false}).select("id").single();
+    if(error||!row)throw Error("Falha ao guardar NF-e da carga.");
+    invoices.push({id:row.id,key:parsed.accessKey});
+  }
+  if(!invoices.length)return {skipped:true,invoices:0};
+  const {data:previous}=await db.from("fiscal_drafts").select("id").eq("workspace_id",workspaceId)
+    .eq("cargo_reference",freight.cargoReference).eq("document_type","cte").eq("ciot",freight.ciot)
+    .limit(1).maybeSingle();
+  let draftId=previous?.id;
+  if(!draftId){
+    const {data:created,error}=await db.from("fiscal_drafts").insert({
+      workspace_id:workspaceId,created_by:ownerId,document_type:"cte",nfe_id:invoices[0].id,
+      cargo_reference:freight.cargoReference,ciot:freight.ciot,freight_value:freight.freightValue,status:"draft",
+      checklist:{source:"ortobom_gmail",source_message_id:msgId,nfe_access_keys:invoices.map(x=>x.key),
+        invoice_count:invoices.length,fiscal_approval:false,issue_environment:"none",
+        note:"Dados sugeridos pelos anexos e corpo do e-mail. Conferir motorista, veículo, tomador, ANTT e tributação."},
+    }).select("id").single();
+    if(error||!created)throw Error("Falha ao criar rascunho CT-e.");
+    draftId=created.id;
+  }
+  const {error:loggedError}=await db.from("fiscal_gmail_messages").upsert({
+    workspace_id:workspaceId,message_id:msgId,cargo_reference:freight.cargoReference,
+    ciot:freight.ciot,freight_value:freight.freightValue,nfe_count:invoices.length,draft_id:draftId,
+  },{onConflict:"workspace_id,message_id"});
+  if(loggedError)throw Error("Falha ao registrar idempotência do Gmail.");
+  return {skipped:false,invoices:invoices.length};
+}
+export async function gmailStatus(workspaceId:string){
+  const {data,error}=await admin().from("fiscal_gmail_connections").select("email,last_sync_at,last_error")
+    .eq("workspace_id",workspaceId).maybeSingle();
+  if(error)throw Error("Estado Gmail indisponível.");
+  return data;
+}
+export async function syncGmailWorkspace(workspaceId:string,ownerId:string):Promise<FiscalGmailSync>{
+  const db=admin();
+  const {data:conn,error}=await db.from("fiscal_gmail_connections").select("*")
+    .eq("workspace_id",workspaceId).eq("owner_id",ownerId).maybeSingle();
+  if(error||!conn)throw Error("Conecte o Gmail da transportadora primeiro.");
+  const stats:FiscalGmailSync={scanned:0,imported:0,invoices:0,skipped:0,errors:0};
+  try{
+    const token=await accessToken(conn.encrypted_refresh_token);
+    const query=new URLSearchParams({
+      q:"from:acertorj.qm@ortobom.com.br filename:xml",
+      maxResults:"8",
+    });
+    if(conn.next_page_token)query.set("pageToken",conn.next_page_token);
+    const list=await gmailJson<{messages?:Array<{id:string}>;nextPageToken?:string}>(token,
+      "/users/me/messages?"+query.toString());
+    for(const m of list.messages||[]){
+      stats.scanned++;
+      try {
+        const result=await importMessage(db,token,workspaceId,ownerId,m.id);
+        if(result.skipped)stats.skipped++;
+        else{stats.imported++;stats.invoices+=result.invoices;}
+      }catch{stats.errors++;}
+    }
+    // Ao chegar ao fim, voltar à primeira página para coletar novos e-mails.
+    await db.from("fiscal_gmail_connections").update({
+      next_page_token:list.nextPageToken||null,last_sync_at:new Date().toISOString(),
+      last_error:stats.errors?stats.errors+" e-mail(s) necessitam conferência manual":null,
+    }).eq("workspace_id",workspaceId);
+    return stats;
+  }catch{
+    await db.from("fiscal_gmail_connections").update({last_error:"Falha de conexão Google. Reconecte se necessário."})
+      .eq("workspace_id",workspaceId);
+    throw Error("Não foi possível sincronizar o Gmail da Ortobom.");
+  }
+}
+export async function syncAllGmailWorkspaces(){
+  const {data,error}=await admin().from("fiscal_gmail_connections").select("workspace_id,owner_id").limit(15);
+  if(error)throw Error("Conexões Gmail indisponíveis.");
+  const result=[];for(const item of data||[]){
+    try{result.push({workspace_id:item.workspace_id,...await syncGmailWorkspace(item.workspace_id,item.owner_id)});}
+    catch{result.push({workspace_id:item.workspace_id,error:"sync_failed"});}
+  }return result;
+}
