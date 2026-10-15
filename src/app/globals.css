@@ -554,3 +554,7 @@ html[data-theme="dark"] .fiscal-gmail-icon{background:#223b61;border-color:#3854
 .fiscal-review-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px}
 .fiscal-review-actions .button{display:inline-flex;align-items:center;gap:7px}
 @media(max-width:640px){.fiscal-review-form{grid-template-columns:1fr}.fiscal-review-form .span-two{grid-column:auto}}
+
+/* DotCompany production read-only diagnostic */
+.fiscal-dotcompany-production{display:grid;gap:13px;padding:16px;border:1px solid var(--line);border-radius:12px}
+.fiscal-dotcompany-production .fiscal-dotcompany-heading h3{font-size:17px}

@@ -47,6 +47,9 @@ jobs:
       - name: CT-e confirmation preflight tests
         run: npm run test:cte-consent
 
+      - name: Production SEFAZ connection diagnostic tests
+        run: npm run test:dotcompany-production
+
       - name: Pluggy webhook contract tests
         run: npm run test:pluggy
 
