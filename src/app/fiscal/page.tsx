@@ -38,8 +38,8 @@ export default async function FiscalPage() {
     </div>
     <div className="quick"><a href="/motoristas">Motoristas cadastrados</a><a href="/frota">Veículos</a><a href="/assistente">Analisar com IA</a></div><div style={{marginTop:18}}><OrtobomCargoForm/></div>
     <div className="notice" style={{marginTop:12}}>
-      A importação automática do Gmail depende de autorizar a conta no próprio aplicativo;
-      o acesso ao Gmail pelo ChatGPT não transfere autorização OAuth para o Prime Finance.
+      Importação automática de novos e-mails: conector Google Apps Script disponível,
+      aguardando ativação na conta Gmail e credenciais do servidor.
       Para conferir o registro ANTT, consulte{" "}
       <a target="_blank" rel="noopener noreferrer" href="https://consultapublica.antt.gov.br/Site/ConsultaRNTRC.aspx">
         RNTRC por transportador ou placa
