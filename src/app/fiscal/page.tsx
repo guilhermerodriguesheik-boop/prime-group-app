@@ -65,6 +65,9 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
        .eq("workspace_id",ws.id).order("created_at",{ascending:false}).limit(100)
     : {data:[],error:null};
   const drafts=(rows??[]) as unknown as Draft[];
+  const {data:transmissions}=ws?await db.from("fiscal_cte_transmissions")
+    .select("draft_id,status,access_key,protocol").eq("workspace_id",ws.id):{data:[]};
+  const transmissionsByDraft=new Map((transmissions||[]).map(x=>[x.draft_id,x]));
   const ctes=drafts.filter(x=>x.document_type==="cte");
   const manifests=drafts.filter(x=>x.document_type==="mdfe");
   const choices=ctes.filter(x=>canPrepareNewCte(x.status,x.checklist))
@@ -138,7 +141,11 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
                 <td>{money(x.fiscal_nfe_inbox?.goods_value??null)}</td>
                 <td><strong>{money(x.freight_value)}</strong></td>
                 <td>{x.ciot||"—"}</td>
-                <td>{x.checklist?.do_not_issue_duplicate?
+                <td>{transmissionsByDraft.get(x.id)?
+                  <span className="fiscal-draft-status">{transmissionsByDraft.get(x.id)?.status==="authorized"?"CT-e autorizado":
+                    transmissionsByDraft.get(x.id)?.status==="indeterminate"?"Verificar na DotCompany":
+                    transmissionsByDraft.get(x.id)?.status==="rejected"?"Rejeitado na SEFAZ":"Transmissão em andamento"}</span>:
+                  x.checklist?.do_not_issue_duplicate?
                   <span className="fiscal-cte-external" title="Referência de DACTE externo identificada. O protocolo precisa de conferência SEFAZ.">
                     CT-e externo nº {x.checklist.previous_external_cte_number||"—"} · verificar
                   </span>:
