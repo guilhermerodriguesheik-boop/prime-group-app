@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { parseAuthorizedNfeXml } from "@/lib/fiscal/nfe";
+import { validateMdfePreparation, normalizeDigits, normalizePlate, type MdfePreparationInput } from "@/lib/fiscal/preflight";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type FiscalImportState = { message: string; ok: boolean };
@@ -85,5 +86,66 @@ export async function importFiscalNfe(_state: FiscalImportState, formData: FormD
     return {ok:true,message:"NF-e importada. CT-e salvo apenas como RASCUNHO; nenhuma emissao fiscal realizada."};
   } catch (error) {
     return fail(error instanceof Error ? error.message : "Erro inesperado na importacao.");
+  }
+}
+
+
+/** Prepara MDF-e associado a um CT-e ainda nao emitido; nunca assina nem transmite. */
+export async function createMdfePreparation(
+  _state: FiscalImportState, formData: FormData,
+): Promise<FiscalImportState> {
+  try {
+    const supabase = await createClient();
+    const {data:{user},error:authError}=await supabase.auth.getUser();
+    if(authError||!user)return fail("Entre na sua conta para criar o rascunho do manifesto.");
+    const {data:workspace,error:workspaceError}=await supabase.from("workspaces")
+      .select("id").eq("kind","prime").single();
+    if(workspaceError||!workspace)return fail("Ambiente Prime Group nao encontrado.");
+    const input:MdfePreparationInput={
+      cteDraftId:String(formData.get("cteDraftId")??""),
+      plate:String(formData.get("plate")??""),
+      rntrc:String(formData.get("rntrc")??""),
+      driverCpf:String(formData.get("driverCpf")??""),
+      originUf:String(formData.get("originUf")??""),
+      destinationUf:String(formData.get("destinationUf")??""),
+    };
+    const issues=validateMdfePreparation(input);
+    if(issues.length)return fail(issues.join(" "));
+    const db=supabase as unknown as SupabaseClient;
+    const {data:cte,error:cteError}=await db.from("fiscal_drafts")
+      .select("id,nfe_id,trip_id,vehicle_id,driver_id,cargo_reference,ciot")
+      .eq("id",input.cteDraftId).eq("workspace_id",workspace.id)
+      .eq("document_type","cte").eq("status","draft").maybeSingle();
+    if(cteError||!cte)return fail("CT-e de origem nao encontrado neste ambiente.");
+    const {data:existing,error:duplicateError}=await db.from("fiscal_drafts")
+      .select("id").eq("workspace_id",workspace.id).eq("document_type","mdfe")
+      .eq("status","draft")
+      .contains("checklist",{source_cte_draft_id:input.cteDraftId})
+      .limit(1).maybeSingle();
+    if(duplicateError)return fail("Nao foi possivel verificar duplicidade do manifesto.");
+    if(existing)return {ok:true,message:"Ja existe um MDF-e em rascunho para este CT-e. Nenhum documento foi emitido."};
+    const {error:insertError}=await db.from("fiscal_drafts").insert({
+      workspace_id:workspace.id,created_by:user.id,document_type:"mdfe",
+      nfe_id:cte.nfe_id,trip_id:cte.trip_id,vehicle_id:cte.vehicle_id,driver_id:cte.driver_id,
+      cargo_reference:cte.cargo_reference,ciot:cte.ciot,status:"draft",
+      checklist:{
+        source_cte_draft_id:input.cteDraftId,
+        vehicle_plate:normalizePlate(input.plate),
+        driver_cpf:normalizeDigits(input.driverCpf),
+        rntrc:normalizeDigits(input.rntrc),
+        origin_uf:input.originUf.trim().toUpperCase(),
+        destination_uf:input.destinationUf.trim().toUpperCase(),
+        cte_sefaz_authorized:false,
+        fiscal_approval:false,
+        issue_environment:"none",
+        note:"MDF-e em preparo: CT-e nao autorizado. Proibida transmissao automatica.",
+      },
+    });
+    if(insertError)return fail("Nao foi possivel criar rascunho MDF-e: "+insertError.message);
+    revalidatePath("/fiscal");
+    return {ok:true,message:"Manifesto salvo como RASCUNHO. Nao foi enviado a SEFAZ."};
+  }catch(error){
+    console.error("MDF-e preparation failed",error instanceof Error?error.message:"unknown");
+    return fail("Nao foi possivel preparar o manifesto.");
   }
 }

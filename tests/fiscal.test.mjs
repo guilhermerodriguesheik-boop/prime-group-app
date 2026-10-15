@@ -39,3 +39,21 @@ test("recusar xml malformado", () => {
 test("recusar XML maior que 1 MB", () => {
   assert.throws(()=>parseAuthorizedNfeXml("x".repeat(1024*1024+1)),/1 MB/);
 });
+
+
+import { validateMdfePreparation,normalizePlate,validCpf,validCteAccessKey,mdfeTransmissionBlockers } from "../src/lib/fiscal/preflight.ts";
+const mdfeInput={cteDraftId:"123e4567-e89b-42d3-a456-426614174000",plate:"ABC1D23",rntrc:"12345678",driverCpf:"52998224725",originUf:"RJ",destinationUf:"MG"};
+test("preparacao MDF-e valida placa Mercosul e CPF sem liberar emissao",()=>{
+ assert.deepEqual(validateMdfePreparation(mdfeInput),[]);
+ assert.equal(normalizePlate("abc-1d23"),"ABC1D23");
+ assert.equal(validCpf(mdfeInput.driverCpf),true);
+ assert.ok(mdfeTransmissionBlockers().length>=3);
+});
+test("preparacao MDF-e rejeita motorista, RNTRC, placa e UF invalidos",()=>{
+ const issues=validateMdfePreparation({...mdfeInput,plate:"XYZ",rntrc:"a",driverCpf:"11111111111",destinationUf:"ZZ"});
+ assert.equal(issues.length,4);
+});
+test("chave CT-e valida tamanho e digito verificador",()=>{
+ assert.equal(validCteAccessKey("123"),false);
+ assert.equal(validCteAccessKey("1".repeat(44)),false);
+});
