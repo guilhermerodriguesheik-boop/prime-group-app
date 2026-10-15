@@ -13,7 +13,7 @@ export function MdfeDraftForm({cteDrafts,vehicles,drivers,rntrc}:{
  const [driverId,setDriverId]=useState("");
  const [plate,setPlate]=useState("");
  const [cpf,setCpf]=useState("");
- return <form action={action} className="card" style={{display:"grid",gap:12,maxWidth:740}}>
+ return <form action={action} className="card fiscal-form">
   <h3>Preparar MDF-e para a viagem</h3>
   <p>Selecionar veículo e motorista cadastrados preenche os campos. O documento ainda não é transmitido.</p>
   <label>CT-e de referência

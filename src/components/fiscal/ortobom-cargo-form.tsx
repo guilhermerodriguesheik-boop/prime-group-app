@@ -4,7 +4,7 @@ import {importOrtobomCargo,type CargoImportState} from "@/app/fiscal/ortobom-act
 const initial:CargoImportState={ok:false,message:""};
 export function OrtobomCargoForm(){
  const [state,action,pending]=useActionState(importOrtobomCargo,initial);
- return <form action={action} className="card" style={{display:"grid",gap:12,maxWidth:740}}>
+ return <form action={action} className="card fiscal-form">
   <h3>Importar carga por email</h3>
   <p>Cole o assunto e o corpo da mensagem da Ortobom. Selecione todos os XMLs da mesma carga.</p>
   <label>Assunto <input name="subject" required maxLength={200}/></label>

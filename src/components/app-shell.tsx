@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3, Building2, CalendarDays, CreditCard, FileText, Landmark,
   LayoutDashboard, LogOut, Menu, Moon, Percent, Settings2, ShieldCheck,
-  Sparkles, Sun, Truck, UserRound, X, ClipboardList, Route, UsersRound, Repeat2, BellRing,
+  Sparkles, Sun, Truck, UserRound, X, ClipboardList, Route, UsersRound, Repeat2, BellRing, FileCheck2,
 } from "lucide-react";
 
 const nav = [
@@ -23,6 +23,7 @@ const nav = [
     {label:"Relatórios",href:"/relatorios",icon:BarChart3},
     {label:"Empréstimos e juros",href:"/juros",icon:Percent},
     {label:"Viagens e fretes",href:"/viagens",icon:Route},
+    {label:"Emissor fiscal",href:"/fiscal",icon:FileCheck2},
     {label:"Equipe e pagamentos",href:"/equipes",icon:UsersRound},
     {label:"Frota",href:"/frota",icon:Truck},
   ]},
