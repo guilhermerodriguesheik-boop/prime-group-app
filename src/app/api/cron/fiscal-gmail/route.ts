@@ -9,6 +9,9 @@ export async function GET(request:Request){
   if(expected.length<24||actual.length!==expected.length||
       !timingSafeEqual(Buffer.from(actual),Buffer.from(expected)))
     return NextResponse.json({error:"Não autorizado"},{status:401});
+  if(!process.env.SUPABASE_SERVICE_ROLE_KEY||!process.env.GOOGLE_GMAIL_CLIENT_ID||
+     !process.env.GOOGLE_GMAIL_CLIENT_SECRET||!process.env.GMAIL_TOKEN_ENCRYPTION_KEY)
+    return NextResponse.json({skipped:"Gmail OAuth not configured"},{headers:{"Cache-Control":"no-store"}});
   try{
     return NextResponse.json({results:await syncAllGmailWorkspaces()},{headers:{"Cache-Control":"no-store"}});
   }catch{
