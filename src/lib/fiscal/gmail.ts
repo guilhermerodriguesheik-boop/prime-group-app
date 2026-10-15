@@ -7,6 +7,10 @@ import { isOrtobomSender, parseOrtobomEmail } from "@/lib/fiscal/ortobom-email";
 
 export const GMAIL_ACCOUNT = "lgtransporteelogistica@gmail.com";
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export type GmailOAuthFailure = "invalid_client"|"invalid_grant"|"token_denied"|"missing_refresh"|"wrong_google_account"|"supabase_access"|"database_write"|"gmail_profile"|"session_or_workspace"|"unexpected";
+export class GmailOAuthError extends Error {
+  constructor(public readonly code:GmailOAuthFailure){super(code);this.name="GmailOAuthError";}
+}
 
 function admin(): SupabaseClient {
   const url=process.env.NEXT_PUBLIC_SUPABASE_URL, key=process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -61,25 +65,40 @@ async function fetchOAuth(params:URLSearchParams):Promise<OAuthResponse>{
     method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},
     body:params,cache:"no-store",
   });
-  if(!response.ok)throw Error("Autorização do Google falhou ("+response.status+").");
-  return response.json() as Promise<OAuthResponse>;
+  const parsed=await response.json().catch(()=>null) as (OAuthResponse|{error?:string})|null;
+  if(!response.ok){
+    const code=parsed?.error;
+    if(code==="invalid_client")throw new GmailOAuthError("invalid_client");
+    if(code==="invalid_grant")throw new GmailOAuthError("invalid_grant");
+    throw new GmailOAuthError("token_denied");
+  }
+  return (parsed||{}) as OAuthResponse;
 }
 export async function exchangeAuthorizationCode(code:string){
   const {clientId,clientSecret,redirectUri}=oauthConfig();
   const tokens=await fetchOAuth(new URLSearchParams({
     grant_type:"authorization_code",code,client_id:clientId,client_secret:clientSecret,redirect_uri:redirectUri,
   }));
-  if(!tokens.access_token||!tokens.refresh_token)throw Error("Google não retornou acesso offline. Reconecte a conta.");
-  const profile=await gmailJson<{emailAddress:string}>(tokens.access_token,"/users/me/profile");
-  if(profile.emailAddress.toLowerCase()!==GMAIL_ACCOUNT)
-    throw Error("Conta Google incorreta: use o e-mail da transportadora.");
-  const {workspaceId,ownerId}=await ownerWorkspace();
-  const {error}=await admin().from("fiscal_gmail_connections").upsert({
+  if(!tokens.access_token||!tokens.refresh_token)throw new GmailOAuthError("missing_refresh");
+  let profile:{emailAddress:string};
+  try{profile=await gmailJson<{emailAddress:string}>(tokens.access_token,"/users/me/profile");}
+  catch{throw new GmailOAuthError("gmail_profile");}
+  if(profile.emailAddress?.toLowerCase()!==GMAIL_ACCOUNT)
+    throw new GmailOAuthError("wrong_google_account");
+  let workspaceId:string,ownerId:string;
+  try{({workspaceId,ownerId}=await ownerWorkspace());}
+  catch{throw new GmailOAuthError("session_or_workspace");}
+  let database:SupabaseClient;
+  try{database=admin();}catch{throw new GmailOAuthError("supabase_access");}
+  const {error}=await database.from("fiscal_gmail_connections").upsert({
     workspace_id:workspaceId,owner_id:ownerId,email:GMAIL_ACCOUNT,
     encrypted_refresh_token:encryptToken(tokens.refresh_token),
     next_page_token:null,last_error:null,
   },{onConflict:"workspace_id"});
-  if(error)throw Error("Não foi possível salvar a conexão Gmail.");
+  if(error){
+    console.error("Fiscal Gmail connection insert failed; Supabase error code:",error.code||"unknown");
+    throw new GmailOAuthError("database_write");
+  }
 }
 async function accessToken(encrypted:string){
   const {clientId,clientSecret}=oauthConfig();

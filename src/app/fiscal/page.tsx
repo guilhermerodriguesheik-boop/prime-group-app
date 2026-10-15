@@ -19,7 +19,22 @@ type Draft = {
   fiscal_nfe_inbox:{invoice_number:string;sender_name:string;recipient_name:string;origin_city:string;destination_city:string;goods_value:number}|null;
 };
 const money = (n:number|null)=>n===null?"Nao informado":n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-export default async function FiscalPage() {
+export default async function FiscalPage({searchParams}:{searchParams:Promise<{gmail?:string;reason?:string}>}) {
+  const query=await searchParams;
+  const oauthMessages:Record<string,string>={
+    invalid_state:"A sessão de conexão expirou ou o cookie foi bloqueado. Tente novamente a partir deste mesmo navegador.",
+    not_authorized:"O Google não concluiu a autorização de leitura. Verifique o usuário de teste e permita a leitura do Gmail.",
+    invalid_client:"O Google rejeitou a credencial OAuth. O ID e a chave do cliente precisam ser conferidos na Vercel.",
+    invalid_grant:"O código de autorização expirou ou foi usado antes. Inicie uma nova conexão.",
+    token_denied:"O Google recusou a troca do código. Confira o cliente OAuth e a URI de redirecionamento.",
+    missing_refresh:"O Google não forneceu acesso contínuo. Revogue o acesso anterior ao Prime Finance na Conta Google e tente conectar novamente.",
+    wrong_google_account:"Você autorizou outra conta. Escolha lgtransporteelogistica@gmail.com no Google.",
+    supabase_access:"A chave de acesso administrativo do Supabase ainda não está operante no servidor.",
+    database_write:"O Gmail foi autorizado, mas o Supabase rejeitou o armazenamento da conexão. O sistema precisa corrigir o acesso ao banco.",
+    gmail_profile:"O Gmail não confirmou a conta autorizada. Verifique se a API Gmail está habilitada no Google Cloud.",
+    session_or_workspace:"Seu login do Prime Finance não foi reconhecido no retorno do Google. Entre novamente no aplicativo e repita a conexão.",
+    unexpected:"A conexão encontrou um erro inesperado e não foi gravada.",
+  };
   const client = await createClient();
   const {data:{user}}=await client.auth.getUser();
   if(!user)redirect("/login");
@@ -43,6 +58,10 @@ export default async function FiscalPage() {
     .map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem numero")+" — NF-e "+(x.fiscal_nfe_inbox?.invoice_number||"nao informada")}));
   return <>
     <Header title="Prime Emissor Fiscal" subtitle="NF-e Ortobom, rascunhos de CT-e e preparação de MDF-e da Prime Group."/>
+    {query.gmail==="connected"&&gmail&&<div className="fiscal-alert fiscal-alert-success" role="status"><strong>Gmail autorizado.</strong> Conta vinculada ao Prime Finance. Agora você pode importar os e-mails da Ortobom.</div>}
+    {query.gmail==="connection_failed"&&<div className="fiscal-alert fiscal-alert-error" role="alert"><strong>Conexão Gmail não concluída.</strong><span>{oauthMessages[query.reason||"unexpected"]||oauthMessages.unexpected}</span><small>Diagnóstico: {Object.hasOwn(oauthMessages,query.reason||"")?query.reason:"unexpected"}</small></div>}
+    {query.gmail==="setup_required"&&<div className="fiscal-alert fiscal-alert-error" role="alert"><strong>Antes de conectar o Gmail, entre no Prime Finance com a conta proprietária.</strong></div>}
+    {query.gmail==="connected"&&!gmail&&<div className="fiscal-alert fiscal-alert-error" role="alert"><strong>O retorno do Google foi recebido, mas o registro da conexão não está disponível no banco.</strong></div>
     <div className="notice">
       Modo de preparação: não há emissão fiscal ativa. CT-e e MDF-e nesta tela são RASCUNHOS,
       sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
