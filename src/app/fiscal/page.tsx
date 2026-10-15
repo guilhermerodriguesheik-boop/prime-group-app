@@ -8,7 +8,7 @@ import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
 import { fiscalReadiness } from "@/lib/fiscal/readiness";
 import { FiscalReadinessPanel } from "@/components/fiscal/readiness-panel";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
-import { mdfeTransmissionBlockers } from "@/lib/fiscal/preflight";
+import { mdfeTransmissionBlockers, canPrepareNewCte } from "@/lib/fiscal/preflight";
 import { fiscalIntegrationState } from "@/lib/fiscal/focus";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -17,7 +17,7 @@ import { redirect } from "next/navigation";
 type Draft = {
   id:string; document_type:string; cargo_reference:string|null;ciot:string|null;
   freight_value:number|null;status:string;created_at:string;
-  checklist:{vehicle_plate?:string;origin_uf?:string;destination_uf?:string;source_cte_draft_id?:string}|null;
+  checklist:{vehicle_plate?:string;origin_uf?:string;destination_uf?:string;source_cte_draft_id?:string;previous_external_cte_number?:string;previous_external_cte_series?:string;previous_external_cte_key?:string;do_not_issue_duplicate?:boolean}|null;
   fiscal_nfe_inbox:{invoice_number:string;sender_name:string;recipient_name:string;origin_city:string;destination_city:string;goods_value:number}|null;
 };
 const money = (n:number|null)=>n===null?"Nao informado":n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
@@ -60,7 +60,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
   const drafts=(rows??[]) as unknown as Draft[];
   const ctes=drafts.filter(x=>x.document_type==="cte");
   const manifests=drafts.filter(x=>x.document_type==="mdfe");
-  const choices=ctes.filter(x=>x.status==="draft")
+  const choices=ctes.filter(x=>canPrepareNewCte(x.status,x.checklist))
     .map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem numero")+" — NF-e "+(x.fiscal_nfe_inbox?.invoice_number||"nao informada")}));
   const pending=ctes.filter(x=>x.status==="draft").length;
   return (
@@ -126,7 +126,12 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
                 <td>{money(x.fiscal_nfe_inbox?.goods_value??null)}</td>
                 <td><strong>{money(x.freight_value)}</strong></td>
                 <td>{x.ciot||"—"}</td>
-                <td><span className="fiscal-draft-status">{x.status==="draft"?"Rascunho":x.status}</span></td>
+                <td>{x.checklist?.do_not_issue_duplicate?
+                  <span className="fiscal-cte-external" title="Referência de DACTE externo identificada. O protocolo precisa de conferência SEFAZ.">
+                    CT-e externo nº {x.checklist.previous_external_cte_number||"—"} · verificar
+                  </span>:
+                  <span className="fiscal-draft-status">{x.status==="draft"?"Rascunho":x.status==="review_pending"?"Pendente de revisão":x.status}</span>}
+                </td>
                 <td><FiscalAiReview draftId={x.id}/></td>
               </tr>)}
               {ctes.length===0&&<tr><td colSpan={9} className="fiscal-empty">Nenhuma carga importada. Comece conectando o Gmail ou enviando os XMLs.</td></tr>}</tbody>
