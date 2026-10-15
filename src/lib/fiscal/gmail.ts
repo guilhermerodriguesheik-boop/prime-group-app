@@ -5,6 +5,7 @@ import { createClient as createUserClient } from "@/lib/supabase/server";
 import { parseAuthorizedNfeXml } from "@/lib/fiscal/nfe";
 import { isOrtobomSender, parseOrtobomEmail } from "@/lib/fiscal/ortobom-email";
 import { probeGoogleClient, type GoogleClientStatus } from "@/lib/fiscal/google-credential";
+import { parseOrtobomFinancialEmail } from "@/lib/fiscal/ortobom-finance-parser";
 
 export const GMAIL_ACCOUNT = "lgtransporteelogistica@gmail.com";
 let clientStatusCache:{time:number;value:GoogleClientStatus}|null=null;
@@ -310,4 +311,59 @@ export async function importSelectedOrtobomInbox(workspaceId:string,ownerId:stri
   }catch{result.errors++;}
  }
  return result;
+}
+
+export type FinancialGmailSync={scanned:number;imported:number;skipped:number;errors:number;hasMore:boolean};
+export async function syncOrtobomFinancialReports(workspaceId:string,ownerId:string):Promise<FinancialGmailSync>{
+ const db=admin();
+ const {data:conn,error}=await db.from("fiscal_gmail_connections")
+  .select("encrypted_refresh_token,financial_next_page_token")
+  .eq("workspace_id",workspaceId).eq("owner_id",ownerId).maybeSingle();
+ if(error||!conn)throw Error("Gmail não conectado.");
+ const token=await accessToken(conn.encrypted_refresh_token);
+ const p=new URLSearchParams({q:"from:ortobom.com.br {subject:ADIANTAMENTO subject:PAGAMENTO} after:2026/01/01",maxResults:"30"});
+ if(conn.financial_next_page_token)p.set("pageToken",conn.financial_next_page_token);
+ const page=await gmailJson<{messages?:Array<{id:string}>;nextPageToken?:string}>(token,"/users/me/messages?"+p);
+ const ids=(page.messages||[]).map(x=>x.id).filter(x=>/^[A-Za-z0-9_-]{8,40}$/.test(x));
+ const knownResponse=ids.length?await db.from("ortobom_financial_emails").select("message_id")
+  .eq("workspace_id",workspaceId).in("message_id",ids):{data:[],error:null};
+ if(knownResponse.error)throw Error("Falha ao consultar relatórios anteriores.");
+ const known=new Set((knownResponse.data||[]).map(x=>x.message_id));
+ const stats:FinancialGmailSync={scanned:0,imported:0,skipped:0,errors:0,hasMore:!!page.nextPageToken};
+ for(const id of ids){
+  stats.scanned++;
+  if(known.has(id)){stats.skipped++;continue;}
+  try{
+   const mail=await gmailJson<GmailMessage>(token,"/users/me/messages/"+encodeURIComponent(id)+"?format=full");
+   const sender=header(mail,"from");
+   if(!isOrtobomSender(sender)){stats.skipped++;continue;}
+   const extracted=parseOrtobomFinancialEmail(header(mail,"subject"),mailBody(mail));
+   if(!extracted){stats.skipped++;continue;}
+   const mailDate=new Date(header(mail,"date"));
+   const {data:record,error:saveError}=await db.from("ortobom_financial_emails").upsert({
+    workspace_id:workspaceId,message_id:id,event_kind:extracted.kind,
+    subject:extracted.subject,sender:sender.slice(0,300),
+    email_date:Number.isNaN(mailDate.getTime())?null:mailDate.toISOString(),
+    payment_date:extracted.paymentDate,period_start:extracted.periodStart,period_end:extracted.periodEnd,
+    declared_bank_deposit:extracted.declaredBankDeposit,
+    declared_promissory_discount:extracted.declaredPromissoryDiscount,
+   },{onConflict:"workspace_id,message_id",ignoreDuplicates:true}).select("id").maybeSingle();
+   if(saveError)throw Error("Não foi possível registrar o e-mail financeiro.");
+   if(!record){stats.skipped++;continue;}
+   if(extracted.lines.length){
+    const {error:linesError}=await db.from("ortobom_financial_lines").upsert(extracted.lines.map((line,i)=>({
+     email_id:record.id,line_number:i,cargo_reference:line.cargoReference,
+     cte_number:line.cteNumber,declared_freight:line.freight,
+     declared_advance:line.advance,declared_balance:line.balance,
+    })),{onConflict:"email_id,line_number"});
+    if(linesError)throw Error("Não foi possível registrar as cargas do relatório.");
+   }
+   stats.imported++;
+  }catch{stats.errors++;}
+ }
+ const {error:cursorError}=await db.from("fiscal_gmail_connections").update({
+  financial_next_page_token:page.nextPageToken||null,financial_last_sync_at:new Date().toISOString(),
+ }).eq("workspace_id",workspaceId).eq("owner_id",ownerId);
+ if(cursorError)throw Error("Não foi possível registrar o avanço na caixa de entrada.");
+ return stats;
 }
