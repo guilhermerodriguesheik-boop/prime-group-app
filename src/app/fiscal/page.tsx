@@ -26,6 +26,7 @@ export default async function FiscalPage() {
   const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
   const db=client as unknown as SupabaseClient;
   const gmail=ws ? await gmailStatus(ws.id).catch(()=>null) : null;
+  const gmailReady=Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.GOOGLE_GMAIL_CLIENT_ID&&process.env.GOOGLE_GMAIL_CLIENT_SECRET&&process.env.GMAIL_TOKEN_ENCRYPTION_KEY&&process.env.APP_BASE_URL);
   const [vehiclesResult,driversResult,profileResult]=await Promise.all([
     ws?db.from("vehicles").select("id,nickname,plate").eq("workspace_id",ws.id).eq("status","active"):Promise.resolve({data:[]}),
     ws?db.from("drivers").select("id,name,document").eq("workspace_id",ws.id).eq("active",true):Promise.resolve({data:[]}),
@@ -47,7 +48,7 @@ export default async function FiscalPage() {
       sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
     </div>
     <div className="quick"><a href="/motoristas">Motoristas cadastrados</a><a href="/frota">Veículos</a><a href="/cadastros/transporte">RNTRC e transporte</a><a href="/assistente">Analisar com IA</a></div>
-    {ws&&<div style={{marginTop:18}}><GmailConnector connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/></div>}
+    {ws&&<div style={{marginTop:18}}><GmailConnector ready={gmailReady} connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/></div>}
     <div style={{marginTop:18}}><OrtobomCargoForm/></div>
     <SectionTitle title="Inteligência artificial — cargas e frota"/>
     <FiscalAiPanel/>
