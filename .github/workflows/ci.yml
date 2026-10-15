@@ -44,6 +44,9 @@ jobs:
       - name: DotCompany sandbox adapter contract tests
         run: npm run test:dotcompany
 
+      - name: CT-e confirmation preflight tests
+        run: npm run test:cte-consent
+
       - name: Pluggy webhook contract tests
         run: npm run test:pluggy
 
