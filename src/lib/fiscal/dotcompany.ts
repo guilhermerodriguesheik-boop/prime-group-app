@@ -7,7 +7,9 @@ export type TransportOperation="emit"|"cancel"|"document"|"consult"|"close"|"pen
 export type ApiData=Record<string,unknown>;
 export const DOTCOMPANY_URL="https://erp.dotcompany.com.br";
 export class DotCompanyError extends Error{
- constructor(public readonly code:string,public readonly status=502){super(code);this.name="DotCompanyError";}
+ readonly code:string;
+ readonly status:number;
+ constructor(code:string,status=502){super(code);this.name="DotCompanyError";this.code=code;this.status=status;}
 }
 export function sandboxConfigured(token:string|undefined):boolean{
  return Boolean(token&&/^dc_test_[A-Za-z0-9._-]{16,}$/.test(token));
