@@ -1,5 +1,8 @@
 import { Header, SectionTitle } from "@/components/ui";
 import { FiscalImportForm } from "@/components/fiscal/import-form";
+import { GmailConnector } from "@/components/fiscal/gmail-connector";
+import { gmailStatus } from "@/lib/fiscal/gmail";
+import Link from "next/link";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
 import { mdfeTransmissionBlockers } from "@/lib/fiscal/preflight";
 import { createClient } from "@/lib/supabase/server";
@@ -19,6 +22,8 @@ export default async function FiscalPage() {
   if(!user)redirect("/login");
   const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").single();
   const db=client as unknown as SupabaseClient;
+  const {data:owned}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
+  const gmail=owned ? await gmailStatus(owned.id).catch(()=>null) : null;
   const {data:rows,error}=ws
     ? await db.from("fiscal_drafts").select("id,document_type,cargo_reference,ciot,freight_value,status,created_at,checklist,fiscal_nfe_inbox(invoice_number,sender_name,recipient_name,origin_city,destination_city,goods_value)")
        .eq("workspace_id",ws.id).order("created_at",{ascending:false}).limit(100)
@@ -34,6 +39,8 @@ export default async function FiscalPage() {
       Modo de preparação: não há emissão fiscal ativa. CT-e e MDF-e nesta tela são RASCUNHOS,
       sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
     </div>
+    <div className="quick"><Link href="/cadastros/transporte">Motoristas, veículos e RNTRC (ANTT)</Link><Link href="/assistente">Conferir pendências com a IA</Link></div>
+    <div style={{marginTop:18}}>{owned && <GmailConnector connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/>}</div>
     <div style={{marginTop:18}}><FiscalImportForm/></div>
     <SectionTitle title="Rascunhos de CT-e" />
     {error&&<div className="notice">Banco fiscal indisponível: {error.message}</div>}
