@@ -1,7 +1,9 @@
 import { Header, SectionTitle } from "@/components/ui";
 import { FiscalImportForm } from "@/components/fiscal/import-form";
+import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
 import { mdfeTransmissionBlockers } from "@/lib/fiscal/preflight";
+import { fiscalIntegrationState } from "@/lib/fiscal/focus";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
@@ -17,7 +19,7 @@ export default async function FiscalPage() {
   const client = await createClient();
   const {data:{user}}=await client.auth.getUser();
   if(!user)redirect("/login");
-  const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").single();
+  const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
   const db=client as unknown as SupabaseClient;
   const {data:rows,error}=ws
     ? await db.from("fiscal_drafts").select("id,document_type,cargo_reference,ciot,freight_value,status,created_at,checklist,fiscal_nfe_inbox(invoice_number,sender_name,recipient_name,origin_city,destination_city,goods_value)")
@@ -34,7 +36,17 @@ export default async function FiscalPage() {
       Modo de preparação: não há emissão fiscal ativa. CT-e e MDF-e nesta tela são RASCUNHOS,
       sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
     </div>
-    <div style={{marginTop:18}}><FiscalImportForm/></div>
+    <div className="quick"><a href="/motoristas">Motoristas cadastrados</a><a href="/frota">Veículos</a><a href="/assistente">Analisar com IA</a></div><div style={{marginTop:18}}><OrtobomCargoForm/></div>
+    <div className="notice" style={{marginTop:12}}>
+      Importação automática de novos e-mails: conector Google Apps Script disponível,
+      aguardando ativação na conta Gmail e credenciais do servidor.
+      Para conferir o registro ANTT, consulte{" "}
+      <a target="_blank" rel="noopener noreferrer" href="https://consultapublica.antt.gov.br/Site/ConsultaRNTRC.aspx">
+        RNTRC por transportador ou placa
+      </a>.
+    </div>
+    <SectionTitle title="Importação individual de NF-e"/>
+    <FiscalImportForm/>
     <SectionTitle title="Rascunhos de CT-e" />
     {error&&<div className="notice">Banco fiscal indisponível: {error.message}</div>}
     <div className="table-wrap">
@@ -68,6 +80,13 @@ export default async function FiscalPage() {
       </tr>)}
       {manifests.length===0&&<tr><td colSpan={5}>Nenhum manifesto preparado.</td></tr>}
       </tbody></table>
+    </div>
+    <SectionTitle title="Conexão com o autorizador fiscal"/>
+    <div className="notice">
+      Focus NFe CT-e/MDF-e — homologação: {fiscalIntegrationState().homologacao?"credencial configurada":"sem credencial"};
+      produção: {fiscalIntegrationState().producao?"credencial configurada":"sem credencial"}.
+      Os rascunhos desta tela não são documentos autorizados. A integração de emissão
+      e os retornos da SEFAZ precisam estar habilitados no ambiente da empresa.
     </div>
     <SectionTitle title="Pendências para emissão fiscal real"/>
     <div className="notice">
