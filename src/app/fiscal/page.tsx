@@ -36,7 +36,7 @@ export default async function FiscalPage() {
       Modo de preparação: não há emissão fiscal ativa. CT-e e MDF-e nesta tela são RASCUNHOS,
       sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
     </div>
-    <div style={{marginTop:18}}><OrtobomCargoForm/></div>
+    <div className="quick"><a href="/motoristas">Motoristas cadastrados</a><a href="/frota">Veículos</a><a href="/assistente">Analisar com IA</a></div><div style={{marginTop:18}}><OrtobomCargoForm/></div>
     <div className="notice" style={{marginTop:12}}>
       A importação automática do Gmail depende de autorizar a conta no próprio aplicativo;
       o acesso ao Gmail pelo ChatGPT não transfere autorização OAuth para o Prime Finance.
