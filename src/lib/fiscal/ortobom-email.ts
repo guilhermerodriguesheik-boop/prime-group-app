@@ -12,7 +12,7 @@ function money(value:string):number|null{
 export function parseOrtobomEmail(subject:string,body:string):OrtobomEmailData{
   const cargo=subject.match(/arquivos\s+da\s+carga\s*[:#-]?\s*(\d{4,12})/i)
      || body.match(/arquivos\s+da\s+carga\s*[:#-]?\s*(\d{4,12})/i);
-  const ciot=body.match(/\bCIOT\s*[:#-]?\s*(\d[\d.\s-]{9,16}\d)\b/i);
+  const ciot=body.match(/\bCIOT\s*[:#-]?\s*(\d{11,12})(?!\d)/i);
   const lines=body.split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
   const leading=lines.slice(0,6).join(" ");
   const match=leading.match(/(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/) ||
