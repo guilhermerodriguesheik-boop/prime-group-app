@@ -456,3 +456,30 @@ html[data-theme="dark"] .fiscal-gmail-icon{background:#223b61;border-color:#3854
 @media(max-width:900px){.fiscal-dual-grid{grid-template-columns:1fr}}
 @media(max-width:700px){.main{padding:21px 15px 56px}.fiscal-workspace{gap:25px}.fiscal-hero{grid-template-columns:1fr;padding:26px 22px;border-radius:18px}.fiscal-hero h2{font-size:30px}.fiscal-hero-metrics>div:first-child{grid-column:span 2}.fiscal-section-intro{align-items:flex-start}.fiscal-jump-links{flex-wrap:nowrap;overflow-x:auto;width:100%}.fiscal-connect-layout,.fiscal-manifest-grid,.fiscal-compliance{grid-template-columns:1fr}.fiscal-hero-cta{gap:16px}.fiscal-gmail-heading .fiscal-gmail-state{margin-left:0}.fiscal-gmail-actions .button{width:100%}}
 @media(prefers-reduced-motion:reduce){.fiscal-spin{animation:none}.nav a,.card{transition:none}}
+
+/* Prime Finance workspace — ações operacionais, navegação objetiva e menos ruído. */
+.toolbar-shortcut{display:inline-flex;align-items:center;gap:7px;border:1px solid transparent;background:transparent;color:var(--muted);font-size:12px;font-weight:720;border-radius:9px;padding:9px 12px;transition:color .15s,background .15s}
+.toolbar-shortcut:hover{background:var(--panel2);color:var(--text)}
+.toolbar-shortcut.selected{color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--panel))}
+.home-workflow-strip{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(400px,.85fr);gap:24px;align-items:center;margin:0 0 23px;border:1px solid #213b60;background:linear-gradient(120deg,#0a1b33,#132e55 64%,#1c4971);color:#fff;padding:clamp(25px,3vw,39px);border-radius:21px;box-shadow:0 15px 44px rgba(17,41,82,.13);position:relative;overflow:hidden}
+.home-workflow-strip:before{content:"";position:absolute;width:340px;height:340px;border:1px solid rgba(145,192,248,.12);border-radius:50%;left:-150px;bottom:-280px;box-shadow:0 0 0 55px rgba(145,192,248,.025),0 0 0 100px rgba(145,192,248,.02)}
+.home-workflow-overline{display:flex;align-items:center;gap:9px;color:#90c6f7;font-weight:830;letter-spacing:.13em;font-size:10px}
+.home-workflow-overline span{display:inline-block;width:8px;height:8px;border-radius:50%;background:#54dcb5}
+.home-workflow-copy h2{font-size:clamp(24px,2.6vw,34px);font-weight:760;line-height:1.16;letter-spacing:-.056em;max-width:620px;margin:17px 0 11px}
+.home-workflow-copy p{line-height:1.7;color:#bdd1e8;margin:0;max-width:530px;font-size:13px}
+.home-workflow-actions{display:grid;gap:8px}
+.home-workflow-actions>a{display:flex;align-items:center;gap:12px;padding:12px 15px;border:1px solid rgba(170,213,255,.17);border-radius:11px;background:rgba(255,255,255,.075);color:#edf6ff;transition:background .16s,transform .16s}
+.home-workflow-actions>a:hover{background:rgba(255,255,255,.12);transform:translateX(2px)}
+.home-workflow-actions>a>svg:first-child{color:#9ac8fd;flex-shrink:0}
+.home-workflow-actions>a>span{display:grid;gap:3px;flex:1}
+.home-workflow-actions strong{font-size:13px;font-weight:750}
+.home-workflow-actions small{font-size:11px;color:#b2cbe6}
+.home-workflow-actions>a>svg:last-child{opacity:.7}
+.home-intelligence-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:25px 0 13px}
+.home-intelligence-heading span{font-size:10px;letter-spacing:.13em;color:var(--accent);font-weight:820}
+.home-intelligence-heading h2{font-size:20px;letter-spacing:-.045em;margin:6px 0 5px}
+.home-intelligence-heading p{font-size:12px;color:var(--muted);margin:0}
+.home-intelligence-heading>a{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--accent);padding-bottom:3px}
+@media(max-width:1100px){.home-workflow-strip{grid-template-columns:1fr}.home-workflow-actions{grid-template-columns:repeat(3,minmax(0,1fr))}.home-workflow-actions>a{align-items:flex-start;flex-wrap:wrap}.home-workflow-actions>a>span{flex-basis:65%}}
+@media(max-width:850px){.toolbar-shortcut{display:none}.home-workflow-actions{grid-template-columns:1fr}.home-workflow-actions>a{flex-wrap:nowrap}}
+@media(max-width:700px){.home-workflow-strip{padding:24px 20px;border-radius:17px}.home-workflow-copy h2{font-size:26px}}

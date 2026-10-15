@@ -116,7 +116,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="shell-content">
         <header className="app-toolbar">
           <div className="toolbar-location"><span className="toolbar-dot"/> PRIME <span className="toolbar-separator">/</span> <strong>{currentLabel}</strong></div>
-          <div className="toolbar-actions">{themeButton("theme-button")}</div>
+          <div className="toolbar-actions">
+            <Link href="/fiscal" className={"toolbar-shortcut"+(pathname.startsWith("/fiscal")?" selected":"")}><FileCheck2 size={16}/> Fiscal</Link>
+            <Link href="/assistente" className={"toolbar-shortcut"+(pathname.startsWith("/assistente")?" selected":"")}><Sparkles size={16}/> Assistente IA</Link>
+            {themeButton("theme-button")}
+          </div>
         </header>
         <main className="main">{children}</main>
       </div>
