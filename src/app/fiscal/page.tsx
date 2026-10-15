@@ -2,6 +2,7 @@ import { Header, SectionTitle } from "@/components/ui";
 import { FiscalImportForm } from "@/components/fiscal/import-form";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
 import { mdfeTransmissionBlockers } from "@/lib/fiscal/preflight";
+import { fiscalIntegrationState } from "@/lib/fiscal/focus";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
