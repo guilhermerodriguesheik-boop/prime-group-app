@@ -1,4 +1,4 @@
-import { Header, SectionTitle } from "@/components/ui";
+import { Header } from "@/components/ui";
 import { FiscalImportForm } from "@/components/fiscal/import-form";
 import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
 import { FiscalAiPanel } from "@/components/fiscal/fiscal-ai-panel";
@@ -42,6 +42,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
   const db=client as unknown as SupabaseClient;
   const gmail=ws ? await gmailStatus(ws.id).catch(()=>null) : null;
   const gmailReady=Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.GOOGLE_GMAIL_CLIENT_ID&&process.env.GOOGLE_GMAIL_CLIENT_SECRET&&process.env.GMAIL_TOKEN_ENCRYPTION_KEY&&process.env.APP_BASE_URL);
+  const {count:invoiceCount}=ws?await db.from("fiscal_nfe_inbox").select("id",{count:"exact",head:true}).eq("workspace_id",ws.id):{count:0};
   const [vehiclesResult,driversResult,profileResult]=await Promise.all([
     ws?db.from("vehicles").select("id,nickname,plate").eq("workspace_id",ws.id).eq("status","active"):Promise.resolve({data:[]}),
     ws?db.from("drivers").select("id,name,document").eq("workspace_id",ws.id).eq("active",true):Promise.resolve({data:[]}),
@@ -73,27 +74,14 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
           </div>
           <div className="fiscal-hero-metrics">
             <div><span>CT-e em preparação</span><strong>{pending.toLocaleString("pt-BR")}</strong><small>Rascunhos sem autorização fiscal</small></div>
-            <div><span>NF-e carregadas</span><strong>{ctes.length.toLocaleString("pt-BR")}</strong><small>Cargas vinculadas ao emissor</small></div>
+            <div><span>NF-e carregadas</span><strong>{(invoiceCount||0).toLocaleString("pt-BR")}</strong><small>XMLs das notas armazenados</small></div>
             <div><span>MDF-e em preparação</span><strong>{manifests.length.toLocaleString("pt-BR")}</strong><small>Manifestos ainda não transmitidos</small></div>
           </div>
         </section>
         {query.gmail==="connected"&&gmail&&<div className="fiscal-alert fiscal-alert-success" role="status"><strong>Gmail autorizado e vinculado.</strong><span>Você já pode importar os e-mails da Ortobom.</span></div>}
         {query.gmail==="connection_failed"&&<div className="fiscal-alert fiscal-alert-error" role="alert">
           <strong>Não foi possível concluir a conexão com o Google.</strong>
-          <span>{{
-            invalid_state:"O cookie da autorização expirou ou foi bloqueado. Inicie uma nova conexão no mesmo navegador.",
-            not_authorized:"A autorização não foi concluída. Verifique se lgtransporteelogistica@gmail.com está nos usuários de teste.",
-            invalid_client:"O Google rejeitou o cliente OAuth configurado. A chave do aplicativo precisa ser revista.",
-            invalid_grant:"O código do Google expirou ou já foi utilizado. Inicie uma nova conexão.",
-            token_denied:"O Google recusou a troca do código OAuth. Confira a URI de redirecionamento.",
-            missing_refresh:"O Google não forneceu uma chave para manter a conexão ativa. Revogue a autorização antiga e autorize novamente.",
-            wrong_google_account:"Conta incorreta. Selecione lgtransporteelogistica@gmail.com.",
-            supabase_access:"O servidor não conseguiu acessar o Supabase com a credencial administrativa.",
-            database_write:"A autorização chegou, mas o Supabase não permitiu salvar a conexão.",
-            gmail_profile:"O Google não forneceu os dados da conta. Confira se a Gmail API está habilitada.",
-            session_or_workspace:"O login do Prime Finance expirou durante a autorização. Entre novamente e reconecte.",
-            unexpected:"Ocorreu uma falha inesperada no retorno da autorização.",
-          }[query.reason||"unexpected"]||"Ocorreu uma falha inesperada na autorização."}</span>
+          <span>{oauthMessages[query.reason||"unexpected"]||oauthMessages.unexpected}</span>
           <small>Código do diagnóstico: {query.reason||"unexpected"}</small>
         </div>}
         {query.gmail==="setup_required"&&<div className="fiscal-alert fiscal-alert-error" role="alert">Entre com a conta proprietária do Prime Finance antes de conectar o Gmail.</div>}
