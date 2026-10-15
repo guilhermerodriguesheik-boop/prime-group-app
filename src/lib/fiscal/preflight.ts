@@ -17,6 +17,13 @@ const UFS = new Set([
 ]);
 export const normalizeDigits = (value: string) => value.replace(/\D/g,"");
 export const normalizePlate = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g,"");
+/** Não oferecer preparação de novo CT-e quando existir sinal de emissão externa. */
+export function canPrepareNewCte(status:string,checklist:unknown):boolean{
+ if(status!=="draft")return false;
+ if(!checklist||typeof checklist!=="object"||Array.isArray(checklist))return true;
+ const flags=checklist as Record<string,unknown>;
+ return flags.do_not_issue_duplicate!==true && flags.previous_external_cte_key==null;
+}
 
 export function validCpf(value: string): boolean {
   const cpf = normalizeDigits(value);

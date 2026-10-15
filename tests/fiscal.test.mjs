@@ -88,3 +88,11 @@ test("Ortobom email groups XML invoices without multiplying freight",()=>{
  assert.equal(two.freightValue,3420);
  assert.equal(two.ciot,"20038706271");
 });
+
+import {canPrepareNewCte} from "../src/lib/fiscal/preflight.ts";
+test("não oferecer CT-e novo quando DACTE externo já foi identificado",()=>{
+ assert.equal(canPrepareNewCte("draft",{do_not_issue_duplicate:true}),false);
+ assert.equal(canPrepareNewCte("review_pending",{previous_external_cte_key:"33260942361401000117570030000000311000000364"}),false);
+ assert.equal(canPrepareNewCte("draft",{previous_external_cte_key:"33260942361401000117570030000000311000000364"}),false);
+ assert.equal(canPrepareNewCte("draft",{fiscal_approval:false}),true);
+});
