@@ -1,7 +1,7 @@
 "use client";
 import { useActionState, useState } from "react";
 import { createMdfePreparation, type FiscalImportState } from "@/app/fiscal/actions";
-export type CteDraftChoice={id:string;label:string};
+export type CteDraftChoice={id:string;label:string;originUf:string;destinationUf:string};
 export type VehicleChoice={id:string;plate:string;name:string};
 export type DriverChoice={id:string;cpf:string;name:string};
 const initial: FiscalImportState={ok:false,message:""};
@@ -13,11 +13,14 @@ export function MdfeDraftForm({cteDrafts,vehicles,drivers,rntrc}:{
  const [driverId,setDriverId]=useState("");
  const [plate,setPlate]=useState("");
  const [cpf,setCpf]=useState("");
+ const [originUf,setOriginUf]=useState("");
+ const [destinationUf,setDestinationUf]=useState("");
  return <form action={action} className="card fiscal-form">
   <h3>Preparar MDF-e para a viagem</h3>
   <p>Selecionar veículo e motorista cadastrados preenche os campos. O documento ainda não é transmitido.</p>
   <label>CT-e de referência
     <select name="cteDraftId" required disabled={!cteDrafts.length} defaultValue=""
+      onChange={e=>{const draft=cteDrafts.find(d=>d.id===e.target.value);setOriginUf(draft?.originUf||"");setDestinationUf(draft?.destinationUf||"");}}
       style={{display:"block",width:"100%",padding:10}}>
       <option value="" disabled>Selecione a carga</option>
       {cteDrafts.map(d=><option key={d.id} value={d.id}>{d.label}</option>)}
@@ -52,8 +55,8 @@ export function MdfeDraftForm({cteDrafts,vehicles,drivers,rntrc}:{
       placeholder="RNTRC — conferir na ANTT"/>
   </label>
   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-   <label>UF origem <input name="originUf" required minLength={2} maxLength={2} placeholder="RJ" /></label>
-   <label>UF destino <input name="destinationUf" required minLength={2} maxLength={2} placeholder="MG" /></label>
+   <label>UF origem <input name="originUf" value={originUf} onChange={e=>setOriginUf(e.target.value.toUpperCase())} required minLength={2} maxLength={2} placeholder="RJ" /></label>
+   <label>UF destino <input name="destinationUf" value={destinationUf} onChange={e=>setDestinationUf(e.target.value.toUpperCase())} required minLength={2} maxLength={2} placeholder="MG" /></label>
   </div>
   <button className="button" type="submit" disabled={pending||cteDrafts.length===0}>
     {pending?"Conferindo...":"Salvar manifesto em rascunho"}

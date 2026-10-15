@@ -18,7 +18,7 @@ type Draft = {
   id:string; document_type:string; cargo_reference:string|null;ciot:string|null;
   freight_value:number|null;status:string;created_at:string;
   checklist:{vehicle_plate?:string;origin_uf?:string;destination_uf?:string;source_cte_draft_id?:string;previous_external_cte_number?:string;previous_external_cte_series?:string;previous_external_cte_key?:string;do_not_issue_duplicate?:boolean}|null;
-  fiscal_nfe_inbox:{invoice_number:string;sender_name:string;recipient_name:string;origin_city:string;destination_city:string;goods_value:number}|null;
+  fiscal_nfe_inbox:{invoice_number:string;sender_name:string;recipient_name:string;origin_city:string;destination_city:string;origin_uf:string;destination_uf:string;goods_value:number}|null;
 };
 const money = (n:number|null)=>n===null?"Nao informado":n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 export default async function FiscalPage({searchParams}:{searchParams:Promise<{gmail?:string;reason?:string}>}) {
@@ -53,15 +53,21 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
     ws?db.from("drivers").select("id,name,document").eq("workspace_id",ws.id).eq("active",true):Promise.resolve({data:[]}),
     ws?db.from("fiscal_transport_profiles").select("rntrc").eq("workspace_id",ws.id).maybeSingle():Promise.resolve({data:null}),
   ]);
+  const {data:historicalRows}=ws?await db.from("cte_documents")
+    .select("access_key,number,series,issued_at,total_value,status")
+    .eq("workspace_id",ws.id).eq("source","gmail_dacte")
+    .order("issued_at",{ascending:false}).limit(15):{data:[]};
+  const historicalCtes=historicalRows||[];
   const {data:rows,error}=ws
-    ? await db.from("fiscal_drafts").select("id,document_type,cargo_reference,ciot,freight_value,status,created_at,checklist,fiscal_nfe_inbox(invoice_number,sender_name,recipient_name,origin_city,destination_city,goods_value)")
+    ? await db.from("fiscal_drafts").select("id,document_type,cargo_reference,ciot,freight_value,status,created_at,checklist,fiscal_nfe_inbox(invoice_number,sender_name,recipient_name,origin_city,destination_city,origin_uf,destination_uf,goods_value)")
        .eq("workspace_id",ws.id).order("created_at",{ascending:false}).limit(100)
     : {data:[],error:null};
   const drafts=(rows??[]) as unknown as Draft[];
   const ctes=drafts.filter(x=>x.document_type==="cte");
   const manifests=drafts.filter(x=>x.document_type==="mdfe");
   const choices=ctes.filter(x=>canPrepareNewCte(x.status,x.checklist))
-    .map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem numero")+" — NF-e "+(x.fiscal_nfe_inbox?.invoice_number||"nao informada")}));
+    .map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem numero")+" — NF-e "+(x.fiscal_nfe_inbox?.invoice_number||"nao informada"),
+      originUf:x.fiscal_nfe_inbox?.origin_uf||"",destinationUf:x.fiscal_nfe_inbox?.destination_uf||""}));
   const pending=ctes.filter(x=>x.status==="draft").length;
   return (
     <>
@@ -138,6 +144,20 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
             </table>
           </div>
         </section>
+        {historicalCtes.length>0&&<section aria-label="CT-es emitidos fora do Prime Finance">
+          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">REGISTROS RECUPERADOS DO GMAIL</span>
+            <h2>CT-e já enviados pelo Cargozilla</h2>
+            <p>Documentos existentes identificados nos DACTEs enviados à Ortobom. O protocolo impresso ainda precisa de consulta oficial na SEFAZ.</p>
+          </div><span className="fiscal-count">{historicalCtes.length} identificados</span></div>
+          <div className="table-wrap fiscal-data-table"><table><thead><tr><th>Número</th><th>Série</th><th>Data</th><th>Frete</th><th>Chave CT-e</th><th>Situação</th></tr></thead>
+          <tbody>{historicalCtes.map(x=><tr key={x.access_key}>
+            <td><strong>{x.number||"—"}</strong></td><td>{x.series||"—"}</td>
+            <td>{x.issued_at?new Date(x.issued_at).toLocaleDateString("pt-BR"):"—"}</td>
+            <td>{money(x.total_value===null?null:Number(x.total_value))}</td>
+            <td><span className="fiscal-key-truncate" title={x.access_key||""}>{x.access_key||"—"}</span></td>
+            <td><span className="fiscal-cte-external">DACTE recebido · consultar SEFAZ</span></td>
+          </tr>)}</tbody></table></div>
+        </section>}
         <div className="fiscal-dual-grid">
           <section id="fiscal-assistant">
             <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">03 / INTELIGÊNCIA OPERACIONAL</span><h2>Conferência por IA</h2><p>Pergunte sobre cargas, notas, CIOT, motoristas e veículos.</p></div></div>

@@ -503,3 +503,5 @@ html[data-theme="dark"] .fiscal-gmail-icon{background:#223b61;border-color:#3854
 
 /* Documento emitido fora do Prime: diferenciação visível e bloqueio de novas preparações. */
 .fiscal-cte-external{display:inline-block;font-size:11px;line-height:1.5;border:1px solid color-mix(in srgb,var(--warn) 35%,var(--line));background:color-mix(in srgb,var(--warn) 10%,var(--panel));color:var(--warn);padding:6px 10px;border-radius:8px;font-weight:740;white-space:nowrap}
+
+.fiscal-key-truncate{display:block;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-variant-numeric:tabular-nums;color:var(--muted)}
