@@ -1,6 +1,7 @@
 "use client";
 
 import Script from "next/script";
+import { classifyBankMovement } from "@/app/actions/premium";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownLeft, ArrowUpRight, CheckCircle2, ChevronDown,
@@ -16,7 +17,7 @@ type BankAccount={id:string;connection_id:string;display_name:string;account_las
 type Statement={id:string;bank_account_id:string;occurred_on:string;description:string;
   amount:number;direction:"credit"|"debit";provider_status:string;review_status:string;category:string|null};
 type Data={configured:boolean;mode:string;archivedView:boolean;workspaces:Workspace[];
-  connections:Connection[];accounts:BankAccount[];transactions:Statement[]};
+  connections:Connection[];accounts:BankAccount[];transactions:Statement[];classifications:{bank_transaction_id:string;destination:string;category:string|null}[]};
 type WidgetOptions={
   connectToken:string;includeSandbox:boolean;updateItem?:string;selectedConnectorId?:number;connectorIds?:number[];products?:string[];
   onSuccess:(data:{item:{id:string}})=>void;onError:(error:{message:string})=>void;onClose?:()=>void;
@@ -61,6 +62,7 @@ export function BankDashboard(){
   const visibleConnections=showArchived?archivedConnections:activeConnections;
   const accountMap=useMemo(()=>new Map((data?.accounts||[]).map(a=>[a.id,a])),[data]);
   const pendingVisible=(data?.transactions||[]).filter(t=>t.review_status==="pending").length;
+  const classificationMap=new Map((data?.classifications||[]).map(c=>[c.bank_transaction_id,c]));
 
   const load=useCallback(async()=>{
     try{
@@ -375,11 +377,30 @@ export function BankDashboard(){
         <td><span className={"bank-money "+(t.direction==="credit"?"credit":"debit")}>
           {t.direction==="credit"?<ArrowDownLeft size={13} style={{verticalAlign:"middle"}}/>:<ArrowUpRight size={13} style={{verticalAlign:"middle"}}/>} {t.direction==="credit"?"+":"−"} {money(Number(t.amount))}
         </span></td>
-        <td>{t.review_status==="matched"?<span className="bank-inline-badge good"><CheckCircle2 size={12}/> Conciliada</span>:
+        <td><div className="bank-transaction-actions">
+          {t.review_status==="matched"?<span className="bank-inline-badge good"><CheckCircle2 size={12}/> Conciliada</span>:<>
+          {classificationMap.has(t.id)&&<span className="bank-inline-badge good">Direcionado: {classificationMap.get(t.id)?.destination}</span>}
+          <details className="premium-disclosure"><summary>Direcionar</summary>
+            <form onSubmit={async e=>{e.preventDefault();setBusy(t.id);
+              try{await classifyBankMovement(new FormData(e.currentTarget));setNotice("Classificação salva para conferência, sem alterar caixa.");await load();}
+              catch(error){setNotice(error instanceof Error?error.message:"Falha ao classificar.");}
+              finally{setBusy("");}
+            }} className="bank-classify-form">
+              <input type="hidden" name="id" value={t.id}/>
+              <select name="destination" className="bank-select" defaultValue={classificationMap.get(t.id)?.destination||"pending"} aria-label="Destino da movimentação">
+                <option value="prime">Prime Group</option><option value="personal">Pessoal</option>
+                <option value="interest">Empréstimos/Juros</option><option value="transfer">Transferência entre contas</option>
+                <option value="pending">Ainda não sei</option>
+              </select>
+              <input className="bank-input" type="text" name="category" maxLength={80} placeholder="Categoria (ex.: combustível)" defaultValue={classificationMap.get(t.id)?.category||""}/>
+              <button type="submit" className="button primary compact" disabled={!!busy}>Salvar destino</button>
+            </form>
+          </details>
           <button type="button" className="button compact bank-button" disabled={!!busy}
             onClick={()=>void review(t.id,t.review_status==="ignored"?"pending":"ignored")}>
             {t.review_status==="ignored"?"Reabrir":"Ignorar"}
-          </button>}</td>
+          </button></>}
+        </div></td>
       </tr>)}
       {!filteredTransactions.length&&<tr><td colSpan={5} style={{textAlign:"center",padding:25,color:"var(--muted)"}}>Nenhum lançamento encontrado para esses filtros.</td></tr>}
       </tbody></table></div>

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3, Building2, CalendarDays, CreditCard, FileText, Landmark,
   LayoutDashboard, LogOut, Menu, Moon, Percent, Settings2, ShieldCheck,
-  Sparkles, Sun, Truck, UserRound, X, ClipboardList, Route,
+  Sparkles, Sun, Truck, UserRound, X, ClipboardList, Route, UsersRound, Repeat2, BellRing,
 } from "lucide-react";
 
 const nav = [
@@ -19,15 +19,18 @@ const nav = [
   ]},
   {label:"Gestão",items:[
     {label:"Planejamento",href:"/planejamento",icon:CalendarDays},
+    {label:"Dívidas recorrentes",href:"/recorrentes",icon:Repeat2},
     {label:"Relatórios",href:"/relatorios",icon:BarChart3},
     {label:"Empréstimos e juros",href:"/juros",icon:Percent},
     {label:"Viagens e fretes",href:"/viagens",icon:Route},
+    {label:"Equipe e pagamentos",href:"/equipes",icon:UsersRound},
     {label:"Frota",href:"/frota",icon:Truck},
   ]},
   {label:"Ferramentas",items:[
     {label:"Assistente IA",href:"/assistente",icon:Sparkles},
     {label:"Documentos",href:"/documentos",icon:FileText},
     {label:"Registros parciais",href:"/registros",icon:ClipboardList},
+    {label:"Automações",href:"/configuracoes",icon:BellRing},
     {label:"Integrações",href:"/integracoes",icon:Settings2},
   ]},
 ] as const;
@@ -83,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className={"sidebar"+(menuOpen?" sidebar-open":"")}>
         <div className="brand">
           <div className="brand-mark">P</div>
-          <div><strong>Prime Finance</strong><small>Gestão inteligente</small></div>
+          <div><strong>PRIME<span className="premium-brand-accent"> FINANCE</span></strong><small>PRIVATE FINANCIAL OFFICE</small></div>
         </div>
         <div className="sidebar-scroll">
           {nav.map(group=>(
@@ -111,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </aside>
       <div className="shell-content">
         <header className="app-toolbar">
-          <div className="toolbar-location"><span className="toolbar-dot"/> Painel financeiro <span className="toolbar-separator">/</span> <strong>{currentLabel}</strong></div>
+          <div className="toolbar-location"><span className="toolbar-dot"/> PRIME <span className="toolbar-separator">/</span> <strong>{currentLabel}</strong></div>
           <div className="toolbar-actions">{themeButton("theme-button")}</div>
         </header>
         <main className="main">{children}</main>

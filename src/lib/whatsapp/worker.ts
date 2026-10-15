@@ -2,6 +2,7 @@ import { Output, generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { summarizeFiscalXml } from "@/lib/assistant/fiscal-xml";
+import { chooseAiProfile } from "@/lib/ai/cost-routing";
 
 type Obj = Record<string, unknown>;
 type Event = {
@@ -12,13 +13,14 @@ type Event = {
 const schema = z.object({
   answer: z.string().max(1500),
   actions: z.array(z.object({
-    kind: z.enum(["transaction","trip","note"]),
+    kind: z.enum(["transaction","trip","note","debt"]),
     workspace: z.enum(["prime","personal","interest"]).nullable(),
     certainty: z.enum(["confirmed","unconfirmed"]),
     description: z.string().max(500),
     direction: z.enum(["income","expense"]).nullable(),
     amount: z.number().nonnegative().nullable(),
     date: z.string().nullable(),
+    recurrence: z.enum(["none","monthly"]).optional(),
     origin: z.string().nullable(),
     destination: z.string().nullable(),
     customer: z.string().nullable(),
@@ -291,16 +293,23 @@ async function understand(message: string, context: Obj, media?: {
     "Não deduza data de pagamento passada. Campo faltante é null; se precisar, gere note.",
     "Notas fiscais não comprovam pagamento, não gere transação apenas por nota fiscal.",
     "Empréstimos, juros, quitação, transferências e baixas de dívidas: gere note, nunca transaction.",
+    "Uma conta A PAGAR pode ser cadastrada como debt, sem alterar o caixa, APENAS quando o remetente pedir explicitamente para cadastrar, houver descrição, valor, vencimento exato e ambiente prime ou personal.",
+    "Para conta repetida mensalmente e explicitamente solicitada, recurrence=monthly; caso contrário recurrence=none. Sem dia/valor completos gere note.",
     "Se ambiente ou dados não estiverem claros, gere note com workspace=null; jamais invente fatos.",
     "Não afirme que gravou nada em answer: a aplicação confirmará após registrar.",
     "No máximo 3 ações, não invente números ou nomes e nunca liste credenciais.",
   ].join("\n");
 
+  const profile = chooseAiProfile({
+    message, hasVisual: Boolean(media && (media.mime.startsWith("image/") || media.mime === "application/pdf")),
+    channel: "whatsapp",
+  });
   const response = await generateText({
-    model:openai(process.env.PRIME_AGENT_MODEL?.trim()||"gpt-6-astra"),
+    model:openai(profile.model),
     output:Output.object({schema}),
     system,messages:[{role:"user",content:userContent}],
-    maxOutputTokens:2200,timeout:36000,maxRetries:0,
+    providerOptions: { openai: { store: false, reasoningEffort: profile.reasoningEffort } },
+    maxOutputTokens:profile.maxOutputTokens,timeout:36000,maxRetries:0,
   });
   return response.output;
 }
@@ -391,6 +400,24 @@ export async function processWhatsAppQueue(maxMessages=1) {
         await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
         processed++;continue;
       }
+      // Replies to bank prompts do not require AI and cannot book money movements.
+      const classification=text.match(/^classificar\s+([a-f0-9]{8})\s+(prime|empresa|pessoal|personal|juros|interest|transfer[eê]ncia|transfer|pendente)(?:\s+(.{1,80}))?$/i);
+      if(classification){
+        const raw=classification[2].normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+        const destination=raw==="empresa"?"prime":raw==="pessoal"?"personal":raw==="juros"?"interest":
+          raw.startsWith("transfer")?"transfer":raw==="pendente"?"pending":raw;
+        const changed=await rpc<boolean>("prime_whatsapp_classify_bank",{
+          p_secret:secret,p_event_id:event.id,p_reference:classification[1].toUpperCase(),
+          p_destination:destination,p_category:(classification[3]||"").trim(),
+        });
+        const answer=changed
+          ?"Classificação guardada para conferência. Não registrei receita, despesa, transferência ou baixa automaticamente."
+          :"Não encontrei essa referência vinculada ao seu WhatsApp. Confira o código enviado.";
+        await sendText(event.from||"",answer);
+        await rpc("whatsapp_finish_event",{p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:answer});
+        await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
+        processed++;continue;
+      }
       const interpretation = await understand(text,context,visual);
       const confirmations:string[]=[];
       for (let index=0;index<interpretation.actions.length;index++) {
@@ -403,6 +430,21 @@ export async function processWhatsAppQueue(maxMessages=1) {
           (!event.mediaId || /\b(hoje|ontem|anteontem|dia\s+\d{1,2}|em\s+\d{1,2}[\/.-]\d{1,2})\b/i.test(text));
         const safeAction = action.kind==="transaction"&&!allowedTransaction ?
           {...action,kind:"note",certainty:"unconfirmed"} : action;
+        if(action.kind==="debt"&&action.workspace!==null&&
+           ["prime","personal"].includes(action.workspace)&&action.amount!==null&&action.amount>0&&
+           action.description.length>=2&&validDate(action.date)&&
+           /\b(cadastre|cadastrar|registra|registre|lan[cç]a|anota|inclui|me lembre|tenho que pagar)\b/i.test(text)&&
+           !/\b(simula|exemplo|nao cadastre|não cadastre|nao registre|não registre)\b/i.test(text)){
+          const saved=await rpc<{saved:boolean}>("prime_whatsapp_create_debt",{
+            p_secret:secret,p_event_id:event.id,p_index:index,
+            p_description:action.description,p_amount:action.amount,p_due_date:action.date,
+            p_workspace:action.workspace,p_recurrence:action.recurrence==="monthly"?"monthly":"none",
+          });
+          if(saved.saved)confirmations.push(action.recurrence==="monthly"
+            ?"Dívida mensal cadastrada em contas recorrentes, sem lançar pagamento."
+            :"Conta a pagar cadastrada, sem descontar do caixa.");
+          continue;
+        }
         const saved=await rpc<{saved:boolean;kind:string;workspace?:string}>("whatsapp_apply_action",{
           p_secret:secret,p_event_id:event.id,p_index:index,p_action:safeAction,
           p_text:text.slice(0,8000),

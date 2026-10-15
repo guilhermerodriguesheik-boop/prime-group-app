@@ -51,11 +51,11 @@ export default async function Page() {
       <SectionTitle title="Lembretes de pagamentos" hint={dueAlerts.length ? `${dueAlerts.length} aviso(s) aguardando atenção` : "avisos no próprio aplicativo"} />
       <div className="notice">
         {evolutionGoConfigured
-          ? "O canal Evolution Go está configurado. Avisos automáticos são enviados pelo WhatsApp 3 dias antes e no dia do vencimento, para o número vinculado, quando estiverem ativados."
+          ? "O canal Evolution Go está configurado. Avisos automáticos são enviados pelo WhatsApp 3 dias antes e no dia do vencimento, para o número vinculado, quando ativados. A entrega pode sofrer atrasos do provedor."
           : "O canal Evolution Go precisa estar configurado para enviar alertas automáticos; lembretes continuam disponíveis no aplicativo."}
         {" "}Finalizar um lembrete não dá baixa financeira na conta.
         <form action={setWhatsappReminderPreference} className="record-alert-settings">
-          <span>Alertas no WhatsApp: <b>{alertsOn?"ativados":"desativados"}</b> • Envio diário às 7h (horário de Brasília)</span>
+          <span>Alertas no WhatsApp: <b>{alertsOn?"ativados":"desativados"}</b> • Envio diário por volta das 20h50 (horário de Brasília)</span>
           <input type="hidden" name="enabled" value={alertsOn?"no":"yes"} />
           <button type="submit" className="button compact">{alertsOn?"Desativar avisos":"Ativar avisos"}</button>
         </form>

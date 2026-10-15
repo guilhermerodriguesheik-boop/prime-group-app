@@ -2,6 +2,8 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { processWhatsAppQueue } from "@/lib/whatsapp/worker";
 import { runScheduledReminders } from "@/lib/whatsapp/scheduled-reminders";
+import { runPrimeDailyJobs } from "@/lib/whatsapp/prime-automations";
+import {drainPluggyEventInbox} from "@/lib/banks/event-worker";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,7 +16,13 @@ export async function GET(request: Request) {
     return NextResponse.json({error:"Unauthorized"},{status:401});
   }
   try {
-    // Existing daily cron: 10:00 UTC (07:00 in Rio de Janeiro).
+    // Runs daily in Brazil; fresh bank events also trigger notifications via verified Pluggy webhook.
+    let automations:unknown;
+    try{automations=await runPrimeDailyJobs();}
+    catch(error){console.error("Prime automation batch unavailable",error instanceof Error?error.message:"unknown");automations={error:"automation_unavailable"};}
+    let bankEvents:unknown;
+    try{bankEvents=await drainPluggyEventInbox(2);}
+    catch(error){console.error("Pluggy event retry unavailable",error instanceof Error?error.message:"unknown");bankEvents={error:"bank_events_unavailable"};}
     let reminders:unknown;
     try{reminders=await runScheduledReminders();}
     catch(error){
@@ -22,7 +30,7 @@ export async function GET(request: Request) {
       reminders={sent:0,error:"delivery_unavailable"};
     }
     const queue=await processWhatsAppQueue(2);
-    return NextResponse.json({reminders,queue},{
+    return NextResponse.json({automations,bankEvents,reminders,queue},{
       headers:{"Cache-Control":"no-store"},
     });
   } catch(error) {
