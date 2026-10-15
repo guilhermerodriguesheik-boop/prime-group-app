@@ -188,8 +188,8 @@ async function importMessage(db:SupabaseClient,token:string,workspaceId:string,o
   }
   if(!invoices.length)return {skipped:true,invoices:0};
   const {data:previous}=await db.from("fiscal_drafts").select("id").eq("workspace_id",workspaceId)
-    .eq("cargo_reference",freight.cargoReference).eq("document_type","cte").eq("ciot",freight.ciot)
-    .limit(1).maybeSingle();
+    .eq("cargo_reference",freight.cargoReference).eq("document_type","cte")
+    .neq("status","canceled").limit(1).maybeSingle();
   let draftId=previous?.id;
   if(!draftId){
     const {data:created,error}=await db.from("fiscal_drafts").insert({
