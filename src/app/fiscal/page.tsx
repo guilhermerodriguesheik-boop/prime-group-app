@@ -1,5 +1,6 @@
 import { Header, SectionTitle } from "@/components/ui";
 import { FiscalImportForm } from "@/components/fiscal/import-form";
+import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
 import { mdfeTransmissionBlockers } from "@/lib/fiscal/preflight";
 import { fiscalIntegrationState } from "@/lib/fiscal/focus";
@@ -18,7 +19,7 @@ export default async function FiscalPage() {
   const client = await createClient();
   const {data:{user}}=await client.auth.getUser();
   if(!user)redirect("/login");
-  const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").single();
+  const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
   const db=client as unknown as SupabaseClient;
   const {data:rows,error}=ws
     ? await db.from("fiscal_drafts").select("id,document_type,cargo_reference,ciot,freight_value,status,created_at,checklist,fiscal_nfe_inbox(invoice_number,sender_name,recipient_name,origin_city,destination_city,goods_value)")
@@ -35,7 +36,17 @@ export default async function FiscalPage() {
       Modo de preparação: não há emissão fiscal ativa. CT-e e MDF-e nesta tela são RASCUNHOS,
       sem XML assinado, número fiscal, autorização, protocolo ou validade na SEFAZ.
     </div>
-    <div style={{marginTop:18}}><FiscalImportForm/></div>
+    <div style={{marginTop:18}}><OrtobomCargoForm/></div>
+    <div className="notice" style={{marginTop:12}}>
+      A importação automática do Gmail depende de autorizar a conta no próprio aplicativo;
+      o acesso ao Gmail pelo ChatGPT não transfere autorização OAuth para o Prime Finance.
+      Para conferir o registro ANTT, consulte{" "}
+      <a target="_blank" rel="noopener noreferrer" href="https://consultapublica.antt.gov.br/Site/ConsultaRNTRC.aspx">
+        RNTRC por transportador ou placa
+      </a>.
+    </div>
+    <SectionTitle title="Importação individual de NF-e"/>
+    <FiscalImportForm/>
     <SectionTitle title="Rascunhos de CT-e" />
     {error&&<div className="notice">Banco fiscal indisponível: {error.message}</div>}
     <div className="table-wrap">
