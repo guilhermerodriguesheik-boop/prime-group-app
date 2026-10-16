@@ -9,6 +9,8 @@ import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
 import { fiscalReadiness } from "@/lib/fiscal/readiness";
 import { FiscalReadinessPanel } from "@/components/fiscal/readiness-panel";
 import { DotcompanyPanel } from "@/components/fiscal/dotcompany-panel";
+import { OrtobomFinancePanel } from "@/components/fiscal/ortobom-finance-panel";
+import { canonicalCargo } from "@/lib/fiscal/ortobom-finance-parser";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
 import { mdfeTransmissionBlockers, canPrepareNewCte } from "@/lib/fiscal/preflight";
 import { fiscalIntegrationState } from "@/lib/fiscal/focus";
@@ -69,6 +71,67 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
     .select("draft_id,status,access_key,protocol").eq("workspace_id",ws.id):{data:[]};
   const transmissionsByDraft=new Map((transmissions||[]).map(x=>[x.draft_id,x]));
   const ctes=drafts.filter(x=>x.document_type==="cte");
+  type FinanceLine={cargo_reference:string;cte_number:string|null;declared_freight:number|string|null;
+   declared_advance:number|string|null;declared_balance:number|string|null};
+  type FinanceEmail={id:string;event_kind:string;payment_date:string|null;period_start:string|null;period_end:string|null;
+   declared_bank_deposit:number|string|null;declared_promissory_discount:number|string|null;
+   ortobom_financial_lines:FinanceLine[]};
+  const {data:financialData}=ws?await db.from("ortobom_financial_emails")
+    .select("id,event_kind,payment_date,period_start,period_end,declared_bank_deposit,declared_promissory_discount,ortobom_financial_lines(cargo_reference,cte_number,declared_freight,declared_advance,declared_balance)")
+    .eq("workspace_id",ws.id).order("email_date",{ascending:false}).limit(300):{data:[]};
+  const financeEmails=(financialData||[]) as unknown as FinanceEmail[];
+  const cargoData=new Map<string,{cargo:string;freight:number|null;claimed:number|null;advance:number;balance:number|null;cte:string|null;status:string}>();
+  for(const e of [...financeEmails].reverse()){
+   for(const l of e.ortobom_financial_lines||[]){
+    const key=canonicalCargo(l.cargo_reference);
+    const known=cargoData.get(key)||{cargo:key.padStart(6,"0"),freight:null,claimed:null,advance:0,balance:null,cte:null,status:"Aguardando cruzamento"};
+    if(e.event_kind==="advance"&&l.declared_advance!==null){
+     known.advance+=Number(l.declared_advance);
+    }
+    if(l.declared_freight!==null)known.claimed=Number(l.declared_freight);
+    if(e.event_kind==="period_payment"&&l.declared_balance!==null)known.balance=Number(l.declared_balance);
+    if(l.cte_number)known.cte=l.cte_number;
+    cargoData.set(key,known);
+   }
+  }
+  for(const item of ctes){
+   const key=canonicalCargo(item.cargo_reference||"");
+   const target=cargoData.get(key);
+   if(target)target.freight=item.freight_value===null?null:Number(item.freight_value);
+  }
+  for(const item of cargoData.values()){
+   item.status=item.freight===null?"Sem carga no app":item.claimed!==null&&Math.abs(item.freight-item.claimed)>0.01?
+    "Divergência de frete":"Conferir recebimento bancário";
+  }
+  const {data:bankDeposits}=ws?await db.from("bank_transactions")
+   .select("id,occurred_on,amount,direction,provider_status")
+   .eq("workspace_id",ws.id).eq("direction","credit")
+   .gte("occurred_on","2026-01-01").limit(1500):{data:[]};
+  const postedDeposits=(bankDeposits||[]).filter(x=>x.provider_status==="POSTED");
+  const matchedBankIds=new Set<string>();
+  const bankStatus=(paymentDay:string|null,value:number|null)=>{
+   if(!paymentDay||value===null)return "Sem dados suficientes";
+   const date=new Date(paymentDay+"T12:00:00Z").getTime();
+   const possible=postedDeposits.filter(x=>{
+    if(matchedBankIds.has(x.id)||Math.abs(Number(x.amount)-value)>0.009)return false;
+    const delta=Math.abs(new Date(x.occurred_on+"T12:00:00Z").getTime()-date)/86400000;
+    return delta<=3;
+   }).sort((a,b)=>Math.abs(new Date(a.occurred_on).getTime()-date)-Math.abs(new Date(b.occurred_on).getTime()-date));
+   if(!possible.length)return "Sem crédito correspondente";
+   // A single match by same date and exact value is a strong bank match, not a SEFAZ or invoice status.
+   if(possible.length>1)return "Múltiplos créditos possíveis";
+   matchedBankIds.add(possible[0].id);
+   return possible[0].occurred_on===paymentDay?"Crédito compatível no extrato":"Crédito próximo à data — conferir";
+  };
+  const financePeriods=financeEmails.filter(e=>e.event_kind==="period_payment").map(e=>({
+   id:e.id,date:e.payment_date,
+   period:[e.period_start,e.period_end].filter(Boolean).join(" a ")||"Não especificado",
+   deposit:e.declared_bank_deposit===null?null:Number(e.declared_bank_deposit),
+   promissory:e.declared_promissory_discount===null?null:Number(e.declared_promissory_discount),
+   loads:e.ortobom_financial_lines?.length||0,
+   bankMatch:bankStatus(e.payment_date,e.declared_bank_deposit===null?null:Number(e.declared_bank_deposit)),
+  }));
+
   const manifests=drafts.filter(x=>x.document_type==="mdfe");
   const choices=ctes.filter(x=>canPrepareNewCte(x.status,x.checklist))
     .map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem numero")+" — NF-e "+(x.fiscal_nfe_inbox?.invoice_number||"nao informada"),
@@ -126,7 +189,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
         </section>
         <section id="fiscal-provider">
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">AUTORIZADOR / SANDBOX</span><h2>Integração fiscal DotCompany</h2><p>Valide a chave e confira os documentos sem solicitar uma emissão real.</p></div></div>
-          <DotcompanyPanel drafts={ctes.map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem referência")+" · "+(x.status==="draft"?"rascunho":"verificação")}))}/>
+          <DotcompanyPanel drafts={[...ctes].sort((a,b)=>Number(canPrepareNewCte(b.status,b.checklist))-Number(canPrepareNewCte(a.status,a.checklist))).map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem referência")+" · "+(canPrepareNewCte(x.status,x.checklist)?"para preparar":"bloqueada / conferência")}))}/>
         </section>
         <section id="cte-queue">
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">02 / DOCUMENTOS</span><h2>Fila de CT-e</h2><p>Lista real das cargas cadastradas; rascunhos não equivalem a documentos autorizados.</p></div><span className="fiscal-count">{ctes.length} {ctes.length===1?"registro":"registros"}</span></div>
@@ -198,6 +261,8 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
             </aside>
           </div>
         </section>
+        <OrtobomFinancePanel cargo={[...cargoData.values()].sort((a,b)=>b.cargo.localeCompare(a.cargo))}
+          periods={financePeriods} emailCount={financeEmails.length} connected={Boolean(gmail)}/>
         <section className="fiscal-readiness-section" aria-label="Condições de emissão fiscal">
           <span className="fiscal-section-kicker">CONTROLES DE EMISSÃO</span>
           <h2>O que já está pronto e o que ainda depende de homologação</h2>

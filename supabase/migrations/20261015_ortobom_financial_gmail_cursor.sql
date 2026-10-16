@@ -1,0 +1,2 @@
+alter table public.fiscal_gmail_connections add column if not exists financial_next_page_token text;
+alter table public.fiscal_gmail_connections add column if not exists financial_last_sync_at timestamptz;

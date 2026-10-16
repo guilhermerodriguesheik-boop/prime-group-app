@@ -10,6 +10,7 @@
     "test:ai": "node --experimental-strip-types --test tests/ai-cost-routing.test.mjs",
     "test:fiscal": "node --experimental-strip-types --test tests/fiscal.test.mjs",
     "test:ortobom": "node --experimental-strip-types --test tests/ortobom-email.test.mjs",
+    "test:ortobom-finance": "node --experimental-strip-types --test tests/ortobom-finance.test.mjs",
     "test:fiscal-readiness": "node --experimental-strip-types --test tests/fiscal-readiness.test.mjs",
     "test:dotcompany": "node --experimental-strip-types --test tests/dotcompany.test.mjs",
     "test:cte-consent": "node --test tests/cte-consent.test.mjs",

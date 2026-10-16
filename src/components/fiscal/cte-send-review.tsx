@@ -1,7 +1,8 @@
 "use client";
 import {useState} from "react";
 import {useRouter} from "next/navigation";
-import {ClipboardCheck,Send,Save,X,ShieldAlert} from "lucide-react";
+import {ClipboardCheck,Send,Save,X,ShieldAlert,Plus} from "lucide-react";
+import {registerDriver,registerTransportVehicle} from "@/app/cadastros/transporte/actions";
 type Config={cfop:string;tomador:string;produto_predominante:string;uf_licenciamento:string;numbering_verified:boolean};
 type Preview={
  hash:string;ready:boolean;missing:string[];invoiceCount:number;freightValue:number;goodsValue:number;
@@ -26,6 +27,7 @@ export function CteSendReview({draftId}:{draftId:string}){
  const [vehicle,setVehicle]=useState("");
  const [driver,setDriver]=useState("");
  const [consent,setConsent]=useState(false);
+ const [creating,setCreating]=useState<"driver"|"vehicle"|null>(null);
  async function refresh(){
   setLoading(true);setError("");
   try{
@@ -36,6 +38,16 @@ export function CteSendReview({draftId}:{draftId:string}){
    setConsent(false);
   }catch(e){setError(e instanceof Error?e.message:"Falha ao revisar.");}
   finally{setLoading(false)}
+ }
+ async function createTransport(kind:"driver"|"vehicle",form:FormData){
+  setLoading(true);setError("");setMessage("");
+  try{
+   if(kind==="driver")await registerDriver(form);
+   else await registerTransportVehicle(form);
+   setCreating(null);
+   await refresh();router.refresh();
+   setMessage(kind==="driver"?"Motorista incluído no cadastro central. Selecione-o acima.":"Veículo incluído na frota central. Selecione-o acima.");
+  }catch(e){setError(e instanceof Error?e.message:"Falha ao cadastrar. Confira os dados.");setLoading(false);}
  }
  async function save(){
   if(!vehicle||!driver){setError("Selecione veículo e motorista.");return}
@@ -127,6 +139,32 @@ export function CteSendReview({draftId}:{draftId:string}){
             Confirmei com o emissor anterior a sequência de CT-e e verifiquei que esta carga ainda não possui CT-e autorizado.
           </label>
         </div>
+        <div className="fiscal-review-actions" style={{justifyContent:"flex-start"}}>
+          <button className="button" type="button" onClick={()=>setCreating(creating==="driver"?null:"driver")} disabled={loading||!!data.submission}><Plus size={14}/> Novo motorista</button>
+          <button className="button" type="button" onClick={()=>setCreating(creating==="vehicle"?null:"vehicle")} disabled={loading||!!data.submission}><Plus size={14}/> Novo veículo</button>
+          <a href="/cadastros/transporte" target="_blank" rel="noopener noreferrer" style={{fontSize:12}}>Ver todos os cadastros ↗</a>
+        </div>
+        {creating&&<form className="fiscal-review-form" onSubmit={e=>{
+         e.preventDefault();
+         void createTransport(creating,new FormData(e.currentTarget));
+        }} style={{border:"1px solid var(--line)",borderRadius:12,padding:14}}>
+         {creating==="driver"?<>
+           <label>Nome do motorista<input required name="name" maxLength={120} placeholder="Nome completo"/></label>
+           <label>CPF<input required name="cpf" inputMode="numeric" maxLength={14}/></label>
+           <label>CNH<input name="cnh" maxLength={40}/></label>
+           <label>Validade da CNH<input type="date" name="cnhExpires"/></label>
+           <label className="span-two">Telefone<input name="phone" inputMode="tel"/></label>
+         </>:<>
+           <label>Placa<input required name="plate" placeholder="ABC1D23" maxLength={9}/></label>
+           <label>Identificação no aplicativo<input required name="nickname" placeholder="Toco / Sprinter"/></label>
+           <label>Marca<input name="make" maxLength={80}/></label>
+           <label>Modelo<input name="model" maxLength={80}/></label>
+         </>}
+         <div className="span-two fiscal-review-actions">
+           <button type="button" className="button" disabled={loading} onClick={()=>setCreating(null)}>Cancelar</button>
+           <button type="submit" className="button primary" disabled={loading}>Salvar cadastro compartilhado</button>
+         </div>
+        </form>}
         <div className="fiscal-review-actions">
           <button className="button" onClick={()=>void save()} disabled={loading||!!data.submission||data.draft.status!=="draft"}><Save size={15}/> Salvar conferência</button>
         </div>
