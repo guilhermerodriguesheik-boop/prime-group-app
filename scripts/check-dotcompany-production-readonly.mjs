@@ -37,7 +37,7 @@ if(process.env.VERCEL_ENV!=="production"||!token){
     authenticated:accepted,
     check_error:checks.some(s=>s==="NETWORK_ERROR")?"NETWORK_ERROR":null,
    };
-   const res=await fetch(supabaseUrl.replace(/\\/$/,"")+"/rest/v1/fiscal_provider_diagnostics?on_conflict=provider,environment",{
+   const res=await fetch((supabaseUrl.endsWith("/")?supabaseUrl.slice(0,-1):supabaseUrl)+"/rest/v1/fiscal_provider_diagnostics?on_conflict=provider,environment",{
     method:"POST",
     headers:{"apikey":supabaseAdmin,"Authorization":"Bearer "+supabaseAdmin,
       "Content-Type":"application/json","Prefer":"resolution=merge-duplicates"},
