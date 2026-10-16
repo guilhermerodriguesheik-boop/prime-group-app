@@ -67,12 +67,16 @@ export async function POST(req:Request){
   });
   const received=await response.json().catch(()=>null) as
     {autorizado?:unknown;chave_acesso?:unknown;protocolo?:unknown;message?:unknown;codigo_status_sefaz?:unknown}|null;
-  const message=typeof received?.message==="string"?received.message.slice(0,450):"";
+  const details=received&&typeof received==="object"?received as Record<string,unknown>:{};
+  const detailText=[details.message,details.error,details.erro,details.detail,details.mensagem,details.mensagem_original]
+   .map(v=>typeof v==="string"?v:(v&&typeof v==="object"?JSON.stringify(v):""))
+   .filter(Boolean).join(" | ").slice(0,1000);
+  const message=detailText.replace(/dc_(?:live|test)_[A-Za-z0-9._-]+/g,"[TOKEN_REDACTED]");
   const code=String(received?.codigo_status_sefaz||"").slice(0,20);
   if(!response.ok){
    await update("indeterminate",{error_code:"HTTP_"+response.status,
-    provider_response:{message,code,http:response.status}});
-   return NextResponse.json({error:"O emissor retornou erro sem confirmação de resultado. Consulte a DotCompany antes de tentar novamente."},{status:502});
+    provider_response:{message,code,http:response.status,provider_error:response.status===422?"VALIDATION_REJECTED":"HTTP_ERROR"}});
+   return NextResponse.json({error:response.status===422?"DotCompany recusou os dados do CT-e (HTTP 422). Nenhum documento foi confirmado. Consulte o diagnóstico da tentativa antes de corrigir ou reenviar.":"O emissor retornou erro sem confirmação de resultado. Consulte a DotCompany antes de tentar novamente.",reason:message||null},{status:502});
   }
   const authorized=received?.autorizado===true;
   const access=String(received?.chave_acesso||"");
