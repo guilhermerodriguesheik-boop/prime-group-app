@@ -40,6 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname=usePathname();
   const [theme,setTheme]=useState<"light"|"dark">("light");
   const [menuOpen,setMenuOpen]=useState(false);
+  const [expanded,setExpanded]=useState<string|null>("Principal");
   useEffect(()=>{
     const saved=window.localStorage.getItem("prime-theme");
     const preference=saved==="dark"?"dark":"light";
@@ -49,6 +50,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     },0);
     return ()=>window.clearTimeout(tick);
   },[]);
+  useEffect(()=>{
+    const group=nav.find(g=>g.items.some(x=>x.href==="/"?pathname==="/":pathname.startsWith(x.href)));
+    setExpanded(group?.label||"Principal");
+  },[pathname]);
   function toggleTheme(){
     const next=theme==="light"?"dark":"light";
     setTheme(next);
@@ -91,9 +96,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="sidebar-scroll">
           {nav.map(group=>(
-            <div key={group.label}>
-              <div className="nav-section">{group.label}</div>
-              <nav className="nav" aria-label={group.label}>
+            <div key={group.label} className="sidebar-group">
+              <button type="button" className={"nav-accordion-toggle"+(expanded===group.label?" is-open":"")}
+                aria-expanded={expanded===group.label} aria-controls={"nav-group-"+group.label}
+                onClick={()=>setExpanded(old=>old===group.label?null:group.label)}>
+                <span>{group.label}</span>
+                <span aria-hidden="true">{expanded===group.label?"−":"+"}</span>
+              </button>
+              {expanded===group.label&&<nav className="nav" id={"nav-group-"+group.label} aria-label={group.label}>
                 {group.items.map(item=>{
                   const Icon=item.icon;
                   const active=item.href==="/"?pathname==="/":pathname.startsWith(item.href);
@@ -102,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <span className="label">{item.label}</span>
                   </Link>;
                 })}
-              </nav>
+              </nav>}
             </div>
           ))}
         </div>
