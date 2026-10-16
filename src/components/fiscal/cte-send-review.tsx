@@ -91,8 +91,8 @@ export function CteSendReview({draftId}:{draftId:string}){
     method:"POST",headers:{"Content-Type":"application/json","x-prime-action":"fiscal-cte-confirm"},
     body:JSON.stringify({draftId,hash:data.preview.hash,confirmation:"CONFIRMO O ENVIO À SEFAZ"}),
    });
-   const j=await r.json() as {error?:string;message?:string;authorized?:boolean;key?:string;protocol?:string};
-   if(!r.ok)throw Error(j.error||"Falha ao transmitir. Não tente novamente sem consultar o emissor.");
+   const j=await r.json() as {error?:string;reason?:string;message?:string;authorized?:boolean;key?:string;protocol?:string};
+   if(!r.ok)throw Error([j.error,j.reason].filter(Boolean).join(" — ")||"Falha ao transmitir. Não tente novamente sem consultar o emissor.");
    setMessage(j.message||"Resultado recebido da API.");
    await refresh();router.refresh();
   }catch(e){setError(e instanceof Error?e.message:"Erro ao enviar.");setLoading(false);}
