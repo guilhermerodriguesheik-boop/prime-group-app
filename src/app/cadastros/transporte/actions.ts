@@ -59,3 +59,23 @@ export async function saveTransportRntrc(form:FormData){
   if(error)throw Error("Banco regulatório não disponível; verifique a migração.");
   revalidatePath("/cadastros/transporte");revalidatePath("/fiscal");
 }
+
+/** Records a dated, user-attested official ANTT review. This does not call ANTT. */
+export async function confirmTransportRntrcReview(form:FormData){
+ const {client,workspaceId}=await ctx();
+ const submitted=normalizeDigits(value(form,"rntrc"));
+ if(form.get("checked")!=="yes"||!/^[0-9]{8,9}$/.test(submitted))
+  throw Error("Abra a consulta oficial e marque a confirmação após verificar o registro.");
+ const {data:profile,error:lookupError}=await client.from("fiscal_transport_profiles")
+  .select("rntrc").eq("workspace_id",workspaceId).maybeSingle();
+ if(lookupError||!profile||profile.rntrc!==submitted)
+  throw Error("RNTRC diverge do cadastro; atualize e consulte a ANTT antes de prosseguir.");
+ const {error}=await client.from("fiscal_transport_profiles").update({
+  rntrc_checked_at:new Date().toISOString(),
+  rntrc_check_notes:"Situação ATIVO declarada pelo proprietário após consulta ao portal ANTT. O aplicativo não verificou a informação automaticamente.",
+  updated_at:new Date().toISOString(),
+ }).eq("workspace_id",workspaceId).eq("rntrc",submitted);
+ if(error)throw Error("Não foi possível registrar a conferência da ANTT.");
+ revalidatePath("/cadastros/transporte");
+ revalidatePath("/fiscal");
+}
