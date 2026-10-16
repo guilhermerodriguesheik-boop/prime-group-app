@@ -26,10 +26,12 @@ export async function checkDotCompanyProduction(
  let usage:Response;
  try{usage=await fetchUrl(PATHS[0]);}
  catch{return {...base,emitterLookup:"unavailable",reason:"Falha de rede ao consultar a DotCompany."};}
- if(usage.status===401)return {...base,status:401,reason:"Chave de produção inválida ou revogada."};
+ // Check two independent scopes before concluding the production token is revoked.
+ // Provider may return 401 for a missing usage permission.
+
  // A DotCompany authorizes usage.report and emitter.list independently.
  // If usage.report is disabled, listing emitters is still a safe read-only handshake.
- if(!usage.ok&&usage.status!==403)return {...base,status:usage.status,
+ if(!usage.ok&&usage.status!==401&&usage.status!==403)return {...base,status:usage.status,
   reason:"A consulta à DotCompany retornou HTTP "+usage.status+"."};
  let emitters:Response;
  try{emitters=await fetchUrl(PATHS[1]);}
@@ -51,7 +53,9 @@ export async function checkDotCompanyProduction(
  }
  return {...base,status:emitters.status,
   emitterLookup:emitters.status===401||emitters.status===403?"denied":"unavailable",
-  reason:emitters.status===401?
+  reason:usage.status===401&&emitters.status===401?
+   "Ambos os endpoints recusaram a chave de produção (HTTP 401). Confira a credencial na DotCompany.":
+   emitters.status===401?
    "Credencial rejeitada pela listagem de emissores.":
    "Esta chave não tem permissão para consultar consumo (usage.report) nem listar emissores (emitter.list)."};
 

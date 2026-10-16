@@ -53,6 +53,9 @@ jobs:
       - name: Production SEFAZ connection diagnostic tests
         run: npm run test:dotcompany-production
 
+      - name: Official ANTT snapshot parser tests
+        run: npm run test:antt-snapshot
+
       - name: Pluggy webhook contract tests
         run: npm run test:pluggy
 

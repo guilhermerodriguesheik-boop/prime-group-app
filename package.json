@@ -15,6 +15,7 @@
     "test:dotcompany": "node --experimental-strip-types --test tests/dotcompany.test.mjs",
     "test:cte-consent": "node --test tests/cte-consent.test.mjs",
     "test:dotcompany-production": "node --experimental-strip-types --test tests/dotcompany-production.test.mjs",
+    "test:antt-snapshot": "node --experimental-strip-types --test tests/antt-snapshot.test.mjs",
     "test:pluggy": "node --experimental-strip-types --test tests/pluggy-webhook.test.mjs"
   },
   "dependencies": {

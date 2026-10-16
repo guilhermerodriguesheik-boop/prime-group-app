@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {AnttMonthlyCheck} from "@/components/fiscal/antt-monthly-check";
 import { redirect } from "next/navigation";
 import { Header, SectionTitle } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
@@ -75,6 +76,7 @@ export default async function Page(){
         <button className="button" type="submit">Salvar veículo</button>
       </form>
     </div>
+    <AnttMonthlyCheck/>
     <SectionTitle title="Motoristas cadastrados"/>
     <div className="table-wrap"><table><thead><tr><th>Nome</th><th>CPF</th><th>Validade CNH</th></tr></thead><tbody>
       {(drivers.data||[]).map((d:{id:string;name:string;document:string|null;license_expires_on:string|null})=><tr key={d.id}>
