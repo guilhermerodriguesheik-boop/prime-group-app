@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import type { AssistantDocument } from "./documents";
+import { createDotCompanyAssistantTools } from "./dotcompany-tools";
 
 type Workspace = { id: string; name: string; kind: string };
 type Account = { id: string; workspace_id: string; name: string; institution: string | null };
@@ -1241,5 +1242,16 @@ export function createAssistantTools(input: CreateToolsInput) {
     }),
   };
 
-  return { tools, actions };
+  const prime = workspaces.find(w => w.kind === "prime");
+  return {
+    tools: {
+      ...tools,
+      ...createDotCompanyAssistantTools({
+        db: supabase as unknown as import("@supabase/supabase-js").SupabaseClient,
+        userId,
+        primeWorkspaceId: prime?.id ?? null,
+      }),
+    },
+    actions,
+  };
 }

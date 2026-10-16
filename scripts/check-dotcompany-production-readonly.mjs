@@ -21,6 +21,20 @@ if(process.env.VERCEL_ENV!=="production"||!token){
    checks.push("NETWORK_ERROR");
   }
  }
+ // Probe only the documented listing family (never issue or cancel).
+ // Log numerical statuses only; no fiscal payload, key or response body.
+ const fiscalReadStatus={};
+ for(const kind of ["cte","mdfe"]){
+  try{
+   const response=await fetch("https://erp.dotcompany.com.br/api/v1/"+kind+"/listar",{
+    method:"POST",
+    headers:{Authorization:"Bearer "+token,Accept:"application/json","Content-Type":"application/json"},
+    body:"{}",signal:AbortSignal.timeout(12000),cache:"no-store",
+   });
+   fiscalReadStatus[kind]=response.status;
+  }catch{fiscalReadStatus[kind]="NETWORK_ERROR";}
+ }
+ console.log("DOTCOMPANY_FISCAL_READONLY_CHECK: cte_list="+fiscalReadStatus.cte+" mdfe_list="+fiscalReadStatus.mdfe);
  const accepted=checks.some(s=>s===200);
  const rejected=checks.every(s=>s===401);
  console.log("DOTCOMPANY_DEPLOY_CHECK: usage_status="+checks[0]+" emitters_status="+checks[1]+" authenticated="+accepted+" both_rejected="+rejected);

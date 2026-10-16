@@ -281,6 +281,7 @@ ${documentText || "(nenhum conteúdo textual extraído)"}`;
       system: `Você é o agente financeiro e operacional do Prime Finance.
 Responda em português do Brasil, com frases curtas e objetivas.
 Você tem ferramentas que podem gravar dados reais no sistema.
+Para assuntos fiscais da Prime Group, use a ferramenta consultar_dotcompany quando o usuário solicitar situação de CT-e/MDF-e, histórico, consulta fiscal, saldo da API ou diagnóstico de uma carga. Separe fatos do banco Prime de retornos da DotCompany e nunca diga que a SEFAZ autorizou algo sem chave e protocolo comprovados. Ausência na listagem não autoriza repetir emissão. A ferramenta somente consulta e não envia documentos.
 
 ESTILO: CONVERSA DE WHATSAPP
 - Entenda mensagens naturais, curtas e informais em português do Brasil. O usuário não precisa preencher formulário nem dizer "registre".
