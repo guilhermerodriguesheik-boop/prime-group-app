@@ -34,7 +34,7 @@ export function CteSendReview({draftId}:{draftId:string}){
    const r=await fetch("/api/fiscal/cte/review?draftId="+encodeURIComponent(draftId),{cache:"no-store"});
    const json=await r.json() as Data;
    if(!r.ok)throw Error(json.error||"Não foi possível carregar a revisão.");
-   setData(json);setConfig(json.preview.config);setVehicle(json.draft.vehicle_id||"");setDriver(json.draft.driver_id||"");
+   setData(json);setConfig(json.preview.config);setVehicle(json.draft.vehicle_id||(json.vehicles.length===1?json.vehicles[0].id:""));setDriver(json.draft.driver_id||(json.drivers.length===1?json.drivers[0].id:""));
    setConsent(false);
   }catch(e){setError(e instanceof Error?e.message:"Falha ao revisar.");}
   finally{setLoading(false)}
@@ -97,7 +97,7 @@ export function CteSendReview({draftId}:{draftId:string}){
           <p>Frete: {data.preview.freightValue.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})} ·
              Mercadoria: {data.preview.goodsValue.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})} ·
              Peso: {data.preview.grossWeight.toLocaleString("pt-BR")} kg · CIOT: {data.preview.ciot||"pendente"}</p>
-          <p>Esses valores são extraídos dos dados cadastrados. Confira-os antes de emitir.</p>
+          <p>Modelo do último CT-e (nº 33, série 003): CFOP, tomador e produto são sugeridos apenas para operações RJ–RJ. Confira cada carga antes de salvar e emitir. Veículo e motorista só são sugeridos automaticamente quando houver um único cadastro ativo.</p>
         </div>
         {data.submission&&<div className="fiscal-review-summary" role="status">
           <strong>Transmissão registrada: {data.submission.status}</strong>
