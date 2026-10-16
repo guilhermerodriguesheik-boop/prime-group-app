@@ -27,6 +27,8 @@ export function CteSendReview({draftId}:{draftId:string}){
  const [vehicle,setVehicle]=useState("");
  const [driver,setDriver]=useState("");
  const [consent,setConsent]=useState(false);
+ const [emailStatus,setEmailStatus]=useState<{authorized:boolean;sourceLinked:boolean;existing:{status:string;recipient_email?:string}|null}|null>(null);
+ const [emailBusy,setEmailBusy]=useState(false);
  const [creating,setCreating]=useState<"driver"|"vehicle"|null>(null);
  async function refresh(){
   setLoading(true);setError("");
@@ -36,6 +38,8 @@ export function CteSendReview({draftId}:{draftId:string}){
    if(!r.ok)throw Error(json.error||"Não foi possível carregar a revisão.");
    setData(json);setConfig(json.preview.config);setVehicle(json.draft.vehicle_id||(json.vehicles.length===1?json.vehicles[0].id:""));setDriver(json.draft.driver_id||(json.drivers.length===1?json.drivers[0].id:""));
    setConsent(false);
+   const status=await fetch("/api/fiscal/cte/email-reply?draftId="+encodeURIComponent(draftId),{cache:"no-store"});
+   setEmailStatus(status.ok?await status.json():null);
   }catch(e){setError(e instanceof Error?e.message:"Falha ao revisar.");}
   finally{setLoading(false)}
  }
@@ -61,6 +65,22 @@ export function CteSendReview({draftId}:{draftId:string}){
    if(!r.ok)throw Error(j.error||"Falha ao salvar a conferência.");
    setMessage(j.message||"Salvo.");await refresh();router.refresh();
   }catch(e){setError(e instanceof Error?e.message:"Falha ao salvar.");setLoading(false);}
+ }
+ async function sendEmail(){
+  if(!emailStatus?.authorized||!emailStatus.sourceLinked||emailStatus.existing)return;
+  if(!window.confirm("Confirma responder ao e-mail original da Ortobom com o XML do CT-e autorizado?"))return;
+  setEmailBusy(true);setError("");setMessage("");
+  try{
+   const res=await fetch("/api/fiscal/cte/email-reply",{
+    method:"POST",headers:{"Content-Type":"application/json","x-prime-action":"ortobom-cte-email"},
+    body:JSON.stringify({draftId,confirmation:"CONFIRMO ENVIO DO CT-E À ORTOBOM"}),
+   });
+   const data=await res.json() as {error?:string;recipient?:string;sent?:boolean};
+   if(!res.ok)throw Error(data.error||"Envio não confirmado.");
+   setMessage("CT-e enviado para "+data.recipient+" e registrado no histórico.");
+   await refresh();
+  }catch(e){setError(e instanceof Error?e.message:"Não foi possível enviar.");}
+  finally{setEmailBusy(false)}
  }
  async function submit(){
   if(!data?.preview.ready||!consent)return;
@@ -103,6 +123,22 @@ export function CteSendReview({draftId}:{draftId:string}){
           <strong>Transmissão registrada: {data.submission.status}</strong>
           <p>Chave: {data.submission.access_key||"Aguardar consulta"} · Protocolo: {data.submission.protocol||"Não confirmado"}</p>
           <p>Não tente enviar novamente uma operação com resultado desconhecido.</p>
+        </div>}
+        {emailStatus?.authorized&&<div className="fiscal-review-summary">
+          <strong>Responder à Ortobom com o CT-e autorizado</strong>
+          <p>{emailStatus.existing?
+            "Registro do envio: "+emailStatus.existing.status+(emailStatus.existing.recipient_email?" · "+emailStatus.existing.recipient_email:""):
+            emailStatus.sourceLinked?
+            "Envia resposta na conversa original com XML autorizado e salva o resultado no aplicativo.":
+            "Não foi encontrado o e-mail de origem desta carga. Vincule primeiro a mensagem da Ortobom."}</p>
+          <p>Para envio direto, é necessário reconectar o Gmail concedendo também a permissão de enviar e-mails.</p>
+          <a href="/api/fiscal/gmail/connect">Autorizar envio pelo Gmail ↗</a>
+          <div className="fiscal-review-actions">
+            <button className="button" type="button" onClick={()=>void sendEmail()}
+              disabled={emailBusy||!emailStatus.sourceLinked||!!emailStatus.existing}>
+              {emailBusy?"Enviando...":"Responder ao e-mail da Ortobom"}
+            </button>
+          </div>
         </div>}
         <div className="fiscal-review-form">
           <label>Veículo

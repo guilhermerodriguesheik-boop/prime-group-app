@@ -15,7 +15,7 @@ export async function gmailClientStatus():Promise<GoogleClientStatus>{
  clientStatusCache={time:Date.now(),value};
  return value;
 }
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
 export type GmailOAuthFailure = "invalid_client"|"invalid_grant"|"token_denied"|"missing_refresh"|"wrong_google_account"|"supabase_access"|"database_write"|"gmail_profile"|"session_or_workspace"|"unexpected";
 export class GmailOAuthError extends Error {
   constructor(public readonly code:GmailOAuthFailure){super(code);this.name="GmailOAuthError";}
@@ -371,4 +371,57 @@ export async function syncOrtobomFinancialReports(workspaceId:string,ownerId:str
  }).eq("workspace_id",workspaceId).eq("owner_id",ownerId);
  if(cursorError)throw Error("Não foi possível registrar o avanço na caixa de entrada.");
  return stats;
+}
+
+/** Send a single reply in the original Ortobom thread, attaching the verified authorized XML.
+ * Requires a new OAuth consent including gmail.send. No send is attempted without a valid attachment.
+ */
+export async function sendAuthorizedCteReply(input:{
+ workspaceId:string;ownerId:string;sourceMessageId:string;cteKey:string;xml:string;cargoReference:string;
+}):Promise<{messageId:string;threadId:string;recipient:string}>{
+ const {workspaceId,ownerId,sourceMessageId,cteKey,xml,cargoReference}=input;
+ if(!/^[A-Za-z0-9_-]{8,40}$/.test(sourceMessageId)||!/^[0-9]{44}$/.test(cteKey)||
+    !xml.includes("<")||!xml.includes(">")||Buffer.byteLength(xml,"utf8")>1024*1024)
+  throw Error("CT-e XML autorizado e e-mail original são obrigatórios.");
+ const {token}=await gmailConnection(workspaceId,ownerId);
+ const source=await gmailJson<GmailMessage & {threadId?:string}>(token,
+   "/users/me/messages/"+encodeURIComponent(sourceMessageId)+"?format=metadata");
+ const sender=header(source,"From");
+ if(!isOrtobomSender(sender))throw Error("O e-mail original não pertence à Ortobom.");
+ const email=sender.match(/<([^<>]+)>/)?.[1]||sender.trim();
+ if(!/^[^\s@<>]+@[^\s@<>]+$/.test(email)||!email.toLowerCase().endsWith("@ortobom.com.br"))
+  throw Error("Remetente da Ortobom inválido para resposta automática.");
+ if(!source.threadId)throw Error("Conversa original não localizada no Gmail.");
+ const sourceMessageIdHeader=header(source,"Message-ID");
+ if(!sourceMessageIdHeader||!/^<[^\r\n<>]+@[^\r\n<>]+>$/.test(sourceMessageIdHeader.trim()))
+  throw Error("Identificador da mensagem original não disponível.");
+ const subject=header(source,"Subject").replace(/[\r\n]/g," ").slice(0,180);
+ const boundary="primecte_"+randomBytes(12).toString("hex");
+ const body="Prezados,\\r\\n\\r\\nSegue o CT-e autorizado referente à carga "+cargoReference+
+  ".\\r\\nChave de acesso: "+cteKey+".\\r\\n\\r\\nAtenciosamente,\\r\\nPrime Group.";
+ const lines=[
+  "From: "+GMAIL_ACCOUNT,"To: "+email,
+  "Subject: "+(subject.toLowerCase().startsWith("re:")?subject:"Re: "+subject),
+  "In-Reply-To: "+sourceMessageIdHeader.trim(),"References: "+sourceMessageIdHeader.trim(),
+  "MIME-Version: 1.0","Content-Type: multipart/mixed; boundary=\""+boundary+"\"","",
+  "--"+boundary,"Content-Type: text/plain; charset=UTF-8","Content-Transfer-Encoding: base64","",
+  Buffer.from(body,"utf8").toString("base64"),
+  "--"+boundary,"Content-Type: application/xml; name=\"CTe-"+cteKey+".xml\"",
+  "Content-Disposition: attachment; filename=\"CTe-"+cteKey+".xml\"",
+  "Content-Transfer-Encoding: base64","",Buffer.from(xml,"utf8").toString("base64"),
+  "--"+boundary+"--",""
+ ];
+ const raw=Buffer.from(lines.join("\r\n"),"utf8").toString("base64url");
+ const res=await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send",{
+  method:"POST",headers:{"authorization":"Bearer "+token,"content-type":"application/json"},
+  body:JSON.stringify({raw,threadId:source.threadId}),cache:"no-store",
+  signal:AbortSignal.timeout(20000),
+ });
+ if(!res.ok){
+  if(res.status===403)throw Error("Gmail ainda não autorizado para envio. Reconecte a conta e conceda a permissão de envio.");
+  throw Error("Gmail não confirmou o envio (HTTP "+res.status+").");
+ }
+ const sent=await res.json() as {id?:string;threadId?:string};
+ if(!sent.id||!sent.threadId)throw Error("Gmail retornou resultado de envio inconclusivo.");
+ return {messageId:sent.id,threadId:sent.threadId,recipient:email};
 }
