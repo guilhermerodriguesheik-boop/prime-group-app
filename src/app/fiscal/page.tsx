@@ -103,12 +103,33 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
    item.status=item.freight===null?"Sem carga no app":item.claimed!==null&&Math.abs(item.freight-item.claimed)>0.01?
     "Divergência de frete":"Conferir recebimento bancário";
   }
+  const {data:bankDeposits}=ws?await db.from("bank_transactions")
+   .select("id,occurred_on,amount,direction,provider_status")
+   .eq("workspace_id",ws.id).eq("direction","credit")
+   .gte("occurred_on","2026-01-01").limit(1500):{data:[]};
+  const postedDeposits=(bankDeposits||[]).filter(x=>x.provider_status==="POSTED");
+  const matchedBankIds=new Set<string>();
+  const bankStatus=(paymentDay:string|null,value:number|null)=>{
+   if(!paymentDay||value===null)return "Sem dados suficientes";
+   const date=new Date(paymentDay+"T12:00:00Z").getTime();
+   const possible=postedDeposits.filter(x=>{
+    if(matchedBankIds.has(x.id)||Math.abs(Number(x.amount)-value)>0.009)return false;
+    const delta=Math.abs(new Date(x.occurred_on+"T12:00:00Z").getTime()-date)/86400000;
+    return delta<=3;
+   }).sort((a,b)=>Math.abs(new Date(a.occurred_on).getTime()-date)-Math.abs(new Date(b.occurred_on).getTime()-date));
+   if(!possible.length)return "Sem crédito correspondente";
+   // A single match by same date and exact value is a strong bank match, not a SEFAZ or invoice status.
+   if(possible.length>1)return "Múltiplos créditos possíveis";
+   matchedBankIds.add(possible[0].id);
+   return possible[0].occurred_on===paymentDay?"Crédito compatível no extrato":"Crédito próximo à data — conferir";
+  };
   const financePeriods=financeEmails.filter(e=>e.event_kind==="period_payment").map(e=>({
    id:e.id,date:e.payment_date,
    period:[e.period_start,e.period_end].filter(Boolean).join(" a ")||"Não especificado",
    deposit:e.declared_bank_deposit===null?null:Number(e.declared_bank_deposit),
    promissory:e.declared_promissory_discount===null?null:Number(e.declared_promissory_discount),
    loads:e.ortobom_financial_lines?.length||0,
+   bankMatch:bankStatus(e.payment_date,e.declared_bank_deposit===null?null:Number(e.declared_bank_deposit)),
   }));
 
   const manifests=drafts.filter(x=>x.document_type==="mdfe");
