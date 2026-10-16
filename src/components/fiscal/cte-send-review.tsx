@@ -9,7 +9,7 @@ type Preview={
  grossWeight:number;cargoReference:string|null;ciot:string|null;config:Config;
 };
 type Data={
- preview:Preview;submission:{status:string;access_key?:string|null;protocol?:string|null;error_code?:string|null}|null;
+ preview:Preview;submission:{status:string;access_key?:string|null;protocol?:string|null;error_code?:string|null;provider_response?:{reconciliation?:{checked_at?:string;cte_list_http_status?:number|null;total_rows_inspected?:number;possible_matches?:Array<Record<string,string>>;note?:string;emitter_profile_http_status?:number|null}}|null}|null;
  draft:{vehicle_id:string|null;driver_id:string|null;status:string};
  vehicles:Array<{id:string;nickname:string;plate:string}>;
  drivers:Array<{id:string;name:string}>;
@@ -123,6 +123,11 @@ export function CteSendReview({draftId}:{draftId:string}){
           <strong>Transmissão registrada: {data.submission.status}</strong>
           <p>Chave: {data.submission.access_key||"Aguardar consulta"} · Protocolo: {data.submission.protocol||"Não confirmado"}</p>
           <p>Não tente enviar novamente uma operação com resultado desconhecido.</p>
+          {data.submission.provider_response?.reconciliation&&<div role="status">
+            <strong>Consulta de reconciliação fiscal</strong>
+            <p>Verificada em {data.submission.provider_response.reconciliation.checked_at||"data não disponível"} · DotCompany HTTP {data.submission.provider_response.reconciliation.cte_list_http_status??"indisponível"} · Possíveis documentos: {data.submission.provider_response.reconciliation.possible_matches?.length??0}</p>
+            <p>{data.submission.provider_response.reconciliation.note||"Aguardando conferência de resultado."}</p>
+          </div>}
         </div>}
         {emailStatus?.authorized&&<div className="fiscal-review-summary">
           <strong>Responder à Ortobom com o CT-e autorizado</strong>

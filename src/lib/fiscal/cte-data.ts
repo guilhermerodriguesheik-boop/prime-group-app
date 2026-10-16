@@ -25,7 +25,7 @@ export async function gather(workspaceId:string,db:SupabaseClient,draftId:string
   draft.vehicle_id?db.from("vehicles").select("id,plate,nickname,status")
    .eq("workspace_id",workspaceId).eq("id",draft.vehicle_id).maybeSingle():Promise.resolve({data:null}),
   db.from("fiscal_transport_profiles").select("rntrc,rntrc_checked_at,cte_defaults").eq("workspace_id",workspaceId).maybeSingle(),
-  db.from("fiscal_cte_transmissions").select("status,access_key,protocol,error_code")
+  db.from("fiscal_cte_transmissions").select("status,access_key,protocol,error_code,provider_response")
    .eq("workspace_id",workspaceId).eq("draft_id",draftId).maybeSingle(),
  ]);
  const preview=ctePreview({
