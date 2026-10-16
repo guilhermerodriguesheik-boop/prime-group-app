@@ -403,11 +403,11 @@ export async function sendAuthorizedCteReply(input:{
   "From: "+GMAIL_ACCOUNT,"To: "+email,
   "Subject: "+(subject.toLowerCase().startsWith("re:")?subject:"Re: "+subject),
   "In-Reply-To: "+sourceMessageIdHeader.trim(),"References: "+sourceMessageIdHeader.trim(),
-  "MIME-Version: 1.0","Content-Type: multipart/mixed; boundary=\\\""+boundary+"\\\"","",
+  "MIME-Version: 1.0","Content-Type: multipart/mixed; boundary=\""+boundary+"\"","",
   "--"+boundary,"Content-Type: text/plain; charset=UTF-8","Content-Transfer-Encoding: base64","",
-  Buffer.from(body.replaceAll("\\\\r\\\\n","\\r\\n"),"utf8").toString("base64"),
-  "--"+boundary,"Content-Type: application/xml; name=\\\"CTe-"+cteKey+".xml\\\"",
-  "Content-Disposition: attachment; filename=\\\"CTe-"+cteKey+".xml\\\"",
+  Buffer.from(body,"utf8").toString("base64"),
+  "--"+boundary,"Content-Type: application/xml; name=\"CTe-"+cteKey+".xml\"",
+  "Content-Disposition: attachment; filename=\"CTe-"+cteKey+".xml\"",
   "Content-Transfer-Encoding: base64","",Buffer.from(xml,"utf8").toString("base64"),
   "--"+boundary+"--",""
  ];
