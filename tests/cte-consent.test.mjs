@@ -83,3 +83,22 @@ test("Fiscal configuration sanitizes untrusted user entries",()=>{
  assert.deepEqual(safeConfig({cfop:"5352OVERFLOW",tomador:"012",produto_predominante:"TEST",uf_licenciamento:"rj",
   numbering_verified:"true"}),{cfop:"5352",tomador:"0",produto_predominante:"TEST",uf_licenciamento:"RJ",numbering_verified:false});
 });
+
+test("Reviewed CT-e template is reusable by route, but never reuses sending consent",()=>{
+ const row={...valid,
+  draft:{...draft,checklist:{}},
+  profile:{...valid.profile,cte_defaults:{
+   cfop:"5352",tomador:"0",produto_predominante:"COLCHOES E CAMAS",
+   uf_licenciamento:"RJ",origin_uf:"RJ",destination_uf:"RJ",numbering_verified:true,
+  }},
+ };
+ const res=ctePreview(row);
+ assert.equal(res.config.cfop,"5352");
+ assert.equal(res.config.produto_predominante,"COLCHOES E CAMAS");
+ assert.equal(res.config.numbering_verified,false);
+ assert.equal(res.ready,false);
+ assert.ok(res.missing.some(x=>x.includes("sequência fiscal")));
+ const other=ctePreview({...row,notes:[{...notes[0],destination_uf:"SP"}]});
+ assert.equal(other.config.cfop,"");
+ assert.equal(other.ready,false);
+});
