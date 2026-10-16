@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Header, SectionTitle } from "@/components/ui";
 import { createClient } from "@/lib/supabase/server";
-import { registerDriver,registerTransportVehicle,saveTransportRntrc } from "./actions";
+import { registerDriver,registerTransportVehicle,saveTransportRntrc,confirmTransportRntrcReview } from "./actions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 export default async function Page(){
   const supabase=await createClient();
@@ -16,7 +16,7 @@ export default async function Page(){
       .eq("workspace_id",ws.id).order("name"):{data:[]},
     ws?db.from("vehicles").select("id,nickname,plate,make,model,status")
       .eq("workspace_id",ws.id).order("nickname"):{data:[]},
-    ws?db.from("fiscal_transport_profiles").select("rntrc")
+    ws?db.from("fiscal_transport_profiles").select("rntrc,rntrc_checked_at,rntrc_check_notes")
       .eq("workspace_id",ws.id).maybeSingle():{data:null},
   ]);
   return <>
@@ -36,6 +36,26 @@ export default async function Page(){
         <label>Registro RNTRC <input name="rntrc" required inputMode="numeric"
           defaultValue={(profile.data as {rntrc?:string}|null)?.rntrc||""} placeholder="8 ou 9 dígitos"/></label>
         <button className="button" type="submit">Salvar número informado</button>
+        <p style={{fontSize:12,opacity:.8}}>
+          Última comprovação declarada: {(profile.data as {rntrc_checked_at?:string|null}|null)?.rntrc_checked_at
+            ? new Date((profile.data as {rntrc_checked_at:string}|null)!.rntrc_checked_at).toLocaleDateString("pt-BR")
+            : "Pendente de consulta ANTT atual"}.
+          O extrato anexado pela Prime Group é de 04/10/2025 e não comprova a situação atual.
+        </p>
+      </form>
+      <form action={confirmTransportRntrcReview} className="card" style={{display:"grid",gap:10}}>
+        <h3>Confirmar situação atual na ANTT</h3>
+        <p style={{fontSize:12,opacity:.8}}>
+          Este registro guarda a sua conferência do portal oficial; o Prime Finance não consulta a ANTT automaticamente.
+        </p>
+        <label>RNTRC conferido
+          <input name="rntrc" readOnly value={(profile.data as {rntrc?:string}|null)?.rntrc||""}/>
+        </label>
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
+          <input type="checkbox" required name="checked" value="yes"/>
+          Confirmei no site da ANTT que o RNTRC está ATIVO para a Prime Group.
+        </label>
+        <button className="button" type="submit" disabled={!(profile.data as {rntrc?:string}|null)?.rntrc}>Registrar minha conferência</button>
       </form>
       <form action={registerDriver} className="card" style={{display:"grid",gap:10}}>
         <h3>Cadastrar motorista</h3>
