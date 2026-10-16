@@ -4,6 +4,7 @@ import {CheckCircle2,PlugZap,ShieldAlert,RefreshCw,ClipboardCheck} from "lucide-
 type ProductionResult={configured:boolean;authenticated:boolean;emitterLookup:"ok"|"denied"|"unavailable"|"not_checked";productionEnabled:boolean;status?:number;reason?:string;message?:string};
 type CheckResult={configured?:boolean;connected?:boolean;environment?:string;
  reason?:string;message?:string};
+type Insights={kind:string;cargo:string|null;local:Array<{cargo:string;attempt?:{status?:string;error_code?:string;idempotency_key?:string}|null}>;provider:{ok:boolean;httpStatus:number|null;error:string|null;items:Array<Record<string,unknown>>;summary:Record<string,unknown>};reconciled:boolean;warning:string};
 type Preview={ready:boolean;invoiceCount:number;freightValue:number|null;
  goodsValue:number;missing:string[];canTransmit:boolean;notice:string};
 export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
@@ -15,6 +16,10 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
  const [production,setProduction]=useState<ProductionResult|null>(null);
  const [checkingProduction,setCheckingProduction]=useState(false);
  const [productionError,setProductionError]=useState("");
+ const [insightKind,setInsightKind]=useState<"cte"|"mdfe"|"mdfe_pending"|"usage">("cte");
+ const [cargo,setCargo]=useState("");
+ const [insights,setInsights]=useState<Insights|null>(null);
+ const [insightLoading,setInsightLoading]=useState(false);
  async function check(){
   setBusy(true);setError("");setResult(null);
   try{
@@ -51,6 +56,18 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
   }catch{
    setProduction(null);setProductionError("Não foi possível verificar a chave de produção.");
   }finally{setCheckingProduction(false)}
+ }
+ async function checkInsights(){
+  setInsightLoading(true);setError("");setInsights(null);
+  try{
+   const params=new URLSearchParams({kind:insightKind});
+   if(insightKind==="cte"&&cargo.trim())params.set("cargo",cargo.trim());
+   const response=await fetch("/api/fiscal/dotcompany/insights?"+params.toString(),{cache:"no-store"});
+   const value=await response.json() as Insights&{error?:string};
+   if(!response.ok)throw Error(value.error||"Consulta fiscal indisponível.");
+   setInsights(value);
+  }catch(e){setError(e instanceof Error?e.message:"Não foi possível consultar a DotCompany.");}
+  finally{setInsightLoading(false);}
  }
  async function preflight(){
   if(!draftId)return;
@@ -112,6 +129,38 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
     <span>{productionError}
      {production?.status===403&&" Abra a chave de PRODUÇÃO na DotCompany → Escopos e habilite usage.report e emitter.list. A falta dessas permissões impede o diagnóstico, mas não comprova que o token seja inválido."}
     </span>
+   </div>}
+  </div>
+  <div className="fiscal-dotcompany-production">
+   <div className="fiscal-dotcompany-heading">
+    <div><span className="fiscal-section-kicker">CONEXÃO DIRETA / SOMENTE CONSULTA</span>
+      <h3>Diagnóstico DotCompany</h3>
+      <p>Consulte os CT-e e MDF-e sem transmitir, cancelar ou alterar numeração.</p>
+    </div>
+   </div>
+   <div className="fiscal-dotcompany-actions">
+    <select aria-label="Tipo de consulta DotCompany" value={insightKind}
+      onChange={e=>{setInsightKind(e.target.value as typeof insightKind);setInsights(null);}}>
+      <option value="cte">Histórico CT-e</option>
+      <option value="mdfe">Histórico MDF-e</option>
+      <option value="mdfe_pending">MDF-e para encerrar</option>
+      <option value="usage">Consumo e saldo</option>
+    </select>
+    {insightKind==="cte"&&<input aria-label="Número da carga" placeholder="Carga (ex.: 029988)"
+      value={cargo} onChange={e=>setCargo(e.target.value.replace(/[^0-9]/g,"").slice(0,12))}/>}
+    <button type="button" className="button" onClick={()=>void checkInsights()} disabled={insightLoading}>
+      <RefreshCw size={15}/>{insightLoading?"Consultando...":"Consultar DotCompany"}
+    </button>
+   </div>
+   {insights&&<div className="fiscal-dotcompany-result" role="status">
+     <strong>{insights.provider.ok?"Consulta recebida da DotCompany":"Não foi possível obter a listagem externa"}</strong>
+     {insights.provider.error&&<p>{insights.provider.error}</p>}
+     {insights.local.map((item,i)=><p key={i}>Carga {item.cargo} · tentativa local: {item.attempt?.status||"não registrada"} · {item.attempt?.error_code||"sem erro registrado"}</p>)}
+     {insights.provider.items.length>0?
+      <ul>{insights.provider.items.map((item,i)=><li key={i}>{[item.numero||item.number||item.id||item.cte_id||item.mdfe_id||"Documento",
+       item.status||item.situacao||"situação não informada",item.chave_acesso||""].filter(Boolean).join(" · ")}</li>)}</ul>:
+      <p>Nenhum documento foi retornado nesta consulta. Isso não comprova ausência de emissão.</p>}
+     <small>{insights.warning}</small>
    </div>}
   </div>
   {drafts.length>0&&<div className="fiscal-dotcompany-preflight">
