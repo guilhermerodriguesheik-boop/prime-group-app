@@ -24,4 +24,28 @@ if(process.env.VERCEL_ENV!=="production"||!token){
  const accepted=checks.some(s=>s===200);
  const rejected=checks.every(s=>s===401);
  console.log("DOTCOMPANY_DEPLOY_CHECK: usage_status="+checks[0]+" emitters_status="+checks[1]+" authenticated="+accepted+" both_rejected="+rejected);
+ // Persist sanitized statuses independently of build-log availability.
+ // No token, user information, or provider response is stored.
+ const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL;
+ const supabaseAdmin=process.env.SUPABASE_SERVICE_ROLE_KEY;
+ if(supabaseUrl&&supabaseAdmin){
+  try{
+   const record={
+    provider:"dotcompany",environment:"production",checked_at:new Date().toISOString(),
+    usage_http_status:typeof checks[0]==="number"?checks[0]:null,
+    emitters_http_status:typeof checks[1]==="number"?checks[1]:null,
+    authenticated:accepted,
+    check_error:checks.some(s=>s==="NETWORK_ERROR")?"NETWORK_ERROR":null,
+   };
+   const res=await fetch((supabaseUrl.endsWith("/")?supabaseUrl.slice(0,-1):supabaseUrl)+"/rest/v1/fiscal_provider_diagnostics?on_conflict=provider,environment",{
+    method:"POST",
+    headers:{"apikey":supabaseAdmin,"Authorization":"Bearer "+supabaseAdmin,
+      "Content-Type":"application/json","Prefer":"resolution=merge-duplicates"},
+    body:JSON.stringify(record),signal:AbortSignal.timeout(12000)
+   });
+   console.log("DOTCOMPANY_DIAGNOSTIC_SAVE: "+(res.ok?"OK":"HTTP_"+res.status));
+  }catch{
+   console.log("DOTCOMPANY_DIAGNOSTIC_SAVE: NETWORK_ERROR");
+  }
+ }
 }
