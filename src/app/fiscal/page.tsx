@@ -9,6 +9,7 @@ import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
 import { fiscalReadiness } from "@/lib/fiscal/readiness";
 import { FiscalReadinessPanel } from "@/components/fiscal/readiness-panel";
 import { DotcompanyPanel } from "@/components/fiscal/dotcompany-panel";
+import { AnttMonthlyCheck } from "@/components/fiscal/antt-monthly-check";
 import { FiscalTabs,FiscalTabPanel } from "@/components/fiscal/fiscal-tabs";
 import { OrtobomFinancePanel } from "@/components/fiscal/ortobom-finance-panel";
 import { canonicalCargo } from "@/lib/fiscal/ortobom-finance-parser";
@@ -270,6 +271,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
           periods={financePeriods} emailCount={financeEmails.length} connected={Boolean(gmail)}/>
         </FiscalTabPanel>
         <FiscalTabPanel tab="integracoes">
+        <AnttMonthlyCheck/>
         <section className="fiscal-readiness-section" aria-label="Condições de emissão fiscal">
           <span className="fiscal-section-kicker">CONTROLES DE EMISSÃO</span>
           <h2>O que já está pronto e o que ainda depende de homologação</h2>
