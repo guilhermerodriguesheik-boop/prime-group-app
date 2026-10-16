@@ -38,6 +38,9 @@ jobs:
       - name: Ortobom parser tests
         run: npm run test:ortobom
 
+      - name: Ortobom financial reconciliation parser tests
+        run: npm run test:ortobom-finance
+
       - name: Google OAuth and fiscal readiness tests
         run: npm run test:fiscal-readiness
 
