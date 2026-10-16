@@ -58,18 +58,27 @@ export async function POST(req:Request){
  if(!token)return NextResponse.json({error:"Chave fiscal de produção ausente."},{status:503});
  // Obtain original authorized XML from provider. Fail closed on undocumented or incomplete responses.
  let xml="";
+ let documentError="";
  try{
-  const url=new URL("https://erp.dotcompany.com.br/api/v1/cte/documento");
-  url.searchParams.set("chave_acesso",trans.access_key);
-  const result=await fetch(url,{headers:{Authorization:"Bearer "+token,Accept:"application/json"},
+  // DotCompany transport documents use POST (not GET with query string).
+  const result=await fetch("https://erp.dotcompany.com.br/api/v1/cte/documento",{
+   method:"POST",
+   headers:{Authorization:"Bearer "+token,Accept:"application/json","Content-Type":"application/json"},
+   body:JSON.stringify({chave_acesso:trans.access_key,formato:"xml"}),
    cache:"no-store",signal:AbortSignal.timeout(12000)});
-  if(!result.ok)throw Error("Documento fiscal indisponível.");
+  if(!result.ok)throw Error("HTTP "+result.status);
   const obj=await result.json() as Record<string,unknown>;
-  if(typeof obj.xml==="string"&&obj.xml.trim().startsWith("<"))xml=obj.xml;
-  else if(typeof obj.xml_base64==="string")xml=Buffer.from(obj.xml_base64,"base64").toString("utf8");
- }catch{}
- if(!xml||!xml.includes(trans.access_key)||!xml.includes("<"))
-  return NextResponse.json({error:"A DotCompany ainda não devolveu o XML autorizado em formato verificável. Nenhum e-mail foi enviado."},{status:409});
+  const nested=obj.documento&&typeof obj.documento==="object"&&!Array.isArray(obj.documento)
+   ?obj.documento as Record<string,unknown>:{};
+  const raw=typeof obj.xml==="string"?obj.xml:typeof nested.xml==="string"?nested.xml:"";
+  const b64=[obj.xml_base64,obj.conteudo_base64,nested.xml_base64,nested.conteudo_base64]
+   .find(value=>typeof value==="string");
+  if(raw.trim().startsWith("<"))xml=raw;
+  else if(typeof b64==="string"&&b64.length<3_000_000)
+   xml=Buffer.from(b64,"base64").toString("utf8");
+ }catch(error){documentError=error instanceof Error&&error.message.startsWith("HTTP ")?error.message.slice(0,12):"falha ao recuperar documento";}
+ if(!xml||!xml.includes(trans.access_key)||!xml.includes("protCTe")||!xml.includes("cStat>100<"))
+  return NextResponse.json({error:"Não foi possível verificar o XML autorizado na DotCompany. Nenhum e-mail foi enviado.",reason:documentError||"XML sem protocolo de autorização cStat 100 ou chave divergente."},{status:409});
  const {data:claimed,error:claimError}=await db.from("fiscal_cte_email_replies").insert({
   workspace_id:s.workspaceId,draft_id:draft.id,source_message_id:source.message_id,
   recipient_email:"pending@ortobom.com.br",cte_access_key:trans.access_key,
