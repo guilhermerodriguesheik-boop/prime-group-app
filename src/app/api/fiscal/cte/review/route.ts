@@ -54,5 +54,15 @@ export async function POST(req:Request){
  }).eq("id",body.draftId).eq("workspace_id",s.workspaceId).eq("status","draft")
  .eq("updated_at",r.draft.updated_at).select("id").maybeSingle();
  if(error||!updated)return NextResponse.json({error:"O rascunho mudou. Reabra a revisão antes de salvar."},{status:409});
+ // Store only reviewed reusable defaults; never reuse numbering approval.
+ const {error:defaultError}=await s.db.from("fiscal_transport_profiles").upsert({
+  workspace_id:s.workspaceId,
+  cte_defaults:{
+   cfop:config.cfop,tomador:config.tomador,produto_predominante:config.produto_predominante,
+   uf_licenciamento:config.uf_licenciamento,
+   origin_uf:r.preview.payload.uf_inicio,destination_uf:r.preview.payload.uf_fim,
+  },
+ },{onConflict:"workspace_id"});
+ if(defaultError)return NextResponse.json({ok:true,message:"Dados salvos no CT-e. Não foi possível atualizar o modelo reutilizável; os dados da carga foram preservados."});
  return NextResponse.json({ok:true,message:"Dados salvos. Revise novamente antes de autorizar o envio."});
 }
