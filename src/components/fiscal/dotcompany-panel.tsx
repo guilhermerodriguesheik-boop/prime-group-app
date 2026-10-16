@@ -70,8 +70,8 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
   <div className="fiscal-dotcompany-heading">
    <div><span className="fiscal-section-kicker">API FISCAL / NOVA INTEGRAÇÃO</span>
     <h3>DotCompany</h3>
-    <p>Conexão Sandbox para testes de CT-e e MDF-e. Não emite documentos fiscais reais.</p>
-   </div><span className="fiscal-gmail-state waiting">Homologação</span>
+    <p>Ambiente de testes separado da produção. Verifique abaixo a conexão de emissão real.</p>
+   </div><span className="fiscal-gmail-state waiting">Sandbox / testes</span>
   </div>
   <div className="fiscal-dotcompany-actions">
    <button className="button primary" type="button" onClick={check} disabled={busy}>
@@ -115,7 +115,7 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
    </div>}
   </div>
   {drafts.length>0&&<div className="fiscal-dotcompany-preflight">
-    <label>Conferir uma carga sem emitir
+    <label>Verificar requisitos reais de uma carga (sem emitir)
      <select value={draftId} onChange={e=>{setDraftId(e.target.value);setPreview(null)}}>
       {drafts.map(v=><option key={v.id} value={v.id}>{v.label}</option>)}
      </select>
@@ -125,7 +125,7 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
   {preview&&<div className="fiscal-dotcompany-result" role="status">
     <strong>{preview.invoiceCount} NF-e vinculada(s) — frete {preview.freightValue===null?"não informado":preview.freightValue.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</strong>
     <p>Mercadorias: {preview.goodsValue.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})} (não confundir com o frete).</p>
-    <strong>Antes de emitir:</strong>
+    <strong>{preview.ready?"Conferência concluída — confirme no painel Revisar / enviar.":"Pendências para emissão real:"}</strong>
     <ul>{preview.missing.map((m,i)=><li key={i}>{m}</li>)}</ul>
     <small>{preview.notice}</small>
    </div>}
