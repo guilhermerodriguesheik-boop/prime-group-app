@@ -40,7 +40,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname=usePathname();
   const [theme,setTheme]=useState<"light"|"dark">("light");
   const [menuOpen,setMenuOpen]=useState(false);
-  const [expanded,setExpanded]=useState<string|null>("Principal");
+  const [expandedOverride,setExpandedOverride]=useState<{path:string;group:string|null}|null>(null);
+  const activeGroup=nav.find(g=>g.items.some(x=>x.href==="/"?pathname==="/":pathname.startsWith(x.href)))?.label||"Principal";
+  const expanded=expandedOverride?.path===pathname?expandedOverride.group:activeGroup;
   useEffect(()=>{
     const saved=window.localStorage.getItem("prime-theme");
     const preference=saved==="dark"?"dark":"light";
@@ -50,10 +52,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     },0);
     return ()=>window.clearTimeout(tick);
   },[]);
-  useEffect(()=>{
-    const group=nav.find(g=>g.items.some(x=>x.href==="/"?pathname==="/":pathname.startsWith(x.href)));
-    setExpanded(group?.label||"Principal");
-  },[pathname]);
   function toggleTheme(){
     const next=theme==="light"?"dark":"light";
     setTheme(next);
@@ -99,7 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div key={group.label} className="sidebar-group">
               <button type="button" className={"nav-accordion-toggle"+(expanded===group.label?" is-open":"")}
                 aria-expanded={expanded===group.label} aria-controls={"nav-group-"+group.label}
-                onClick={()=>setExpanded(old=>old===group.label?null:group.label)}>
+                onClick={()=>setExpandedOverride({path:pathname,group:expanded===group.label?null:group.label})}>
                 <span>{group.label}</span>
                 <span aria-hidden="true">{expanded===group.label?"−":"+"}</span>
               </button>
