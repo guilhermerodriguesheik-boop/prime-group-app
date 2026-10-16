@@ -76,7 +76,7 @@ export async function POST(req:Request){
   if(raw.trim().startsWith("<"))xml=raw;
   else if(typeof b64==="string"&&b64.length<3_000_000)
    xml=Buffer.from(b64,"base64").toString("utf8");
- }catch(error){documentError=error instanceof Error&&/^HTTP \\d{3}$/.test(error.message)?error.message:"falha ao recuperar documento";}
+ }catch(error){documentError=error instanceof Error&&error.message.startsWith("HTTP ")?error.message.slice(0,12):"falha ao recuperar documento";}
  if(!xml||!xml.includes(trans.access_key)||!xml.includes("protCTe")||!xml.includes("cStat>100<"))
   return NextResponse.json({error:"Não foi possível verificar o XML autorizado na DotCompany. Nenhum e-mail foi enviado.",reason:documentError||"XML sem protocolo de autorização cStat 100 ou chave divergente."},{status:409});
  const {data:claimed,error:claimError}=await db.from("fiscal_cte_email_replies").insert({
