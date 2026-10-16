@@ -3,7 +3,7 @@ import {useState} from "react";
 import {useRouter} from "next/navigation";
 import {RefreshCw} from "lucide-react";
 type Cargo={cargo:string;freight:number|null;claimed:number|null;advance:number;balance:number|null;cte:string|null;status:string};
-type Period={id:string;date:string|null;period:string;deposit:number|null;promissory:number|null;loads:number};
+type Period={id:string;date:string|null;period:string;deposit:number|null;promissory:number|null;loads:number;bankMatch:string};
 export function OrtobomFinancePanel({cargo,periods,emailCount,connected}:{
  cargo:Cargo[];periods:Period[];emailCount:number;connected:boolean;
 }){
@@ -47,7 +47,7 @@ export function OrtobomFinancePanel({cargo,periods,emailCount,connected}:{
    <p>Conciliação com extrato bancário ainda não confirmada.</p></div></div>
   <div className="table-wrap fiscal-data-table"><table>
    <thead><tr><th>Data informada</th><th>Período</th><th>Depósito informado</th><th>Nota promissória / desconto</th><th>Cargas</th><th>Situação</th></tr></thead>
-   <tbody>{periods.map(p=><tr key={p.id}><td>{p.date||"—"}</td><td>{p.period}</td><td>{brl(p.deposit)}</td><td>{brl(p.promissory)}</td><td>{p.loads}</td><td>Verificar no banco</td></tr>)}
+   <tbody>{periods.map(p=><tr key={p.id}><td>{p.date||"—"}</td><td>{p.period}</td><td>{brl(p.deposit)}</td><td>{brl(p.promissory)}</td><td>{p.loads}</td><td>{p.bankMatch}</td></tr>)}
     {!periods.length&&<tr><td colSpan={6}>Nenhum relatório de período encontrado.</td></tr>}
    </tbody></table></div>
  </section>;
