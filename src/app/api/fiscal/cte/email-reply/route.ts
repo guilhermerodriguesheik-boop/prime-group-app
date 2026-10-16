@@ -76,7 +76,7 @@ export async function POST(req:Request){
   else if(typeof b64==="string"&&b64.length<3_000_000)
    xml=Buffer.from(b64,"base64").toString("utf8");
  }catch{}
- if(!xml||!xml.includes(trans.access_key)||!/<(?:[a-z0-9_]+:)?protCTe[\\s>]/i.test(xml)||!/<(?:[a-z0-9_]+:)?cStat>100<\\//i.test(xml))
+ if(!xml||!xml.includes(trans.access_key)||!xml.includes("protCTe")||!xml.includes("cStat>100<"))
   return NextResponse.json({error:"A DotCompany ainda não devolveu o XML autorizado em formato verificável. Nenhum e-mail foi enviado."},{status:409});
  const {data:claimed,error:claimError}=await db.from("fiscal_cte_email_replies").insert({
   workspace_id:s.workspaceId,draft_id:draft.id,source_message_id:source.message_id,
