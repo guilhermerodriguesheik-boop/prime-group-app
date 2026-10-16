@@ -255,8 +255,13 @@ export async function syncAllGmailWorkspaces(){
   const {data,error}=await admin().from("fiscal_gmail_connections").select("workspace_id,owner_id").limit(15);
   if(error)throw Error("Conexões Gmail indisponíveis.");
   const result=[];for(const item of data||[]){
-    try{result.push({workspace_id:item.workspace_id,...await syncGmailWorkspace(item.workspace_id,item.owner_id)});}
-    catch{result.push({workspace_id:item.workspace_id,error:"sync_failed"});}
+    try{
+      const cargos=await syncGmailWorkspace(item.workspace_id,item.owner_id);
+      let finance:FinancialGmailSync|{error:string};
+      try{finance=await syncOrtobomFinancialReports(item.workspace_id,item.owner_id);}
+      catch{finance={error:"finance_sync_failed"};}
+      result.push({workspace_id:item.workspace_id,...cargos,finance});
+    }catch{result.push({workspace_id:item.workspace_id,error:"sync_failed"});}
   }return result;
 }
 
