@@ -15,7 +15,7 @@ export async function gmailClientStatus():Promise<GoogleClientStatus>{
  clientStatusCache={time:Date.now(),value};
  return value;
 }
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
 export type GmailOAuthFailure = "invalid_client"|"invalid_grant"|"token_denied"|"missing_refresh"|"wrong_google_account"|"supabase_access"|"database_write"|"gmail_profile"|"session_or_workspace"|"unexpected";
 export class GmailOAuthError extends Error {
   constructor(public readonly code:GmailOAuthFailure){super(code);this.name="GmailOAuthError";}
