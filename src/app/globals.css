@@ -558,3 +558,48 @@ html[data-theme="dark"] .fiscal-gmail-icon{background:#223b61;border-color:#3854
 /* DotCompany production read-only diagnostic */
 .fiscal-dotcompany-production{display:grid;gap:13px;padding:16px;border:1px solid var(--line);border-radius:12px}
 .fiscal-dotcompany-production .fiscal-dotcompany-heading h3{font-size:17px}
+
+/* Prime Finance: progressive disclosure and fiscal module navigation */
+.nav-accordion-toggle{
+ width:100%;display:flex;align-items:center;justify-content:space-between;
+ padding:12px 12px;margin:6px 0;border:1px solid transparent;
+ border-radius:11px;background:transparent;color:var(--muted);
+ font-size:12px;font-weight:760;text-transform:uppercase;letter-spacing:.075em;
+ cursor:pointer;transition:background .18s,border-color .18s;
+}
+.nav-accordion-toggle:hover,.nav-accordion-toggle.is-open{
+ background:var(--panel2);border-color:var(--line);color:var(--text)
+}
+.nav-accordion-toggle span:last-child{font-size:18px;line-height:1}
+.sidebar-group{margin:7px 0 10px}
+.sidebar-group .nav{margin-bottom:11px}
+.fiscal-module-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+ gap:10px;margin:16px 0 24px;}
+.fiscal-module-tab{display:flex;align-items:center;text-align:left;gap:12px;
+ min-height:76px;padding:15px 17px;border:1px solid var(--line);
+ background:var(--panel);border-radius:14px;color:var(--text);
+ cursor:pointer;transition:background .15s,border-color .15s,transform .15s;
+}
+.fiscal-module-tab svg{flex-shrink:0;color:var(--muted)}
+.fiscal-module-tab span{display:grid;gap:4px}
+.fiscal-module-tab strong{font-size:13px;line-height:1.35}
+.fiscal-module-tab small{color:var(--muted);font-size:11px;line-height:1.35}
+.fiscal-module-tab:hover{background:var(--panel2);transform:translateY(-1px)}
+.fiscal-module-tab.is-active{border-color:var(--accent);
+ background:color-mix(in srgb,var(--accent) 11%,var(--panel))}
+.fiscal-module-tab.is-active svg{color:var(--accent)}
+.fiscal-module-tab:focus-visible,.nav-accordion-toggle:focus-visible{
+ outline:3px solid var(--accent);outline-offset:3px}
+.fiscal-active-module{display:grid;gap:18px;min-width:0;}
+.fiscal-tab-content{min-width:0;animation:fiscalReveal .16s ease}
+.fiscal-tab-content>section,.fiscal-tab-content>.fiscal-compliance{margin-bottom:20px}
+.fiscal-modular-grid{display:block;min-width:0;}
+@keyframes fiscalReveal{from{opacity:.7;transform:translateY(3px)}to{opacity:1;transform:none}}
+@media(max-width:1000px){.fiscal-module-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){
+ .fiscal-module-tabs{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ .fiscal-module-tab{min-height:64px;padding:10px;gap:8px;border-radius:11px}
+ .fiscal-module-tab svg{width:16px;height:16px}
+ .fiscal-module-tab strong{font-size:11px}
+ .fiscal-module-tab small{font-size:10px}
+}

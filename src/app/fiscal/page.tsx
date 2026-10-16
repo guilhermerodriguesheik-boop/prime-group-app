@@ -9,6 +9,7 @@ import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
 import { fiscalReadiness } from "@/lib/fiscal/readiness";
 import { FiscalReadinessPanel } from "@/components/fiscal/readiness-panel";
 import { DotcompanyPanel } from "@/components/fiscal/dotcompany-panel";
+import { FiscalTabs,FiscalTabPanel } from "@/components/fiscal/fiscal-tabs";
 import { OrtobomFinancePanel } from "@/components/fiscal/ortobom-finance-panel";
 import { canonicalCargo } from "@/lib/fiscal/ortobom-finance-parser";
 import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
@@ -147,8 +148,8 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
             <h2>Da carga recebida ao manifesto, em um só lugar.</h2>
             <p>Organize NF-e da Ortobom, CIOT, fretes e documentos da operação. Os arquivos importados ficam disponíveis para conferência antes de qualquer emissão.</p>
             <div className="fiscal-hero-cta">
-              <a href="#gmail-integration" className="fiscal-hero-button">Conectar cargas <span aria-hidden="true">↗</span></a>
-              <a href="#cte-queue" className="fiscal-hero-textlink">Ver fila de CT-e <span aria-hidden="true">→</span></a>
+              <a href="#module-cargas" className="fiscal-hero-button">Conectar cargas <span aria-hidden="true">↗</span></a>
+              <a href="#module-cte" className="fiscal-hero-textlink">Ver fila de CT-e <span aria-hidden="true">→</span></a>
             </div>
           </div>
           <div className="fiscal-hero-metrics">
@@ -165,12 +166,8 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
         </div>}
         {query.gmail==="setup_required"&&<div className="fiscal-alert fiscal-alert-error" role="alert">Entre com a conta proprietária do Prime Finance antes de conectar o Gmail.</div>}
         {query.gmail==="connected"&&!gmail&&<div className="fiscal-alert fiscal-alert-error" role="alert">O Google retornou ao aplicativo, mas não foi localizado o registro da conexão no banco.</div>}
-        <nav className="fiscal-jump-links" aria-label="Atalhos de operações fiscais">
-          <a href="#gmail-integration">01 · Integração de cargas</a>
-          <a href="#cte-queue">02 · Documentos CT-e</a>
-          <a href="#fiscal-assistant">03 · Conferência por IA</a>
-          <a href="#mdfe-manifest">04 · Manifestos MDF-e</a>
-        </nav>
+        <FiscalTabs>
+          <FiscalTabPanel tab="cargas">
         <section id="gmail-integration">
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">01 / CONEXÃO DE DADOS</span><h2>Importação de cargas</h2><p>Receba os XMLs sem digitar novamente os dados da viagem.</p></div><span className={"fiscal-connection-status "+(gmail?"is-live":"is-pending")}>{gmail?"Gmail vinculado":"Conexão pendente"}</span></div>
           <div className="fiscal-connect-layout">
@@ -187,10 +184,14 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
             </aside>
           </div>
         </section>
+          </FiscalTabPanel>
+          <FiscalTabPanel tab="integracoes">
         <section id="fiscal-provider">
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">AUTORIZADOR / SANDBOX</span><h2>Integração fiscal DotCompany</h2><p>Valide a chave e confira os documentos sem solicitar uma emissão real.</p></div></div>
           <DotcompanyPanel drafts={[...ctes].sort((a,b)=>Number(canPrepareNewCte(b.status,b.checklist))-Number(canPrepareNewCte(a.status,a.checklist))).map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem referência")+" · "+(canPrepareNewCte(x.status,x.checklist)?"para preparar":"bloqueada / conferência")}))}/>
         </section>
+          </FiscalTabPanel>
+          <FiscalTabPanel tab="cte">
         <section id="cte-queue">
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">02 / DOCUMENTOS</span><h2>Fila de CT-e</h2><p>Lista real das cargas cadastradas; rascunhos não equivalem a documentos autorizados.</p></div><span className="fiscal-count">{ctes.length} {ctes.length===1?"registro":"registros"}</span></div>
           {error&&<div className="fiscal-alert fiscal-alert-error">Consulta fiscal indisponível: {error.message}</div>}
@@ -234,19 +235,21 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
             <td><span className="fiscal-cte-external">DACTE recebido · consultar SEFAZ</span></td>
           </tr>)}</tbody></table></div>
         </section>}
-        <div className="fiscal-dual-grid">
-          <section id="fiscal-assistant">
+          </FiscalTabPanel>
+        <div className="fiscal-modular-grid">
+          <FiscalTabPanel tab="ia"><section id="fiscal-assistant">
             <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">03 / INTELIGÊNCIA OPERACIONAL</span><h2>Conferência por IA</h2><p>Pergunte sobre cargas, notas, CIOT, motoristas e veículos.</p></div></div>
             <FiscalAiPanel/>
-          </section>
-          <section id="manual-import">
+          </section></FiscalTabPanel>
+          <FiscalTabPanel tab="cargas"><section id="manual-import">
             <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">ALTERNATIVA / IMPORTAÇÃO MANUAL</span><h2>Enviar documentos</h2><p>Utilize quando uma carga ainda não estiver no Gmail.</p></div></div>
             <div className="fiscal-manual-panel">
               <details><summary>Importar carga com múltiplas NF-e <span>+</span></summary><OrtobomCargoForm/></details>
               <details><summary>Importar uma NF-e individual <span>+</span></summary><FiscalImportForm/></details>
             </div>
-          </section>
+          </section></FiscalTabPanel>
         </div>
+        <FiscalTabPanel tab="mdfe">
         <section id="mdfe-manifest">
           <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">04 / VIAGEM</span><h2>Preparação do MDF-e</h2><p>Vincule a carga ao veículo e motorista. A emissão real depende de integração fiscal homologada.</p></div><a className="fiscal-outline-link" href="/cadastros/transporte">Gerenciar cadastros ↗</a></div>
           <div className="fiscal-manifest-grid">
@@ -261,8 +264,12 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
             </aside>
           </div>
         </section>
+        </FiscalTabPanel>
+        <FiscalTabPanel tab="financeiro">
         <OrtobomFinancePanel cargo={[...cargoData.values()].sort((a,b)=>b.cargo.localeCompare(a.cargo))}
           periods={financePeriods} emailCount={financeEmails.length} connected={Boolean(gmail)}/>
+        </FiscalTabPanel>
+        <FiscalTabPanel tab="integracoes">
         <section className="fiscal-readiness-section" aria-label="Condições de emissão fiscal">
           <span className="fiscal-section-kicker">CONTROLES DE EMISSÃO</span>
           <h2>O que já está pronto e o que ainda depende de homologação</h2>
@@ -280,6 +287,8 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
           <div><span className="fiscal-section-kicker">EMISSÃO CONTROLADA</span><h3>Conferência fiscal e credenciamento</h3><p>Os CT-e e MDF-e desta tela são rascunhos, sem número, XML assinado ou protocolo SEFAZ. A IA ajuda a revisar, mas não transmite documentos.</p><p>DotCompany: {process.env.DOTCOMPANY_SANDBOX_API_KEY?.startsWith("dc_test_")?"chave Sandbox configurada":"chave Sandbox ausente"} · transmissão de produção desabilitada. Focus NFe (legado): homologação {fiscalIntegrationState().homologacao?"configurada":"não configurada"} · produção {fiscalIntegrationState().producao?"configurada":"não configurada"}.</p></div>
           <div><ul>{mdfeTransmissionBlockers().map(reason=><li key={reason}>{reason}</li>)}</ul><a href="https://consultapublica.antt.gov.br/Site/ConsultaRNTRC.aspx" target="_blank" rel="noopener noreferrer">Consultar RNTRC na ANTT ↗</a></div>
         </footer>
+        </FiscalTabPanel>
+        </FiscalTabs>
       </div>
     </>
   );

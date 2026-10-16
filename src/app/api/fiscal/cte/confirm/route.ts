@@ -4,6 +4,7 @@ import {NextResponse} from "next/server";
 import {createClient as adminClient} from "@supabase/supabase-js";
 import {session,gather} from "@/lib/fiscal/cte-data";
 import {productionKey} from "@/lib/fiscal/cte-confirm";
+import {checkDotCompanyProduction} from "@/lib/fiscal/dotcompany-production";
 export const runtime="nodejs";
 export const maxDuration=60;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,6 +28,16 @@ export async function POST(req:Request){
  const key=process.env.DOTCOMPANY_PRODUCTION_API_KEY;
  if(!productionKey(key)||process.env.DOTCOMPANY_CTE_LIVE_ENABLED!=="true")
   return NextResponse.json({error:"Emissão real não habilitada. Configure chave de produção e valide o emissor antes de transmitir."},{status:409});
+ // Read-only, fail-closed check against DotCompany before claiming a fiscal transmission.
+ // A configured dc_live_ token is NOT proof that the provider has authorized it.
+ const verified=await checkDotCompanyProduction(key,true);
+ if(!verified.authenticated){
+  return NextResponse.json({
+   error:"Chave DotCompany de produção não autenticada. Nenhum CT-e foi enviado.",
+   reason:verified.reason||"A API fiscal não confirmou as credenciais.",
+   httpStatus:verified.status||null,
+  },{status:503,headers:{"Cache-Control":"no-store"}});
+ }
  const currentData=await gather(current.workspaceId,current.db,data.draftId);
  if(!currentData)return NextResponse.json({error:"CT-e não encontrado."},{status:404});
  const {preview}=currentData;
