@@ -55,3 +55,16 @@ test("Production check refuses to declare success if both free reads lack scope"
  assert.equal(r.emitterLookup,"denied");
  assert.match(r.reason,/usage.report/);
 });
+
+test("401 on usage alone does not mean revoked if emitter.list authenticates",async()=>{
+ let n=0;
+ const result=await checkDotCompanyProduction(key,false,async()=>{
+  n++;return new Response("{}",{status:n===1?401:200});
+ });
+ assert.equal(result.authenticated,true);assert.equal(result.emitterLookup,"ok");
+});
+test("Two independent 401s mean the live key is rejected by both endpoints",async()=>{
+ const result=await checkDotCompanyProduction(key,false,async()=>new Response("{}",{status:401}));
+ assert.equal(result.authenticated,false);assert.equal(result.status,401);
+ assert.match(result.reason,/Ambos os endpoints/);
+});
