@@ -59,16 +59,24 @@ export async function POST(req:Request){
  // Obtain original authorized XML from provider. Fail closed on undocumented or incomplete responses.
  let xml="";
  try{
-  const url=new URL("https://erp.dotcompany.com.br/api/v1/cte/documento");
-  url.searchParams.set("chave_acesso",trans.access_key);
-  const result=await fetch(url,{headers:{Authorization:"Bearer "+token,Accept:"application/json"},
+  // DotCompany transport documents use POST (not GET with query string).
+  const result=await fetch("https://erp.dotcompany.com.br/api/v1/cte/documento",{
+   method:"POST",
+   headers:{Authorization:"Bearer "+token,Accept:"application/json","Content-Type":"application/json"},
+   body:JSON.stringify({chave_acesso:trans.access_key,formato:"xml"}),
    cache:"no-store",signal:AbortSignal.timeout(12000)});
-  if(!result.ok)throw Error("Documento fiscal indisponível.");
+  if(!result.ok)throw Error("Documento fiscal indisponível (HTTP "+result.status+").");
   const obj=await result.json() as Record<string,unknown>;
-  if(typeof obj.xml==="string"&&obj.xml.trim().startsWith("<"))xml=obj.xml;
-  else if(typeof obj.xml_base64==="string")xml=Buffer.from(obj.xml_base64,"base64").toString("utf8");
+  const nested=obj.documento&&typeof obj.documento==="object"&&!Array.isArray(obj.documento)
+   ?obj.documento as Record<string,unknown>:{};
+  const raw=typeof obj.xml==="string"?obj.xml:typeof nested.xml==="string"?nested.xml:"";
+  const b64=[obj.xml_base64,obj.conteudo_base64,nested.xml_base64,nested.conteudo_base64]
+   .find(value=>typeof value==="string");
+  if(raw.trim().startsWith("<"))xml=raw;
+  else if(typeof b64==="string"&&b64.length<3_000_000)
+   xml=Buffer.from(b64,"base64").toString("utf8");
  }catch{}
- if(!xml||!xml.includes(trans.access_key)||!xml.includes("<"))
+ if(!xml||!xml.includes(trans.access_key)||!/<(?:[a-z0-9_]+:)?protCTe[\\s>]/i.test(xml)||!/<(?:[a-z0-9_]+:)?cStat>100<\\//i.test(xml))
   return NextResponse.json({error:"A DotCompany ainda não devolveu o XML autorizado em formato verificável. Nenhum e-mail foi enviado."},{status:409});
  const {data:claimed,error:claimError}=await db.from("fiscal_cte_email_replies").insert({
   workspace_id:s.workspaceId,draft_id:draft.id,source_message_id:source.message_id,
