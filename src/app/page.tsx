@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, FileCheck2, Landmark, Route } from "lucide-react";
 import { Header, Metric, SectionTitle } from "@/components/ui";
 import { CommandCenter } from "@/components/assistant/command-center";
+import { HomeTabs,HomeTabPanel } from "@/components/home/home-tabs";
 import { getFinanceSnapshot } from "@/lib/finance/data";
 import { brl, pct, shortDate, workspaceLabel } from "@/lib/finance/format";
 
@@ -21,6 +22,8 @@ export default async function Home() {
   return (
     <>
       <Header title="Visão geral" subtitle="Prime + pessoal + recebíveis, sem misturar as contabilidades." />
+      <HomeTabs>
+        <HomeTabPanel tab="resumo">
       <section className="home-workflow-strip">
         <div className="home-workflow-copy">
           <div className="home-workflow-overline"><span/> PRIME OPERATIONS / WORKSPACE PRIVADO</div>
@@ -40,9 +43,13 @@ export default async function Home() {
         <Metric label="Resultado do mês" value={brl(data.prime.result + data.personal.result + data.interest.result)} foot="receitas menos despesas realizadas" tone={(data.prime.result + data.personal.result + data.interest.result) >= 0 ? "positive" : "warning"} />
       </div>
 
+        </HomeTabPanel>
+        <HomeTabPanel tab="assistente">
       <div className="home-intelligence-heading"><div><span>INTELIGÊNCIA DA PRIME</span><h2>Seu assistente financeiro</h2><p>Converse sobre fretes, despesas, comprovantes e decisões do dia a dia.</p></div><Link href="/assistente">Abrir assistente completo <ArrowUpRight size={15}/></Link></div>
       <CommandCenter workspaces={data.workspaces.map((workspace) => ({ id: workspace.id, name: workspace.name, kind: workspace.kind }))} />
 
+        </HomeTabPanel>
+        <HomeTabPanel tab="resumo">
       {(data.overdueReceivables > 0 || data.overduePayables > 0) && (
         <div className="notice attention">
           <b>Atenção:</b> {data.overdueReceivables > 0 ? `${brl(data.overdueReceivables)} a receber em atraso. ` : ""}
@@ -64,6 +71,8 @@ export default async function Home() {
         </div>
       )}
 
+        </HomeTabPanel>
+        <HomeTabPanel tab="financas">
       <SectionTitle title="Separação financeira" hint="consolidado apenas para análise" />
       <div className="grid grid-3">
         {[
@@ -76,6 +85,8 @@ export default async function Home() {
         })}
       </div>
 
+        </HomeTabPanel>
+        <HomeTabPanel tab="frota">
       <SectionTitle title="Frota · resultado do mês" hint="lançamentos vinculados ao veículo" />
       <div className="table-wrap">
         <table>
@@ -95,6 +106,8 @@ export default async function Home() {
         </table>
       </div>
 
+        </HomeTabPanel>
+        <HomeTabPanel tab="receber">
       <SectionTitle title="Próximos recebimentos" hint="planejamento por vencimento" />
       <div className="table-wrap">
         <table>
@@ -114,6 +127,8 @@ export default async function Home() {
         </table>
       </div>
 
+        </HomeTabPanel>
+        <HomeTabPanel tab="acoes">
       <SectionTitle title="Ações rápidas" />
       <div className="quick">
         <Link href="/prime">Novo lançamento da Prime</Link><Link href="/pessoal">Novo lançamento pessoal</Link><Link href="/frota">Cadastrar veículo</Link>
@@ -122,6 +137,8 @@ export default async function Home() {
         <Link href="/documentos">Enviar nota, XML ou comprovante</Link>
         <Link href="/integracoes">Integrações</Link>
       </div>
+        </HomeTabPanel>
+      </HomeTabs>
     </>
   );
 }
