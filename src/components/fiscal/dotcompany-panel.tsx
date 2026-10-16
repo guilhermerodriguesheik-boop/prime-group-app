@@ -1,5 +1,5 @@
 "use client";
-import {useState} from "react";
+import {useState,useEffect} from "react";
 import {CheckCircle2,PlugZap,ShieldAlert,RefreshCw,ClipboardCheck} from "lucide-react";
 type ProductionResult={configured:boolean;authenticated:boolean;emitterLookup:"ok"|"denied"|"unavailable"|"not_checked";productionEnabled:boolean;status?:number;reason?:string;message?:string};
 type CheckResult={configured?:boolean;connected?:boolean;environment?:string;
@@ -25,6 +25,21 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
   }catch{setError("Não foi possível alcançar o serviço de diagnóstico.")}
   finally{setBusy(false)}
  }
+ useEffect(()=>{
+  // Safe on-load check: GET /api/v1/usage and /emitters only, with no SEFAZ transmission.
+  let active=true;
+  const run=async()=>{
+   setCheckingProduction(true);
+   try{
+    const response=await fetch("/api/fiscal/dotcompany/production-status",{cache:"no-store"});
+    const info=await response.json() as ProductionResult;
+    if(active){setProduction(info);setProductionError(info.reason||"");}
+   }catch{if(active)setProductionError("Não foi possível verificar a produção automaticamente.");}
+   finally{if(active)setCheckingProduction(false);}
+  };
+  void run();
+  return ()=>{active=false;};
+ },[]);
  async function checkProduction(){
   setCheckingProduction(true);
   setProductionError("");
