@@ -18,7 +18,7 @@ export type CteInvoice={
 };
 export type CteDriver={id:string;name:string;document:string;active:boolean};
 export type CteVehicle={id:string;plate:string;nickname:string;status:string};
-export type CteProfile={rntrc:string|null;rntrc_checked_at:string|null};
+export type CteProfile={rntrc:string|null;rntrc_checked_at:string|null;cte_defaults?:unknown};
 export type CteReviewInput={
  draft:CteDraft;notes:CteInvoice[];driver:CteDriver|null;vehicle:CteVehicle|null;
  profile:CteProfile|null;configured:boolean;liveEnabled:boolean;existingSubmission:boolean;
@@ -37,7 +37,14 @@ export function safeConfig(raw:unknown):CteConfig{
 }
 export function ctePreview(input:CteReviewInput){
  const {draft,notes,driver,vehicle,profile}=input;
- const c=safeConfig(draft.checklist?.cte_provider_config);
+ const defaults=profile?.cte_defaults&&typeof profile.cte_defaults==="object"&&!Array.isArray(profile.cte_defaults)
+  ? profile.cte_defaults as Record<string,unknown>:{};
+ const routeMatch=defaults.origin_uf===notes[0]?.origin_uf&&defaults.destination_uf===notes[0]?.destination_uf;
+ // A reviewed template may supply tax classification only for a matching route.
+ // Explicit consent and number/duplicate verification are NEVER inherited.
+ const source=draft.checklist?.cte_provider_config||
+  (routeMatch?{...defaults,numbering_verified:false}:{});
+ const c=safeConfig(source);
  const missing:string[]=[];
  if(draft.status!=="draft")missing.push("CT-e não está em rascunho editável.");
  if(draft.checklist?.do_not_issue_duplicate===true||
