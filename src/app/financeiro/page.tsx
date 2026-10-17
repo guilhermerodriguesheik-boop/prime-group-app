@@ -109,7 +109,7 @@ export default async function FinanceiroPage(){
  for(const email of (cargoEmails.data||[]) as LedgerEmail[]){
   if(email.event_kind!=="period_payment"||!email.email_date)continue;
   for(const line of email.ortobom_financial_lines||[]){
-   const reference=String(line.cargo_reference||"").replace(/\\D/g,"").replace(/^0+(?=\\d)/,"");
+   const reference=String(line.cargo_reference||"").replace(/\D/g,"").replace(/^0+(?=\d)/,"");
    if(!reference)continue;
    const value=Number(line.declared_balance??NaN);
    if(!Number.isFinite(value)||value<=0)continue;
