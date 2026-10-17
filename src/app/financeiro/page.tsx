@@ -84,7 +84,7 @@ export default async function FinanceiroPage(){
  },{drivers:0,helpers:0});
  const bankLast=(bankConnections.data||[]).map(c=>c.last_synced_at?Date.parse(c.last_synced_at):0);
  const lastBankSync=Math.max(0,...bankLast);
- const staleBank=lastBankSync?Date.now()-lastBankSync>24*60*60*1000:true;
+ const staleBank=lastBankSync?new Date().getTime()-lastBankSync>24*60*60*1000:true;
 
  const pending=data.payables.filter(p=>ids.has(p.workspace_id)&&["open","overdue","partial"].includes(p.status))
   .map(p=>({...p,remaining:Math.max(0,Number(p.amount)-Number(p.paid_amount))}))
