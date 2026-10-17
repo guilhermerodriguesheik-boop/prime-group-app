@@ -137,7 +137,7 @@ test("Definitive rejection can be corrected but an indeterminate operation stays
  assert.equal(mayRetry.retryAllowed,true);
  const unknown=ctePreview({...valid,existingSubmission:true,retryAllowed:false});
  assert.equal(unknown.ready,false);
- assert.ok(unknown.missing.some(x=>x.includes("Já existe uma tentativa")));
+ assert.ok(unknown.missing.some(x=>x.includes("transmissão anterior")));
 });
 test("Server rejection without SEFAZ response must not permit a fiscal retry",()=>{
  assert.equal(definitiveCteRejection(422,{message:"Autorizador não respondeu"}),false);
