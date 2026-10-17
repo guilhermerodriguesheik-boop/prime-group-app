@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {bankCarouselPayload} from "../src/lib/banks/evolution-go-carousel.ts";
+import {parseEvolutionGoDeliveryStatus as parseDelivery} from "../src/lib/banks/evolution-go-delivery-status.ts";
 const id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 test("NativeFlow carousel holds precisely one bank movement and two image-backed cards",()=>{
  const payload=bankCarouselPayload("5521999999999","SAÍDA · R$ 60,00",id);
@@ -23,4 +24,13 @@ test("more options refer to the same message, never a separate movement",()=>{
  const p=bankCarouselPayload("5521999999999","ENTRADA · R$ 900,00",id,true);
  assert.equal(p.cards[0].header.title,"Outras áreas");
  assert.ok(p.cards[0].buttons.some(b=>b.displayText==="Transferência"));
+});
+
+test("delivery status differs from provider acceptance, with safe fallback",()=>{
+ assert.equal(parseDelivery({message:"success",data:{Info:{ID:"3EB01234567890"}}}),"unavailable");
+ assert.equal(parseDelivery({message:"success",data:{result:{status:"PENDING"}}}),"unavailable");
+ assert.equal(parseDelivery({message:"success",data:{result:{status:"SENT"}}}),"sent");
+ assert.equal(parseDelivery({message:"success",data:{result:{status:"DELIVERED"}}}),"delivered");
+ assert.equal(parseDelivery({message:"success",data:{result:{status:"READ"}}}),"read");
+ assert.equal(parseDelivery(null),"unavailable");
 });
