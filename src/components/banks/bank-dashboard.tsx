@@ -249,6 +249,7 @@ export function BankDashboard(){
           <option value="imported_today">Importados hoje</option>
           <option value="today">Movimentos de hoje</option>
           <option value="yesterday">Ontem</option>
+          <option value="yesterday_today">Ontem e hoje</option>
           <option value="last7">Últimos 7 dias</option>
          </select>
         </label>

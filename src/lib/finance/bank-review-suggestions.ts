@@ -14,16 +14,37 @@ function closeDate(a:string,b:string,maxDays=7){
 function dayDistance(day:number,due:number){
  return Math.min(Math.abs(day-due),Math.abs(day-due+31),Math.abs(day-due-31));
 }
+/** Indicative account movements are not necessarily operating revenue or cost. */
+export function bankMovementNature(move:Pick<ReviewMovement,"description"|"direction">){
+ const text=move.description.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase();
+ if(move.direction==="debit"&&/(?:APL\s+APLIC|APLIC\s+AUT|APLICACAO)/.test(text))
+  return {transfer:true,hint:"Possível aplicação financeira: transferência, não despesa operacional"};
+ if(move.direction==="credit"&&/(?:RES\s+APLIC|RESGATE\s+APLIC)/.test(text))
+  return {transfer:true,hint:"Possível resgate de aplicação: não receita operacional"};
+ if(move.direction==="debit"&&/(?:PARCELA\s+GIRO|EMPRESTIMO)/.test(text))
+  return {transfer:false,hint:"Possível parcela de crédito: conferir juros e amortização"};
+ if(move.direction==="debit"&&/(?:TAR\/CUSTAS|TARIFA\s+BANC)/.test(text))
+  return {transfer:false,hint:"Possível tarifa bancária"};
+ if(move.direction==="debit"&&/DEBITO\s+SEGURO/.test(text))
+  return {transfer:false,hint:"Possível despesa de seguro"};
+ if(move.direction==="credit"&&/(?:SISPAG\s+IND|ORTOBOM)/.test(text))
+  return {transfer:false,hint:"Possível recebimento de cliente: cruzar com cargas"};
+ return {transfer:false,hint:null};
+}
 export function reviewSuggestions(move:ReviewMovement,bills:ReviewBill[],
  recurring:ReviewRecurring[],cargos:ReviewCargo[]){
  const amount=cents(move.amount);
  if(!Number.isSafeInteger(amount)||amount<=0)return [];
+ const nature=bankMovementNature(move);
+ // Bank investment transfers must not be suggested as settlement of invoices.
+ if(nature.transfer)return [nature.hint];
+
  const direction=move.direction==="debit"?"payable":"receivable";
  const matchedBills=bills.filter(b=>b.workspace_id===move.workspace_id&&b.kind===direction
   &&!["cancelled","paid","received"].includes(b.status)
   &&cents(b.amount)-cents(b.settled)===amount
   &&closeDate(move.occurred_on,b.due_date));
- const candidates:string[]=[];
+ const candidates:string[]=nature.hint?[nature.hint]:[];
  if(matchedBills.length===1)candidates.push("Possível conta: "+matchedBills[0].description.slice(0,62));
  else if(matchedBills.length>1)candidates.push(matchedBills.length+" contas possíveis (valor e vencimento)");
  if(move.direction==="debit"){

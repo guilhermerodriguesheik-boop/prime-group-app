@@ -6,7 +6,7 @@ import {primeRpc,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
 
 export const runtime="nodejs";
 export const maxDuration=60;
-const allowed=["imported_today","today","yesterday","last7"] as const;
+const allowed=["imported_today","today","yesterday","yesterday_today","last7"] as const;
 type Mode=(typeof allowed)[number];
 function output(body:unknown,status=200){
  return NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});

@@ -1,6 +1,6 @@
 import { Output, generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
-import { z } from "zod";
+import {whatsAppResponseSchema} from "@/lib/whatsapp/response-schema";
 import { summarizeFiscalXml } from "@/lib/assistant/fiscal-xml";
 import { chooseAiProfile } from "@/lib/ai/cost-routing";
 import {detectBankReportIntent} from "@/lib/banks/report-intent";
@@ -11,27 +11,7 @@ type Event = {
   type: string | null; body: string | null; mediaId: string | null;
   payload: Obj; attempts: number;
 };
-const schema = z.object({
-  answer: z.string().max(1500),
-  actions: z.array(z.object({
-    kind: z.enum(["transaction","trip","note","debt"]),
-    workspace: z.enum(["prime","personal","interest"]).nullable(),
-    certainty: z.enum(["confirmed","unconfirmed"]),
-    description: z.string().max(500),
-    direction: z.enum(["income","expense"]).nullable(),
-    amount: z.number().nonnegative().nullable(),
-    date: z.string().nullable(),
-    recurrence: z.enum(["none","monthly"]).optional(),
-    origin: z.string().nullable(),
-    destination: z.string().nullable(),
-    customer: z.string().nullable(),
-    driver: z.string().nullable(),
-    driverCost: z.number().nonnegative().nullable(),
-    freightValue: z.number().nonnegative().nullable(),
-    distanceKm: z.number().nonnegative().nullable(),
-    reference: z.string().nullable(),
-  })).max(3),
-});
+const schema = whatsAppResponseSchema;
 
 function bridgeConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -479,9 +459,29 @@ export async function processWhatsAppQueue(maxMessages=1) {
       await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
       processed++;
     } catch(error) {
+      const reason=error instanceof Error?error.message.slice(0,240):"Falha no processamento";
+      console.error("WhatsApp worker failed",event.id,reason);
+      // Do not leave the owner waiting forever if an AI/provider error persists.
+      // On the last attempt, send a truthful failure notice rather than silently
+      // marking a legitimate inbound message as failed.
+      if(event.attempts>=4){
+        const reply="Recebi sua mensagem, mas houve uma falha ao processá-la. "+
+          "Não registrei pagamentos nem alterei suas contas. Tente novamente em instantes.";
+        try{
+          if(event.from)await sendText(event.from,reply);
+          await rpc("whatsapp_finish_event",{
+            p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:reply
+          });
+          await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
+          processed++;continue;
+        }catch(failure){
+          console.error("WhatsApp failure notice unavailable",event.id,
+           failure instanceof Error?failure.message:"unknown");
+        }
+      }
       await rpc("whatsapp_finish_event",{
         p_secret:secret,p_event_id:event.id,p_state:event.attempts>=4?"failed":"retry",
-        p_error:error instanceof Error?error.message.slice(0,240):"Unknown processing error",
+        p_error:reason,
       }).catch(()=>undefined);
     }
   }

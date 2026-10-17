@@ -2,7 +2,7 @@
 import {useState} from "react";
 import {useRouter} from "next/navigation";
 import Link from "next/link";
-import {reviewSuggestions,type ReviewCargo,type ReviewRecurring} from "@/lib/finance/bank-review-suggestions";
+import {bankMovementNature,reviewSuggestions,type ReviewCargo,type ReviewRecurring} from "@/lib/finance/bank-review-suggestions";
 type BankMovement={id:string;workspace_id:string;bank_account_id:string;occurred_on:string;
  description:string;amount:number|string;direction:"credit"|"debit";review_status:string};
 type Bill={id:string;workspace_id:string;description:string;amount:number|string;
@@ -51,7 +51,7 @@ export function BankBillMatcher({movements,bills,matches,accountNames,recurring,
   </tr></thead><tbody>
   {movements.map(t=>{
    const kind=t.direction==="debit"?"payable":"receivable";
-   const eligible=bills.filter(b=>b.kind===kind&&b.workspace_id===t.workspace_id
+   const eligible=bankMovementNature(t).transfer?[]:bills.filter(b=>b.kind===kind&&b.workspace_id===t.workspace_id
      &&Number(b.amount)-Number(b.settled)>=Number(t.amount)-.005
      &&!["paid","received","cancelled"].includes(b.status));
    const selected=eligible.find(b=>b.id===chosen[t.id]);
