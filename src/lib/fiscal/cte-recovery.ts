@@ -11,6 +11,15 @@ export function fiscalErrorText(value:unknown):string{
   .filter(Boolean).join(" | ").replace(/dc_(?:live|test)_[A-Za-z0-9._-]+/g,"[CHAVE_OCULTADA]")
   .replace(/Bearer\s+[^\s"']+/gi,"Bearer [CHAVE_OCULTADA]").slice(0,1100);
 }
+/** Exact DotCompany/Python constructor error, NOT a SEFAZ rejection.
+ * No fiscal status may be inferred from it; wait for authoritative reconciliation.
+ */
+export function providerCertificateServiceFailure(value:unknown):boolean{
+ if(!value||typeof value!=="object")return false;
+ let raw="";
+ try{raw=JSON.stringify(value).slice(0,16000);}catch{return false;}
+ return /CertificadoService\.__init__\(\)[^"\\\\]{0,140}takes\s+1\s+positional\s+argument\s+but\s+2\s+were\s+given/i.test(raw);
+}
 export function definitiveCteRejection(httpStatus:number,body:Record<string,unknown>):boolean{
  if(body.autorizado===false&&
     /^[0-9]{3}$/.test(String(body.codigo_status_sefaz??""))&&
@@ -35,6 +44,12 @@ export function correctionFromProvider(status:string|undefined,errorCode:string|
  const detail=String(response?.message||response?.reason||"");
  const check=(errorCode||"")+" "+detail;
  if(status==="authorized")return {title:"CT-e autorizado",description:"Documento emitido; não reenviar.",action:"consultar",retryPossible:false};
+ if(/DOTCOMPANY_CERTIFICATE_SERVICE_FAILURE/i.test(errorCode||"")||
+    providerCertificateServiceFailure(response)){
+  return {title:"Falha interna da DotCompany no serviço de certificado A1",
+   description:"A DotCompany apresentou erro de programação ao carregar o certificado digital. Não há código de rejeição da SEFAZ nem confirmação de autorização. O Prime Finance não consegue corrigir o servidor do provedor; consulte o resultado fiscal antes de tentar outra emissão.",
+   action:"consultar",retryPossible:false};
+ }
  if(status==="sending"||status==="indeterminate"){
   return {title:"Resultado anterior precisa de reconciliação",
    description:detail||"Consulte o protocolo ou a chave na DotCompany antes de liberar outra tentativa. Uma listagem vazia não basta.",

@@ -1,6 +1,6 @@
 import "server-only";
 import {randomUUID} from "node:crypto";
-import {definitiveCteRejection,fiscalErrorText} from "@/lib/fiscal/cte-recovery";
+import {definitiveCteRejection,fiscalErrorText,providerCertificateServiceFailure} from "@/lib/fiscal/cte-recovery";
 import {NextResponse} from "next/server";
 import {createClient as adminClient} from "@supabase/supabase-js";
 import {session,gather} from "@/lib/fiscal/cte-data";
@@ -95,14 +95,16 @@ export async function POST(req:Request){
   const details=received&&typeof received==="object"?received as Record<string,unknown>:{};
   const message=fiscalErrorText(details);
   const code=String(received?.codigo_status_sefaz||"").slice(0,20);
+  const certificateFailure=providerCertificateServiceFailure(details);
   if(!response.ok){
-   const definitive=definitiveCteRejection(response.status,details);
+   const definitive=!certificateFailure&&definitiveCteRejection(response.status,details);
    await update(definitive?"rejected":"indeterminate",{
-    error_code:"HTTP_"+response.status,
+    error_code:certificateFailure?"DOTCOMPANY_CERTIFICATE_SERVICE_FAILURE":"HTTP_"+response.status,
     provider_response:{message,code,http:response.status,definitive_rejection:definitive,
-     provider_error:response.status===422?"VALIDATION_REJECTED":"HTTP_ERROR"}});
+     provider_error:certificateFailure?"PROVIDER_INTERNAL_EXCEPTION":response.status===422?"VALIDATION_REJECTED":"HTTP_ERROR"}});
    return NextResponse.json({
-    error:definitive?"Dados recusados antes da emissão. Corrija os campos apontados e revise antes de tentar novamente.":
+    error:certificateFailure?"Falha interna da DotCompany no processamento do certificado A1. Nenhuma rejeição da SEFAZ foi comprovada. Não reenviar antes de confirmar o resultado fiscal.":
+      definitive?"Dados recusados antes da emissão. Corrija os campos apontados e revise antes de tentar novamente.":
       "Resultado não conclusivo; consulte a DotCompany antes de qualquer outra tentativa.",
     reason:message||null,retryAllowed:definitive,
    },{status:502});
@@ -117,12 +119,14 @@ export async function POST(req:Request){
     message:"CT-e autorizado segundo o retorno da DotCompany. Confira a chave e o protocolo."});
   }
   if(received?.autorizado===false){
-   const definitive=definitiveCteRejection(response.status,details);
+   const definitive=!certificateFailure&&definitiveCteRejection(response.status,details);
    await update(definitive?"rejected":"indeterminate",{
-    error_code:code||"SEFAZ_REJECTED",
-    provider_response:{authorized:false,message,code,definitive_rejection:definitive}});
+    error_code:certificateFailure?"DOTCOMPANY_CERTIFICATE_SERVICE_FAILURE":code||"UNCONFIRMED_PROVIDER_RESULT",
+    provider_response:{authorized:false,message,code,definitive_rejection:definitive,
+     provider_error:certificateFailure?"PROVIDER_INTERNAL_EXCEPTION":undefined}});
    return NextResponse.json({authorized:false,retryAllowed:definitive,
-    message:definitive?"CT-e rejeitado. Corrija os dados e revise antes de reenviar.":
+    message:certificateFailure?"Falha de programação no serviço de certificado A1 da DotCompany. Não há rejeição comprovada da SEFAZ. Aguarde reconciliação antes de reenviar.":
+      definitive?"CT-e rejeitado. Corrija os dados e revise antes de reenviar.":
       "CT-e não autorizado, mas resultado ainda exige reconciliação.",
     reason:message||null});
   }

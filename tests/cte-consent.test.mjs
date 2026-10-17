@@ -118,7 +118,7 @@ test("Reviewed CT-e template is reusable by route, but never reuses sending cons
  assert.equal(other.ready,true);
 });
 
-const {definitiveCteRejection,correctionFromProvider}=loadTS("src/lib/fiscal/cte-recovery.ts");
+const {definitiveCteRejection,correctionFromProvider,providerCertificateServiceFailure}=loadTS("src/lib/fiscal/cte-recovery.ts");
 test("Missing people ids is an explicit pre-SEFAZ rejection and may be corrected",()=>{
  const provider={message:"Faltam campos obrigatórios: remetente_id e destinatario_id"};
  assert.equal(definitiveCteRejection(422,provider),true);
@@ -217,4 +217,21 @@ test("Avisos fiscais acumulados não desabilitam transmissão de rascunho com se
  const result=ctePreview(input);
  assert.equal(result.ready,true,result.missing.join("\n"));
  assert.ok(result.advisories.length>6);
+});
+
+test("DotCompany certificate constructor crash is provider internal, not SEFAZ rejection",()=>{
+ const detail={autorizado:false,erro:{
+  codigo:0,categoria:"desconhecido",
+  titulo:"CertificadoService.__init__() takes 1 positional argument but 2 were given",
+  mensagem:"Ocorreu um erro nao catalogado.",documento:"cte"
+ }};
+ assert.equal(providerCertificateServiceFailure(detail),true);
+ assert.equal(definitiveCteRejection(200,detail),false);
+ assert.equal(providerCertificateServiceFailure({autorizado:false,codigo_status_sefaz:"539"}),false);
+ const stored={message:JSON.stringify(detail.erro),authorized:false,definitive_rejection:false};
+ assert.equal(providerCertificateServiceFailure(stored),true);
+ const instruction=correctionFromProvider("indeterminate","DOTCOMPANY_CERTIFICATE_SERVICE_FAILURE",stored);
+ assert.equal(instruction.action,"consultar");
+ assert.equal(instruction.retryPossible,false);
+ assert.ok(instruction.title.includes("DotCompany"));
 });
