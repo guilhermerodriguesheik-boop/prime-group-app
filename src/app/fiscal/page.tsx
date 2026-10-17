@@ -1,4 +1,5 @@
 import {Header} from "@/components/ui";
+import Link from "next/link";
 import {SimpleCargoTable,type CargoDisplay,type CargoDriver,type CargoOperation} from "@/components/fiscal/simple-cargo-table";
 import {gmailStatus} from "@/lib/fiscal/gmail";
 import {buildCargoLedger,type LedgerDraft,type LedgerEmail} from "@/lib/fiscal/simple-cargo-ledger";
@@ -53,6 +54,8 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
   <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",margin:"12px 0 18px"}}>
    <span style={{fontSize:13}}>{gmail?"Gmail conectado":"Gmail não conectado"}</span>
    {!gmail&&<a className="button primary" href="/api/fiscal/gmail/connect">Conectar Gmail</a>}
+   <Link className="button" href="/prime">Gestão Prime Group</Link>
+   <Link className="button" href="/frota">Frota</Link>
   </div>
   <SimpleCargoTable cargo={cargo} drivers={(drivers.data||[]) as CargoDriver[]} connected={Boolean(gmail)}/>
  </>;
