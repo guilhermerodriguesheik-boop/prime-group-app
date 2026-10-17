@@ -399,6 +399,23 @@ export async function processWhatsAppQueue(maxMessages=1) {
         processed++;continue;
       }
 
+      // Guided classification is a deterministic owner-scoped conversation:
+      // choose a row number from the latest delivered report, then its area.
+      // It never posts money movements or reconciles bills.
+      if(event.type==="text"){
+        const guided=await rpc<{handled:boolean;reply?:string}>(
+          "prime_whatsapp_guided_bank_classify",{
+           p_secret:secret,p_event_id:event.id,p_message:text.slice(0,150)
+          });
+        if(guided.handled&&guided.reply){
+          await sendText(event.from||"",guided.reply);
+          await rpc("whatsapp_finish_event",{
+            p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:guided.reply.slice(0,3900)
+          });
+          await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
+          processed++;continue;
+        }
+      }
       // A numbered movement always resolves against the last successfully SENT
       // bank report snapshot owned by this WhatsApp sender, never against current
       // transaction sorting or a guessed movement with the same amount.
