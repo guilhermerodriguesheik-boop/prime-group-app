@@ -70,7 +70,7 @@ export function prefillCteCompliance(args:{
  }
  const crt=taxCode(transport.tax_crt,/^[123]$/);
  const cst=taxCode(transport.tax_cst,/^(00|20|40|41|50|51|60|90)$/);
- if(crt&&!c.crt){c.crt=crt;autofilled.push("CRT do perfil fiscal do emissor");}
+ if(crt&&!c.crt){c.crt=crt as "1"|"2"|"3";autofilled.push("CRT do perfil fiscal do emissor");}
  if(cst&&!c.cst_icms){c.cst_icms=cst;autofilled.push("CST do perfil fiscal da DotCompany");}
  if(!c.cst_icms)advisories.push("CST ICMS não identificado; o emissor deve utilizar sua configuração fiscal correta.");
  if(transport.license_expires_on&&!c.cnh_validade){
