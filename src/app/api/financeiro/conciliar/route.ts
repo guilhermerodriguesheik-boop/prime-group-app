@@ -43,7 +43,7 @@ export async function POST(req:Request){
   return bad("O movimento não está disponível para este tipo de conta.",409);
  const table=kind==="payable"?"payables":"receivables";
  const {data:bill,error:billError}=await db.from(table)
-  .select("id,workspace_id,amount,paid_amount,received_amount,status")
+  .select(kind==="payable"?"id,workspace_id,amount,paid_amount,status":"id,workspace_id,amount,received_amount,status")
   .eq("id",targetId).eq("workspace_id",ws.id).maybeSingle();
  if(billError||!bill)return bad("Conta não encontrada no mesmo ambiente.",404);
  const settled=Number(kind==="payable"?bill.paid_amount:bill.received_amount);
