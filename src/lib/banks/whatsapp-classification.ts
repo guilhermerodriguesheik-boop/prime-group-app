@@ -33,7 +33,12 @@ export function parseWhatsAppBankNumber(raw:string):BankNumberRequest|null{
  else if(transfer)destination="transfer";
  else if(pending)destination="pending";
  else if(/^(?:tarifa|taxa bancaria|custas bancarias|seguro|diesel|combustivel|pedagio|frete|recebimento|ortobom|motorista|ajudante|manutencao|imposto)(?:\b|$)/.test(label))destination="prime";
- if(!destination)return {type:"clarify",number,category:original};
+ if(!destination){
+  const explicit=/^(?:classificar|classifica|classifique|categoria|movimento|lan[cç]amento)\s+/i.test(text);
+  if(!explicit&&!/^(?:mercado|alimentacao|restaurante|farmacia|compra|compras|uber|pix|pagamento|servico|boleto|loja|conta|gasto)\b/.test(label))
+   return null;
+  return {type:"clarify",number,category:original};
+ }
  const category=normalizeSpace(original.replace(/^(?:prime|empresa|empresarial|pj|pessoal|casa|familia|familiares|pf|pendente|nao classificado|deixar pendente|revisar)\b[\s:,-]*/i,""));
  return {type:"classification",classification:{
   number,destination,category:(destination==="pending"?"":category).slice(0,80)
