@@ -1,11 +1,12 @@
 /** CT-e preview and blocking preflight; never trust client-provided fiscal payloads. */
 import {createHash} from "node:crypto";
+import {safeCteCompliance,cteComplianceIssues,type CteCompliance} from "@/lib/fiscal/cte-compliance";
 import {validCpf} from "@/lib/fiscal/preflight";
 import {preflightCte,type ApiData} from "@/lib/fiscal/dotcompany";
 
 export type CteConfig={
   cfop:string;tomador:string;produto_predominante:string;uf_licenciamento:string;
-  numbering_verified:boolean;
+  numbering_verified:boolean;compliance:CteCompliance;
 };
 export type CteDraft={
   id:string;status:string;updated_at:string;cargo_reference:string|null;ciot:string|null;
@@ -33,6 +34,7 @@ export function safeConfig(raw:unknown):CteConfig{
   produto_predominante:String(data.produto_predominante||"").trim().slice(0,120),
   uf_licenciamento:String(data.uf_licenciamento||"").trim().toUpperCase().slice(0,2),
   numbering_verified:data.numbering_verified===true,
+  compliance:safeCteCompliance(data.compliance),
  };
 }
 export function ctePreview(input:CteReviewInput){
@@ -59,7 +61,8 @@ export function ctePreview(input:CteReviewInput){
  if(notes.some(x=>x.origin_uf!==ufInicio||x.destination_uf!==ufFim))
   missing.push("Notas fiscais têm UFs de origem/destino divergentes.");
  if(!notes.every(x=>/^\d{44}$/.test(x.access_key)))missing.push("Chave de acesso inválida em uma das NF-e.");
- if(!/^\d{11,12}$/.test(normalize(draft.ciot)))missing.push("CIOT não encontrado ou inválido.");
+ if(c.compliance.ciot_aplicabilidade!=="dispensado"&&!/^\d{11,12}$/.test(normalize(draft.ciot)))
+  missing.push("CIOT não encontrado ou inválido quando exigível.");
  if(!vehicle||vehicle.status!=="active"||!vehicle.plate||!(/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(plate(vehicle.plate))))
   missing.push("Selecione um veículo ativo com placa válida.");
  if(!driver||!driver.active||!validCpf(driver.document||"")||driver.name?.trim().length<4)
@@ -72,6 +75,7 @@ export function ctePreview(input:CteReviewInput){
  if(c.produto_predominante.length<3)missing.push("Informe o produto predominante.");
  if(!/^[A-Z]{2}$/.test(c.uf_licenciamento))missing.push("Informe a UF correta de licenciamento do veículo.");
  if(!c.numbering_verified)missing.push("Confirme a sequência fiscal com o emissor anterior antes de transmitir.");
+ missing.push(...cteComplianceIssues(c.compliance,draft.ciot));
  const value=Number(draft.freight_value);
  const goods=notes.reduce((sum,x)=>sum+Number(x.goods_value||0),0);
  const weight=notes.reduce((sum,x)=>sum+Number(x.gross_weight_kg||0),0);
@@ -95,7 +99,7 @@ export function ctePreview(input:CteReviewInput){
  })).digest("hex");
  return {payload,missing:unique,ready:unique.length===0,retryAllowed:input.retryAllowed===true,hash,invoiceCount:notes.length,
   freightValue:value,goodsValue:goods,grossWeight:weight,ciot:draft.ciot,
-  cargoReference:draft.cargo_reference,config:c};
+  cargoReference:draft.cargo_reference,rntrc:profile?.rntrc||null,config:c};
 }
 export function productionKey(token:unknown):token is string{
  return typeof token==="string"&&/^dc_live_[a-zA-Z0-9._-]{16,}$/.test(token);

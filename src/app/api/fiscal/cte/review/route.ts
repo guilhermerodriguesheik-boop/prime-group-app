@@ -40,7 +40,7 @@ export async function POST(req:Request){
  if(origin&&origin!==new URL(req.url).origin)return NextResponse.json({error:"Origem inválida."},{status:403});
  if(req.headers.get("x-prime-action")!=="fiscal-cte-configure")
   return NextResponse.json({error:"Requisição inválida."},{status:403});
- const body=await req.json().catch(()=>null) as {draftId?:unknown;vehicleId?:unknown;driverId?:unknown;config?:unknown}|null;
+ const body=await req.json().catch(()=>null) as {draftId?:unknown;vehicleId?:unknown;driverId?:unknown;config?:unknown;ciot?:unknown}|null;
  if(!body||typeof body.draftId!=="string"||!uuid.test(body.draftId))
   return NextResponse.json({error:"Rascunho inválido."},{status:400});
  const s=await session();
@@ -62,9 +62,10 @@ export async function POST(req:Request){
  ]);
  if(!vehicle.data||!driver.data)return NextResponse.json({error:"Veículo ou motorista não está ativo."},{status:400});
  const config=safeConfig(body.config);
+ const ciot=typeof body.ciot==="string"?body.ciot.replace(/\D/g,"").slice(0,12):r.draft.ciot;
  const existing=r.draft.checklist&&typeof r.draft.checklist==="object"?r.draft.checklist:{};
  const {data:updated,error}=await s.db.from("fiscal_drafts").update({
-  vehicle_id:body.vehicleId,driver_id:body.driverId,
+  vehicle_id:body.vehicleId,driver_id:body.driverId,ciot,
   checklist:{...existing,cte_provider_config:config,fiscal_approval:false},
  }).eq("id",body.draftId).eq("workspace_id",s.workspaceId).eq("status","draft")
  .eq("updated_at",r.draft.updated_at).select("id").maybeSingle();
