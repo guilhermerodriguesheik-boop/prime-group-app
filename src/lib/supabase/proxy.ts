@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/api/webhooks/whatsapp",
   "/api/webhooks/evolution",
   "/api/webhooks/evolution-go",
+  "/api/banks/card-image", // Generic public PNG needed by WhatsApp carousel; no user data
   "/api/cron/whatsapp",
   "/empresa",
 ];
