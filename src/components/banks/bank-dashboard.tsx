@@ -45,6 +45,7 @@ export function BankDashboard(){
   const [notice,setNotice]=useState("");
   const [reportMode,setReportMode]=useState("imported_today");
   const [reportBusy,setReportBusy]=useState(false);
+  const [buttonTestBusy,setButtonTestBusy]=useState(false);
   const [bank,setBank]=useState<BankSlug>("itau");
   async function sendBankReport(){
    setReportBusy(true);setNotice("");
@@ -61,6 +62,20 @@ export function BankDashboard(){
       ". Se a Evolution Go não responder, a rotina automática tentará novamente.");
    }catch(e){setNotice(e instanceof Error?e.message:"Falha ao enviar relatório.");}
    finally{setReportBusy(false);}
+  }
+  async function testBankButtons(){
+   setButtonTestBusy(true);setNotice("");
+   try{
+    const response=await fetch("/api/banks/test-buttons",{method:"POST"});
+    const result=await response.json() as {
+     error?:string;status?:string;providerAccepted?:boolean;failed?:boolean
+    };
+    if(!response.ok)throw Error(result.error||"Falha ao testar os botões");
+    setNotice(result.providerAccepted?
+     "Cartão de teste aceito pela Evolution Go. Confira no WhatsApp se aparecem os três botões e clique em uma área.":
+     "Cartão de teste aguardando envio ("+(result.status||"pendente")+"). Se falhar, confira as notificações e a conexão Evolution Go.");
+   }catch(error){setNotice(error instanceof Error?error.message:"Falha no envio de teste.");}
+   finally{setButtonTestBusy(false);}
   }
   const [manualId,setManualId]=useState("");
   const [sdkReady,setSdkReady]=useState(false);
@@ -260,6 +275,10 @@ export function BankDashboard(){
         <button className="button primary bank-button" type="button"
          disabled={reportBusy||loading} onClick={()=>void sendBankReport()}>
          {reportBusy?"Enviando...":"Enviar relatório agora pelo WhatsApp"}
+        </button>
+        <button type="button" className="button bank-button"
+         disabled={buttonTestBusy||loading} onClick={()=>void testBankButtons()}>
+         {buttonTestBusy?"Testando...":"Testar botões no WhatsApp"}
         </button>
         <button type="button" className="button bank-button" disabled={!!busy} onClick={()=>void syncAll()}>
           <RefreshCw size={15}/> Importar extratos disponíveis

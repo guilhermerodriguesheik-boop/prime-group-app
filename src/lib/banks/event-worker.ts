@@ -80,7 +80,7 @@ export async function drainPluggyEventInbox(limit=2){
   const queued=await queueBankReviewDigests().catch(error=>{
    console.error("Bank digest queue failed",error instanceof Error?error.message:"unknown");return 0;
   });
-  if(queued>0)await runPrimeOutbox();
+  if(queued>0)await runPrimeOutbox(3);
  }
  return {claimed:items.length,completed,failed};
 }
