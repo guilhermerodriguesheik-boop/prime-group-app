@@ -86,9 +86,9 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
  return <section className="fiscal-dotcompany card">
   <div className="fiscal-dotcompany-heading">
    <div><span className="fiscal-section-kicker">API FISCAL / NOVA INTEGRAÇÃO</span>
-    <h3>DotCompany</h3>
-    <p>Ambiente de testes separado da produção. Verifique abaixo a conexão de emissão real.</p>
-   </div><span className="fiscal-gmail-state waiting">Sandbox / testes</span>
+    <h3>Conexão de testes (Sandbox)</h3>
+    <p>Esta área superior consulta apenas a chave de testes. A conexão de produção é verificada no bloco separado abaixo.</p>
+   </div><span className="fiscal-gmail-state waiting">Somente este bloco: Sandbox</span>
   </div>
   <div className="fiscal-dotcompany-actions">
    <button className="button primary" type="button" onClick={check} disabled={busy}>
@@ -103,10 +103,14 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
   <div className="fiscal-dotcompany-production">
    <div className="fiscal-dotcompany-heading">
     <div><span className="fiscal-section-kicker">SEFAZ / PRODUÇÃO</span>
-      <h3>Conexão fiscal para emissão real</h3>
-      <p>Chave de produção separada da chave de teste. Consultar não emite documentos.</p>
+      <h3>DotCompany — ambiente de PRODUÇÃO</h3>
+      <p>Esta seção utiliza a chave dc_live_. Autenticação não significa emissão liberada: o perfil fiscal de CT-e deve estar pronto.</p>
     </div>
-    <span className="fiscal-gmail-state waiting">Não transmite automaticamente</span>
+    <span className={"fiscal-gmail-state "+(production?.authenticated&&production.issuer?.cteReady?"connected":"waiting")}>
+      {checkingProduction?"Consultando produção":production?.authenticated?
+       production.issuer?.cteReady?"Produção: CT-e pronto":"Produção autenticada · CT-e bloqueado":
+       production?"Produção não autenticada":"Produção: verificando"}
+    </span>
    </div>
    <div className="fiscal-dotcompany-actions">
     <button className="button" type="button" disabled={checkingProduction} onClick={checkProduction}>
