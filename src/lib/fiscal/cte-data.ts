@@ -35,6 +35,9 @@ export async function gather(workspaceId:string,db:SupabaseClient,draftId:string
   configured:productionKey(process.env.DOTCOMPANY_PRODUCTION_API_KEY),
   liveEnabled:process.env.DOTCOMPANY_CTE_LIVE_ENABLED==="true",
   existingSubmission:!!transResult.data,
+  retryAllowed:transResult.data?.status==="rejected"&&
+   transResult.data?.provider_response?.definitive_rejection===true&&
+   !transResult.data?.access_key&&!transResult.data?.protocol,
  });
  return {draft,preview,submission:transResult.data||null};
 }
