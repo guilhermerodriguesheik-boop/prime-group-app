@@ -14,7 +14,11 @@ export async function issuerTaxDefaults():Promise<{crt?:string;cst_icms?:string}
   if(String(data.cnpj||"").replace(/\D/g,"")!=="42361401000117")return {};
   const p=data.perfil&&typeof data.perfil==="object"&&!Array.isArray(data.perfil)
    ?data.perfil as Record<string,unknown>:{};
-  const crt=String(p.crt??data.crt??p.regime_tributario??"");
+  const regime=String(p.regime_tributario??data.regime_tributario??"");
+  const literalCrt=String(p.crt??data.crt??"");
+  const crt=/^[123]$/.test(literalCrt)?literalCrt:
+   /simples nacional/i.test(regime)?/excesso/i.test(regime)?"2":"1":
+   /regime normal|lucro (presumido|real)/i.test(regime)?"3":"";
   const cst=String(p.cte_cst_icms??"");
   return {
    ...( /^[123]$/.test(crt)?{crt}:{}),
