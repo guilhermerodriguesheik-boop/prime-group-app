@@ -19,7 +19,7 @@ export type CteCompliance={
  crlv_status:"pendente"|"conferido";
  crlv_exercicio:string;
  cnh_status:"pendente"|"conferido";
- cnh_categoria:""|"C"|"D"|"E";
+ cnh_categoria:""|"B"|"C"|"D"|"E"|"AB"|"AC"|"AD"|"AE";
  cnh_validade:string;
 };
 export const emptyCteCompliance:CteCompliance={
@@ -52,7 +52,7 @@ export function safeCteCompliance(v:unknown):CteCompliance{
   crlv_status:allowed(x.crlv_status,["pendente","conferido"],"pendente"),
   crlv_exercicio:digits(x.crlv_exercicio,4),
   cnh_status:allowed(x.cnh_status,["pendente","conferido"],"pendente"),
-  cnh_categoria:allowed(x.cnh_categoria,["","C","D","E"],""),
+  cnh_categoria:allowed(x.cnh_categoria,["","B","C","D","E","AB","AC","AD","AE"],""),
   cnh_validade:typeof x.cnh_validade==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(x.cnh_validade)?
    x.cnh_validade:"",
  };
