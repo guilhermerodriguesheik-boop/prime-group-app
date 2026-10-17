@@ -1,5 +1,6 @@
 import "server-only";
 import {randomUUID} from "node:crypto";
+import {definitiveCteRejection,fiscalErrorText} from "@/lib/fiscal/cte-recovery";
 import {NextResponse} from "next/server";
 import {createClient as adminClient} from "@supabase/supabase-js";
 import {session,gather} from "@/lib/fiscal/cte-data";
@@ -73,15 +74,25 @@ export async function POST(req:Request){
  const validatedPayload={...preview.payload,remetente_id:sender.id,destinatario_id:recipient.id};
  // Claim persistente e único ANTES da chamada à SEFAZ. Mesmo timeout de rede não permite reemissão silenciosa.
  const client=admin(),idem=randomUUID();
- const {data:claim,error:claimError}=await client.from("fiscal_cte_transmissions").insert({
-  workspace_id:current.workspaceId,draft_id:data.draftId,requested_by:current.userId,
-  idempotency_key:idem,payload_sha256:preview.hash,status:"sending",
- }).select("id").single();
- if(claimError||!claim)return NextResponse.json({error:"Já existe transmissão ou tentativa para este CT-e. Confira o resultado no painel antes de qualquer nova emissão."},{status:409});
+ let claimId:string|null=null;
+ if(preview.retryAllowed){
+  const {data:retryId,error:retryError}=await client.rpc("claim_corrected_cte_retry",{
+   p_workspace:current.workspaceId,p_draft:data.draftId,p_user:current.userId,
+   p_hash:preview.hash,p_new_key:idem,
+  });
+  if(!retryError&&typeof retryId==="string")claimId=retryId;
+ }else{
+  const {data:claim,error:claimError}=await client.from("fiscal_cte_transmissions").insert({
+   workspace_id:current.workspaceId,draft_id:data.draftId,requested_by:current.userId,
+   idempotency_key:idem,payload_sha256:preview.hash,status:"sending",
+  }).select("id").single();
+  if(!claimError&&claim)claimId=claim.id;
+ }
+ if(!claimId)return NextResponse.json({error:"Há transmissão anterior sem rejeição definitiva, ou outro envio já foi iniciado. Consulte o histórico antes de continuar."},{status:409});
  const update=async(status:string,fields:Record<string,unknown>)=>{
   const {error}=await client.from("fiscal_cte_transmissions")
    .update({status,...fields,updated_at:new Date().toISOString()})
-   .eq("id",claim.id).eq("status","sending");
+   .eq("id",claimId).eq("status","sending");
   if(error)throw Error("FISCAL_RESULT_SAVE_FAILED");
  };
  try{
@@ -95,15 +106,19 @@ export async function POST(req:Request){
   const received=await response.json().catch(()=>null) as
     {autorizado?:unknown;chave_acesso?:unknown;protocolo?:unknown;message?:unknown;codigo_status_sefaz?:unknown}|null;
   const details=received&&typeof received==="object"?received as Record<string,unknown>:{};
-  const detailText=[details.message,details.error,details.erro,details.detail,details.mensagem,details.mensagem_original]
-   .map(v=>typeof v==="string"?v:(v&&typeof v==="object"?JSON.stringify(v):""))
-   .filter(Boolean).join(" | ").slice(0,1000);
-  const message=detailText.replace(/dc_(?:live|test)_[A-Za-z0-9._-]+/g,"[TOKEN_REDACTED]");
+  const message=fiscalErrorText(details);
   const code=String(received?.codigo_status_sefaz||"").slice(0,20);
   if(!response.ok){
-   await update("indeterminate",{error_code:"HTTP_"+response.status,
-    provider_response:{message,code,http:response.status,provider_error:response.status===422?"VALIDATION_REJECTED":"HTTP_ERROR"}});
-   return NextResponse.json({error:response.status===422?"DotCompany recusou os dados do CT-e (HTTP 422). Nenhum documento foi confirmado. Consulte o diagnóstico da tentativa antes de corrigir ou reenviar.":"O emissor retornou erro sem confirmação de resultado. Consulte a DotCompany antes de tentar novamente.",reason:message||null},{status:502});
+   const definitive=definitiveCteRejection(response.status,details);
+   await update(definitive?"rejected":"indeterminate",{
+    error_code:"HTTP_"+response.status,
+    provider_response:{message,code,http:response.status,definitive_rejection:definitive,
+     provider_error:response.status===422?"VALIDATION_REJECTED":"HTTP_ERROR"}});
+   return NextResponse.json({
+    error:definitive?"Dados recusados antes da emissão. Corrija os campos apontados e revise antes de tentar novamente.":
+      "Resultado não conclusivo; consulte a DotCompany antes de qualquer outra tentativa.",
+    reason:message||null,retryAllowed:definitive,
+   },{status:502});
   }
   const authorized=received?.autorizado===true;
   const access=String(received?.chave_acesso||"");
@@ -115,10 +130,14 @@ export async function POST(req:Request){
     message:"CT-e autorizado segundo o retorno da DotCompany. Confira a chave e o protocolo."});
   }
   if(received?.autorizado===false){
-   await update("rejected",{error_code:code||"SEFAZ_REJECTED",
-    provider_response:{authorized:false,message,code}});
-   return NextResponse.json({authorized:false,message:"SEFAZ não autorizou o CT-e: "+
-    (message||"verifique a rejeição no emissor. Nenhum CT-e válido foi confirmado.")});
+   const definitive=definitiveCteRejection(response.status,details);
+   await update(definitive?"rejected":"indeterminate",{
+    error_code:code||"SEFAZ_REJECTED",
+    provider_response:{authorized:false,message,code,definitive_rejection:definitive}});
+   return NextResponse.json({authorized:false,retryAllowed:definitive,
+    message:definitive?"CT-e rejeitado. Corrija os dados e revise antes de reenviar.":
+      "CT-e não autorizado, mas resultado ainda exige reconciliação.",
+    reason:message||null});
   }
   await update("indeterminate",{error_code:"UNCONFIRMED_RESULT",
    provider_response:{message,code}});
