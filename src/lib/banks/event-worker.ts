@@ -21,6 +21,7 @@ async function ingest(itemId:string){
  if(lookupError||!connection)throw new Error("Bank webhook without active connection");
  if(!allowPersonalItem(connection.owner_id,item.clientUserId))
   throw new Error("Bank webhook owner mismatch");
+ let counted=0,newlyAdded=0;
  for(const account of accounts.slice(0,15)){
   if(!account.id||account.type!=="BANK")continue;
   const dateFrom=new Date(Date.now()-7*86400_000).toISOString().slice(0,10);
@@ -32,9 +33,12 @@ async function ingest(itemId:string){
     status:t.status==="PENDING"?"PENDING":"POSTED",
    }));
   for(let pos=0;pos<rows.length;pos+=80){
-   await primeRpc("prime_bank_import_event",{
-    p_item_id:itemId,p_account_id:account.id,p_rows:rows.slice(pos,pos+80),
+   const batch=rows.slice(pos,pos+80);
+   const added=await primeRpc<number>("prime_bank_import_event",{
+    p_item_id:itemId,p_account_id:account.id,p_rows:batch,
    });
+   counted+=batch.length;
+   newlyAdded+=Number(added)||0;
   }
  }
  const at=new Date().toISOString();
@@ -52,6 +56,7 @@ async function ingest(itemId:string){
  const providerDate=origin&&!Number.isNaN(origin.getTime())?origin.toISOString():null;
  const {error:statusError}=await db.from("bank_connections").update({
   status:"connected",last_synced_at:at,last_error:null,updated_at:at,
+  last_new_transaction_count:newlyAdded,last_scanned_transaction_count:counted,
   ...(providerDate?{provider_last_updated_at:providerDate}:{}),
  }).eq("id",connection.id).eq("owner_id",connection.owner_id);
  if(statusError)throw new Error("Unable to refresh bank connection metadata");
