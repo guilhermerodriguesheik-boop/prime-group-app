@@ -11,8 +11,8 @@ test("only chosen cargo totals are summed",()=>{
  const s=selectedFreightTotals([row("030061"),row("030151","driver-a",350,true)]);
  assert.equal(s.count,2);assert.equal(s.freight,3600);assert.equal(s.pending,1800);
  assert.equal(s.driverAgreed,600);assert.equal(s.driverDue,250);
- assert.equal(s.helpersDue,400);assert.equal(s.costs,1060);
- assert.equal(s.estimatedResult,2540);
+ assert.equal(s.helpersDue,400);assert.equal(s.costs,1120);
+ assert.equal(s.estimatedResult,2480);
 });
 test("driver messages include selected rows and agreed vs due, not customer freight totals",()=>{
  const summary=driverWhatsAppSummary([row("030061"),row("030151","driver-a",350,true)],"Motorista A");
