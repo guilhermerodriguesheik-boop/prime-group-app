@@ -4,7 +4,7 @@ import {NextResponse} from "next/server";
 import {createClient as adminClient} from "@supabase/supabase-js";
 import {session,gather} from "@/lib/fiscal/cte-data";
 import {productionKey} from "@/lib/fiscal/cte-confirm";
-import {checkDotCompanyProduction} from "@/lib/fiscal/dotcompany-production";
+import {checkDotCompanyProduction,checkPrimeEmitterReadiness} from "@/lib/fiscal/dotcompany-production";
 export const runtime="nodejs";
 export const maxDuration=60;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -37,6 +37,19 @@ export async function POST(req:Request){
    reason:verified.reason||"A API fiscal não confirmou as credenciais.",
    httpStatus:verified.status||null,
   },{status:503,headers:{"Cache-Control":"no-store"}});
+ }
+ // Reject an unavailable emitter BEFORE persisting an idempotency claim.
+ // This prevents 422 + unusable indeterminate records caused by incomplete CT-e setup.
+ const issuer=await checkPrimeEmitterReadiness(key);
+ if(!issuer.verified||!issuer.cteReady){
+  return NextResponse.json({
+   error:"O emissor CT-e da DotCompany não está habilitado para produção.",
+   reason:issuer.reason,
+   details:{rntrcConfigured:issuer.hasRntrc,
+    cteTaxProfileConfigured:issuer.hasCteIcMSConfig,
+    series3Configured:issuer.numberingCteConfigured},
+   noFiscalTransmission:true,
+  },{status:409,headers:{"Cache-Control":"no-store"}});
  }
  const currentData=await gather(current.workspaceId,current.db,data.draftId);
  if(!currentData)return NextResponse.json({error:"CT-e não encontrado."},{status:404});

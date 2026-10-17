@@ -1,7 +1,7 @@
 "use client";
 import {useState,useEffect} from "react";
 import {CheckCircle2,PlugZap,ShieldAlert,RefreshCw,ClipboardCheck} from "lucide-react";
-type ProductionResult={configured:boolean;authenticated:boolean;emitterLookup:"ok"|"denied"|"unavailable"|"not_checked";productionEnabled:boolean;status?:number;reason?:string;message?:string};
+type ProductionResult={configured:boolean;authenticated:boolean;emitterLookup:"ok"|"denied"|"unavailable"|"not_checked";productionEnabled:boolean;status?:number;reason?:string;message?:string;issuer?:{verified:boolean;cteReady:boolean;mdfeReady:boolean;hasRntrc:boolean;hasCteIcMSConfig:boolean;numberingCteConfigured:boolean;reason:string}|null};
 type CheckResult={configured?:boolean;connected?:boolean;environment?:string;
  reason?:string;message?:string};
 type Insights={kind:string;cargo:string|null;local:Array<{cargo:string;attempt?:{status?:string;error_code?:string;idempotency_key?:string}|null}>;provider:{ok:boolean;httpStatus:number|null;error:string|null;items:Array<Record<string,unknown>>;summary:Record<string,unknown>};reconciled:boolean;warning:string};
@@ -120,8 +120,17 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
       <li>Credencial dc_live_: {production.configured?"cadastrada":"não cadastrada na Vercel"}</li>
       <li>Autenticação com DotCompany: {production.authenticated?"confirmada":"não comprovada pelos endpoints de consulta"}</li>
       <li>Consulta do emissor: {production.emitterLookup==="ok"?"endpoint acessível":production.emitterLookup==="denied"?"permissão insuficiente":production.emitterLookup==="unavailable"?"indisponível":"não realizada"}</li>
-      <li>Transmissão CT-e: {production.productionEnabled?"habilitada mediante conferência completa e confirmação":"desabilitada até conclusão da homologação fiscal"}</li>
+      <li>Permissão técnica de transmissão: {production.productionEnabled?"ativa, sujeita ao credenciamento do emissor":"desabilitada"}</li>
+      <li>Emissor CT-e: {production.issuer?.cteReady?"pronto":"não pronto ou não confirmado"}</li>
+      <li>Emissor MDF-e: {production.issuer?.mdfeReady?"pronto":"não pronto ou não confirmado"}</li>
+      <li>RNTRC no perfil DotCompany: {production.issuer?.hasRntrc?"informado":"pendente ou não confirmado"}</li>
+      <li>Configuração ICMS CT-e: {production.issuer?.hasCteIcMSConfig?"preenchida":"pendente ou não confirmada"}</li>
+      <li>Sequência CT-e modelo 57 / série 003: {production.issuer?.numberingCteConfigured?"presente":"não identificada no perfil"}</li>
     </ul>
+    {production.issuer&&!production.issuer.cteReady&&<p role="alert">
+      <strong>Bloqueio da DotCompany:</strong> {production.issuer.reason} Não tente emitir CT-e aqui antes da regularização.
+      <a href="https://dotcompany.com.br/suporte.html" target="_blank" rel="noopener noreferrer"> Suporte oficial ↗</a>
+    </p>}
     <small>{production.message||"A confirmação de conexão não equivale a credenciamento SEFAZ nem a CT-e autorizado."}</small>
    </div>}
    {productionError&&<div className="fiscal-inline-alert" role="alert">

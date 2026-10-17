@@ -60,3 +60,57 @@ export async function checkDotCompanyProduction(
    "Esta chave não tem permissão para consultar consumo (usage.report) nem listar emissores (emitter.list)."};
 
 }
+
+export type EmitterReadiness={
+ verified:boolean;cteReady:boolean;mdfeReady:boolean;status:number|null;
+ emitterId:string;hasRntrc:boolean;hasCteIcMSConfig:boolean;numberingCteConfigured:boolean;
+ reason:string;
+};
+/**
+ * A usable API key is NOT fiscal authorization. Check the actual Prime issuer.
+ * No provider personal/certificate data is returned to clients.
+ */
+export async function checkPrimeEmitterReadiness(
+ raw:string|undefined,fetcher:typeof fetch=fetch
+):Promise<EmitterReadiness>{
+ const base:EmitterReadiness={
+  verified:false,cteReady:false,mdfeReady:false,status:null,
+  emitterId:"646",hasRntrc:false,hasCteIcMSConfig:false,
+  numberingCteConfigured:false,reason:"Prontidão fiscal do emissor não confirmada."
+ };
+ if(!validProductionKey(raw))return {...base,reason:"Chave de produção ausente ou inválida."};
+ try{
+  const response=await fetcher(BASE+"/api/v1/emitters/646/fiscal-profile",{
+   method:"GET",headers:{Authorization:"Bearer "+raw,Accept:"application/json"},
+   cache:"no-store",signal:AbortSignal.timeout(12000),
+  });
+  if(!response.ok)return {...base,status:response.status,
+   reason:"DotCompany não permitiu consultar o perfil fiscal do emissor (HTTP "+response.status+")."};
+  const received=await response.json() as unknown;
+  const row=received&&typeof received==="object"&&!Array.isArray(received)
+   ?received as Record<string,unknown>:{};
+  if(String(row.cnpj||"").replace(/\D/g,"")!=="42361401000117")
+   return {...base,status:response.status,
+    reason:"CNPJ do emissor retornado pela DotCompany não corresponde à Prime Group."};
+  const profile=row.perfil&&typeof row.perfil==="object"&&!Array.isArray(row.perfil)
+   ?row.perfil as Record<string,unknown>:{};
+  const numbering=Array.isArray(row.numeracao)?row.numeracao:[];
+  const cteNumbering=numbering.some((n:unknown)=>{
+   if(!n||typeof n!=="object"||Array.isArray(n))return false;
+   const fields=n as Record<string,unknown>;
+   return String(fields.modelo)==="57"&&String(fields.serie)==="3";
+  });
+  const validRntrc=/^[0-9]{8,9}$/.test(String(profile.rntrc||""));
+  const icms=profile.cte_cst_icms!=null&&String(profile.cte_cst_icms).length>0;
+  const cte=row.pronta_cte===true;
+  const mdfe=row.pronta_mdfe===true;
+  return {...base,verified:true,status:response.status,cteReady:cte,
+   mdfeReady:mdfe,hasRntrc:validRntrc,hasCteIcMSConfig:icms,
+   numberingCteConfigured:cteNumbering,
+   reason:cte&&mdfe?"CT-e e MDF-e prontos conforme a DotCompany.":
+    !cte?"DotCompany informa pronta_cte=false. O perfil de transporte precisa ser completado pelo emissor.":
+     "CT-e pronto, mas DotCompany informa pronta_mdfe=false."};
+ }catch{
+  return {...base,reason:"Falha de comunicação ao consultar prontidão CT-e/MDF-e."};
+ }
+}
