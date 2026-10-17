@@ -18,6 +18,7 @@ if(process.env.VERCEL_ENV!=="production"||!URL||!DBKEY||!TOKEN){
  const dbAuth={apikey:DBKEY,Authorization:"Bearer "+DBKEY,Accept:"application/json"};
  const json=async res=>{const s=await res.text();try{return JSON.parse(s)}catch{return {}}};
  const onlyDigits=x=>String(x??"").replace(/\D/g,"");
+ const toProviderRntrc=x=>onlyDigits(x).replace(/^0(?=\d{8}$)/,"");
  const clean=x=>String(x??"").slice(0,350).replace(/dc_(?:live|test)_[A-Za-z0-9._-]+/g,"[REDACTED]");
  const result={checked_at:new Date().toISOString(),emitter:EMITTER,changed:false,reason:""};
  try{
@@ -37,13 +38,13 @@ if(process.env.VERCEL_ENV!=="production"||!URL||!DBKEY||!TOKEN){
    result.before_present=!!actual;
    if(!read.ok){result.reason="EMITTER_PROFILE_UNAVAILABLE";}
    else if(owner!==CNPJ){result.reason="EMITTER_CNPJ_MISMATCH";}
-   else if(actual===onlyDigits(verified[0].rntrc)){result.reason="RNTRC_ALREADY_CURRENT";}
+   else if(actual===toProviderRntrc(verified[0].rntrc)){result.reason="RNTRC_ALREADY_CURRENT";}
    else if(actual){result.reason="PROVIDER_HAS_DIFFERENT_RNTRC";}
    else{
     const write=await fetch(BASE+path,{
      method:"PUT",
      headers:{...auth,"Content-Type":"application/json"},
-     body:JSON.stringify({rntrc:onlyDigits(verified[0].rntrc)}),
+     body:JSON.stringify({rntrc:toProviderRntrc(verified[0].rntrc)}),
      cache:"no-store",signal:AbortSignal.timeout(14000)});
     const response=await json(write);
     result.put_http=write.status;
@@ -56,7 +57,7 @@ if(process.env.VERCEL_ENV!=="production"||!URL||!DBKEY||!TOKEN){
      const verify=await fetch(BASE+path,{headers:auth,cache:"no-store",signal:AbortSignal.timeout(12000)});
      const after=await json(verify);
      result.verify_http=verify.status;
-     result.changed=verify.ok&&onlyDigits(after.perfil?.rntrc)===onlyDigits(verified[0].rntrc);
+     result.changed=verify.ok&&onlyDigits(after.perfil?.rntrc)===toProviderRntrc(verified[0].rntrc);
      result.ready_cte=after.pronta_cte===true;
      result.ready_mdfe=after.pronta_mdfe===true;
      result.reason=result.changed?"RNTRC_CONFIRMED_IN_DOTCOMPANY":"PROVIDER_DID_NOT_CONFIRM_RNTRC";
