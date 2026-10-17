@@ -41,6 +41,9 @@ jobs:
       - name: Ortobom financial reconciliation parser tests
         run: npm run test:ortobom-finance
 
+      - name: Cargo payable calculations
+        run: node --experimental-strip-types --test tests/cargo-costs.test.mjs
+
       - name: Simple cargo payment ledger tests
         run: node --experimental-strip-types --test tests/simple-cargo-ledger.test.mjs
 
