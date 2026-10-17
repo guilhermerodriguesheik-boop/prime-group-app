@@ -75,6 +75,12 @@ export async function drainPluggyEventInbox(limit=2){
    failed++;
   }
  }
- if(completed)await runPrimeOutbox();
+ if(completed){
+  // Consolidates only newly imported POSTED movements, including all active accounts.
+  const queued=await primeRpc<number>("prime_queue_bank_review_digest",{}).catch(error=>{
+   console.error("Bank digest queue failed",error instanceof Error?error.message:"unknown");return 0;
+  });
+  if(queued>0)await runPrimeOutbox();
+ }
  return {claimed:items.length,completed,failed};
 }
