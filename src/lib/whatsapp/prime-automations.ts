@@ -1,7 +1,7 @@
 import { sendScheduledWhatsAppMessage } from "@/lib/whatsapp/worker";
 import {ensurePluggyWebhooks} from "@/lib/banks/webhook-setup";
 
-type OutboxItem={id:string;phone:string;message:string};
+type OutboxItem={id:string;phone:string;message:string;bankTransactionId:string|null};
 function settings(){
  const url=process.env.NEXT_PUBLIC_SUPABASE_URL,apikey=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
  const secret=process.env.WHATSAPP_INGRESS_SECRET;
@@ -29,25 +29,30 @@ export async function queueBankReviewDigests(maxBatches=6){
  return queued;
 }
 
-export async function runPrimeOutbox(){
+export async function runPrimeOutbox(maxBatches=1){
  if(process.env.WHATSAPP_PROVIDER!=="evolution_go")return {sent:0,disabled:true};
- const items=await primeRpc<OutboxItem[]>("prime_claim_outbox",{p_limit:8});
- // Independent notifications: bounded parallel dispatch avoids exceeding
- // the Vercel function deadline when several people have due notices.
- const results=await Promise.all(items.map(async item=>{
-  try{
-   if(!/^[0-9]{10,15}$/.test(item.phone))throw new Error("Invalid linked recipient");
-   await sendScheduledWhatsAppMessage(item.phone,item.message);
-   await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
-   return true;
-  }catch(err){
-   const reason=err instanceof Error?err.message:"Unavailable";
-   await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:false,p_error:reason}).catch(()=>undefined);
-   return false;
+ let sent=0,claimed=0,failed=0;
+ for(let batch=0;batch<Math.min(Math.max(maxBatches,1),5);batch++){
+  const items=await primeRpc<OutboxItem[]>("prime_claim_outbox",{p_limit:8});
+  if(!items.length)break;
+  claimed+=items.length;
+  // Sequential sends for the same phone avoid bursts of interactive messages.
+  // Each claimed row has bounded attempts and a dedupe key in PostgreSQL.
+  for(const item of items){
+   try{
+    if(!/^[0-9]{10,15}$/.test(item.phone))throw new Error("Invalid linked recipient");
+    await sendScheduledWhatsAppMessage(item.phone,item.message,item.bankTransactionId?item.id:null);
+    await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
+    sent++;
+   }catch(err){
+    const reason=err instanceof Error?err.message:"Unavailable";
+    await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:false,p_error:reason}).catch(()=>undefined);
+    failed++;
+   }
   }
- }));
- const sent=results.filter(Boolean).length;
- return {claimed:items.length,sent,failed:results.length-sent};
+  if(items.length<8)break;
+ }
+ return {claimed,sent,failed};
 }
 export async function runPrimeDailyJobs(){
  let pluggyEvents:unknown;
