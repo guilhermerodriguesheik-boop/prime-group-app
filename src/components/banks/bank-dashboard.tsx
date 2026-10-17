@@ -13,6 +13,7 @@ type Workspace={id:string;kind:string;name:string};
 type Connection={id:string;provider:string;workspace_id:string;display_name:string;institution_name:string|null;
   account_kind:string;status:string;last_synced_at:string|null;provider_last_updated_at:string|null;
   last_new_transaction_count:number;last_scanned_transaction_count:number;
+  webhook_check_at:string|null;webhook_check_status:"not_checked"|"verified"|"failed";webhook_check_error:string|null;
   last_error:string|null;archived_at:string|null};
 type BankAccount={id:string;connection_id:string;display_name:string;account_last4:string|null;
   kind:string;currency:string;balance:number|null;balance_updated_at:string|null};
@@ -322,6 +323,16 @@ export function BankDashboard(){
               <b>{date(c.last_synced_at)}</b></div>
             <div className="bank-connection-data"><span>Última importação</span>
               <b>{c.last_new_transaction_count} novos / {c.last_scanned_transaction_count} conferidos</b></div>
+            {c.provider==="pluggy"&&<div className="bank-connection-data"><span>Webhook da Pluggy</span>
+              <b style={{color:c.webhook_check_status==="verified"?"#166534":
+                c.webhook_check_status==="failed"?"#b91c1c":undefined}}>
+                {c.webhook_check_status==="verified"?"Cadastro verificado":
+                 c.webhook_check_status==="failed"?"Verificação falhou":"Ainda não verificado"}
+              </b>
+              {c.webhook_check_at&&<small style={{display:"block"}}>
+               Conferido: {date(c.webhook_check_at)}</small>}
+              {c.webhook_check_error&&<small style={{display:"block"}}>{c.webhook_check_error}</small>}
+            </div>}
             {c.last_error&&<div className="bank-risk" style={{marginTop:10}}>{c.last_error}</div>}
             <div className="bank-connection-actions">
               {!c.archived_at&&c.provider==="pluggy"&&<button type="button" className="button bank-button" disabled={!!busy||c.status==="disconnected"}

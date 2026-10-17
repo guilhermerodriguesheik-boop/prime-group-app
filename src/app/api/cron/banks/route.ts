@@ -34,8 +34,24 @@ export async function GET(req:Request){
   .in("status",["connected","attention"]).limit(10);
  if(error)return respond({error:"Could not read bank connections"},503);
  let webhooks:"ready"|"pending"="pending";
- try{const result=await ensurePluggyWebhooks();webhooks=result.configured?"ready":"pending";}
- catch(e){console.error("Bank webhooks unavailable",e instanceof Error?e.message:"unknown");}
+ let webhookError:string|null=null;
+ try{
+  const result=await ensurePluggyWebhooks();
+  webhooks=result.configured&&result.verified?"ready":"pending";
+  if(webhooks!=="ready")webhookError="A Pluggy não confirmou a inscrição.";
+ }catch(e){
+  webhookError=e instanceof Error?e.message.slice(0,180):"Verificação indisponível";
+  console.error("Bank webhooks unavailable",webhookError);
+ }
+ const bankIds=(connections||[]).map(c=>c.id);
+ if(bankIds.length){
+  const {error:saveError}=await db.from("bank_connections").update({
+   webhook_check_at:new Date().toISOString(),
+   webhook_check_status:webhooks==="ready"?"verified":"failed",
+   webhook_check_error:webhooks==="ready"?null:webhookError,
+  }).in("id",bankIds);
+  if(saveError)console.error("Bank webhook audit failed",saveError.code);
+ }
  const results=await Promise.all((connections||[]).map(async connection=>{
   try{
    const result=await syncBankConnection(db,connection,45);
