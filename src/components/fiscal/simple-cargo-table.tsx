@@ -5,11 +5,13 @@ import {Download,RefreshCw} from "lucide-react";
 import type {CargoWithReceipt} from "@/lib/fiscal/manual-balance";
 import {cargoCosts,num} from "@/lib/fiscal/cargo-costs";
 import {CargoEditor} from "./cargo-editor";
+import {SelectedFreightSummary} from "./selected-freight-summary";
+import {selectedDriverId} from "@/lib/fiscal/selected-freights";
 export type CargoOperation={cargo_reference:string;service_date:string|null;route_description:string;driver_id:string|null;
  driver_pay:number|string;driver_paid:boolean;helper_count:number;helper_rate:number|string;helpers_paid:boolean;
  diesel:number|string;tolls:number|string;other_expenses:number|string;notes:string;
  manual_settled_on:string|null;manual_settled_amount:number|string|null;manual_settlement_note:string};
-export type CargoDriver={id:string;name:string;active:boolean};
+export type CargoDriver={id:string;name:string;active:boolean;phone:string|null};
 export type CargoDisplay=CargoWithReceipt&{emailDate:string|null;operation:CargoOperation|null};
 const brl=(n:number|null)=>n===null?"—":n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 function download(name:string,headers:string[],rows:unknown[][]){
@@ -25,6 +27,13 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
  const [who,setWho]=useState(""),[status,setStatus]=useState(""),[expanded,setExpanded]=useState<string|null>(null);
  const [busy,setBusy]=useState(false),[message,setMessage]=useState("");
  const [newDriver,setNewDriver]=useState(""),[creating,setCreating]=useState(false);
+ const [selectedIds,setSelectedIds]=useState<string[]>([]);
+ const selectedSet=new Set(selectedIds);
+ const selectedRows=cargo.filter(c=>selectedSet.has(c.cargo));
+ function toggleSelected(id:string,value:boolean){
+  setSelectedIds(previous=>value?[...new Set([...previous,id])]:previous.filter(x=>x!==id));
+ }
+
  const names=new Map(drivers.map(d=>[d.id,d.name]));
  const filtered=cargo.filter(c=>{
   const date=c.operation?.service_date||c.emailDate||"";
@@ -33,6 +42,12 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
    &&(!status||(status==="pending"?c.status==="Pendente":
      status==="paid"?c.status==="Pago"||c.status==="Adiantado":!c.operation?.driver_id));
  });
+ const allVisibleSelected=filtered.length>0&&filtered.every(c=>selectedSet.has(c.cargo));
+ function toggleVisible(value:boolean){
+  const visible=new Set(filtered.map(c=>c.cargo));
+  setSelectedIds(previous=>value?[...new Set([...previous,...visible])]:
+   previous.filter(id=>!visible.has(id)));
+ }
  const summary=filtered.reduce((s,c)=>{
   const p=cargoCosts(c.operation,c.freight);
   return {pending:s.pending+(c.pending||0),driver:s.driver+p.driverDue,helpers:s.helpers+p.helperDue,costs:s.costs+p.total};
@@ -69,7 +84,7 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
  }
  function crewCSV(){
   const rows:unknown[][]=[];
-  for(const c of filtered){const o=c.operation;if(!o)continue;const x=cargoCosts(o,c.freight);
+  for(const c of selectedRows){const o=c.operation;if(!o)continue;const x=cargoCosts(o,c.freight);
    const date=o.service_date||c.emailDate||"";
    if(x.driver>0)rows.push([date,c.cargo,o.route_description,"Motorista",
     names.get(o.driver_id||"")||"Não atribuído",x.driver,o.driver_paid?"Pago":"A pagar"]);
@@ -85,7 +100,7 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
     <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
      <button type="button" className="button primary" disabled={!connected||busy} onClick={sync}><RefreshCw size={15}/>{busy?"Atualizando":"Atualizar Gmail"}</button>
      <button type="button" className="button" disabled={!filtered.length} onClick={ledgerCSV}><Download size={15}/> Planilha CSV</button>
-     <button type="button" className="button" disabled={!filtered.length} onClick={crewCSV}><Download size={15}/> Gerar pagamento da equipe</button>
+     <button type="button" className="button" disabled={!selectedRows.length} onClick={crewCSV}><Download size={15}/> Fechamento selecionado</button>
     </div>
    </div>
    <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"end",marginTop:12,fontSize:12}}>
@@ -99,7 +114,10 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
      <option value="">Todas</option><option value="pending">Pendente</option><option value="paid">Recebido</option><option value="no-driver">Sem motorista</option></select></label>
     <button className="button" type="button" onClick={()=>{setFrom("");setTo("");setLoad("");setWho("");setStatus("");}}>Limpar</button>
    </div>
-   <p style={{fontSize:11,opacity:.7,marginTop:8}}>Sem data da carga cadastrada, o filtro usa a data do primeiro e-mail da Ortobom.</p>
+   <p style={{fontSize:11,opacity:.7,marginTop:8}}>Marque as caixas ao lado das cargas para somar apenas os fretes escolhidos e preparar o WhatsApp. 
+    A seleção é mantida ao trocar filtros.
+   </p>
+   <p style={{fontSize:11,opacity:.7,marginTop:4}}>Sem data da carga cadastrada, o filtro usa a data do primeiro e-mail da Ortobom.</p>
    <div style={{display:"flex",gap:24,flexWrap:"wrap",marginTop:12}}>
     <div><small>Cargas</small><p style={{fontWeight:700,margin:0}}>{filtered.length}</p></div>
     <div><small>Saldo pendente</small><p style={{fontWeight:700,margin:0}}>{brl(summary.pending)}</p></div>
@@ -109,13 +127,18 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
    </div>
    {message&&<p role="status" className="fiscal-inline-alert">{message}</p>}
   </div>
+  {selectedRows.length>0&&<SelectedFreightSummary key={selectedDriverId(selectedRows)||"multiple-or-unassigned"}
+   rows={selectedRows} drivers={drivers} onClear={()=>setSelectedIds([])}/>}
   <form className="card" onSubmit={createDriver} style={{display:"flex",alignItems:"end",gap:9,flexWrap:"wrap",padding:12,marginTop:12}}>
    <label style={{fontSize:12}}>Novo motorista<input placeholder="Nome completo" required minLength={3} maxLength={100}
     value={newDriver} onChange={e=>setNewDriver(e.target.value)} style={{display:"block",minWidth:210}}/></label>
    <button type="submit" className="button" disabled={creating}>{creating?"Salvando...":"+ Cadastrar motorista"}</button>
   </form>
   <div className="table-wrap fiscal-data-table" style={{marginTop:15}}>
-   <table style={{minWidth:1420}}><thead><tr><th>Data</th><th>Carga / rota</th><th>Frete</th><th>Adiantamento</th>
+   <table style={{minWidth:1480}}><thead><tr>
+    <th><input type="checkbox" aria-label="Selecionar todos os fretes visíveis"
+     checked={allVisibleSelected} onChange={e=>toggleVisible(e.target.checked)}/></th>
+    <th>Data</th><th>Carga / rota</th><th>Frete</th><th>Adiantamento</th>
     <th>Saldo recebido</th><th>Saldo pendente</th><th>Motorista</th><th>Motorista a pagar</th><th>Ajudantes a pagar</th>
     <th>Diesel/pedágio/outros</th><th>Resultado previsto</th><th>Situação</th><th>Ação</th></tr></thead>
     <tbody>{filtered.map(c=>{
@@ -123,6 +146,8 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
      const open=c.status==="Pendente",color=paid?"#166534":open?"#b91c1c":"#64748b";
      return <Fragment key={c.cargo}>
       <tr style={{backgroundColor:paid?"#ebf8ee":open?"#fff0f0":undefined}}>
+       <td><input type="checkbox" aria-label={"Selecionar carga "+c.cargo}
+        checked={selectedSet.has(c.cargo)} onChange={e=>toggleSelected(c.cargo,e.target.checked)}/></td>
        <td>{o?.service_date||c.emailDate||"—"}{!o?.service_date&&c.emailDate&&<small style={{display:"block"}}>e-mail</small>}</td>
        <td><strong style={{color}}>{c.cargo}</strong>{o?.route_description&&<small style={{display:"block"}}>{o.route_description}</small>}</td>
        <td>{brl(c.freight)}</td><td>{brl(c.advance)}</td><td>{brl(c.received)}</td>
@@ -135,13 +160,13 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
        <td><button type="button" className="button" aria-expanded={expanded===c.cargo}
         onClick={()=>setExpanded(expanded===c.cargo?null:c.cargo)}>{expanded===c.cargo?"Fechar":"Editar"}</button></td>
       </tr>
-      {expanded===c.cargo&&<tr><td colSpan={13} style={{padding:10}}>
+      {expanded===c.cargo&&<tr><td colSpan={14} style={{padding:10}}>
        <CargoEditor key={JSON.stringify(o)} cargo={c} drivers={drivers}
         onSaved={()=>{setExpanded(null);setMessage("Carga "+c.cargo+" salva.");router.refresh();}}/>
       </td></tr>}
      </Fragment>;
     })}
-    {!filtered.length&&<tr><td colSpan={13}>Nenhuma carga encontrada para esses filtros.</td></tr>}
+    {!filtered.length&&<tr><td colSpan={14}>Nenhuma carga encontrada para esses filtros.</td></tr>}
     </tbody></table>
   </div>
   <p style={{fontSize:12,opacity:.75,marginTop:10}}>Verde: saldo quitado (por e-mail ou baixa manual). Vermelho: saldo pendente. A baixa manual é reversível e não movimenta a conta bancária.
