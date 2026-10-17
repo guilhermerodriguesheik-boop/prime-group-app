@@ -4,6 +4,7 @@ import {whatsAppResponseSchema} from "@/lib/whatsapp/response-schema";
 import { summarizeFiscalXml } from "@/lib/assistant/fiscal-xml";
 import { chooseAiProfile } from "@/lib/ai/cost-routing";
 import {detectBankReportIntent} from "@/lib/banks/report-intent";
+import {parseWhatsAppBankNumber} from "@/lib/banks/whatsapp-classification";
 
 type Obj = Record<string, unknown>;
 type Event = {
@@ -392,6 +393,48 @@ export async function processWhatsAppQueue(maxMessages=1) {
       }
       if (!text && !visual) {
         const answer="Recebi a mensagem, mas não encontrei texto ou arquivo compatível.";
+        await sendText(event.from||"",answer);
+        await rpc("whatsapp_finish_event",{p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:answer});
+        await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
+        processed++;continue;
+      }
+
+      // A numbered movement always resolves against the last successfully SENT
+      // bank report snapshot owned by this WhatsApp sender, never against current
+      // transaction sorting or a guessed movement with the same amount.
+      const numbered=event.type==="text"?parseWhatsAppBankNumber(text):null;
+      if(numbered){
+        if(numbered.type==="clarify"){
+          const answer="Para classificar o nº "+numbered.number+
+            ", indique a área: por exemplo '"+
+            numbered.number+" empresa "+numbered.category+"' ou '"+
+            numbered.number+" pessoal "+numbered.category+
+            "'. Não alterei nenhum lançamento.";
+          await sendText(event.from||"",answer);
+          await rpc("whatsapp_finish_event",{p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:answer});
+          await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
+          processed++;continue;
+        }
+        const {number,destination,category}=numbered.classification;
+        const result=await rpc<{ok:boolean;reason?:string;amount?:number|string;description?:string}>(
+          "prime_whatsapp_classify_bank_by_number",{
+          p_secret:secret,p_event_id:event.id,p_number:number,
+          p_destination:destination,p_category:category
+        });
+        const area=destination==="prime"?"Empresa":destination==="personal"?"Pessoal":
+          destination==="interest"?"Empréstimos":destination==="transfer"?"Transferência":"Pendente";
+        const brl=(n:number|string)=>Number(n).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+        const answer=result.ok
+          ?"Lançamento nº "+number+" ("+brl(result.amount||0)+") classificado em "+
+           area+(category?" / "+category:"")+
+           ". Salvo na área Bancos do Prime Finance. Isso não cria receita, despesa nem baixa pagamentos."
+          :result.reason==="no_report"?
+           "Para classificar por número, envie 'relatório bancário' novamente e responda ao relatório novo. "+
+           "Os números valem apenas para o último relatório entregue."
+          :result.reason==="number_not_found"?
+           "Não encontrei o nº "+number+" no último relatório entregue. "+
+           "Confira a numeração ou solicite outro extrato."
+          :"Não consegui classificar essa movimentação. Confira o relatório e tente novamente.";
         await sendText(event.from||"",answer);
         await rpc("whatsapp_finish_event",{p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:answer});
         await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
