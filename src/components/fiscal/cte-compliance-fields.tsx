@@ -56,7 +56,7 @@ export function CteComplianceFields({value:v,onChange,disabled,ciot,onCiotChange
    <label>CNH<select value={v.cnh_status} onChange={e=>set("cnh_status",e.target.value as CteCompliance["cnh_status"])}>
     <option value="pendente">Pendente</option><option value="conferido">Conferida</option></select></label>
    <label>Categoria CNH<select value={v.cnh_categoria} onChange={e=>set("cnh_categoria",e.target.value as CteCompliance["cnh_categoria"])}>
-    <option value="">Selecione</option><option value="C">C</option><option value="D">D</option><option value="E">E</option>
+    <option value="">Selecione</option><option value="B">B</option><option value="AB">AB</option><option value="AC">AC</option><option value="AD">AD</option><option value="AE">AE</option><option value="C">C</option><option value="D">D</option><option value="E">E</option>
    </select></label>
    <label>Validade CNH<input type="date" value={v.cnh_validade} onChange={e=>set("cnh_validade",e.target.value)}/></label>
   </fieldset>
