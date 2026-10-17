@@ -61,7 +61,7 @@ begin
    join public.workspaces w on w.id=t.workspace_id and w.id=a.workspace_id and w.owner_id=t.owner_id
    left join public.prime_bank_digest_items seen on seen.bank_transaction_id=t.id
    where t.owner_id=usr.user_id and t.provider_status in ('POSTED','PENDING')
-    and t.amount>0 and t.review_status='pending'
+    and t.amount>0
     and a.kind='BANK' and a.currency='BRL'
     and seen.bank_transaction_id is null
    order by t.created_at,t.id
