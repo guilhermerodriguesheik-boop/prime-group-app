@@ -186,3 +186,21 @@ test("An imported CIOT is not mislabeled as verified in official source",()=>{
  assert.equal(result.compliance.crt,"1");
  assert.equal(result.compliance.tributacao_conferida,false);
 });
+
+test("Serie CT-e 001 no emissor bloqueia mesmo com caixa manual marcada",()=>{
+ const r=ctePreview({...valid,issuerTax:{cteNumbering:{series:"1",nextNumber:35}},lastExternalCteNumber:34});
+ assert.equal(r.ready,false);
+ assert.ok(r.missing.some(x=>x.includes("DotCompany configurada na série CT-e 001")));
+ assert.equal(r.numberingEvidence?.matched,false);
+});
+test("Série 003 e contador posterior ao histórico dispensam atestado manual repetido",()=>{
+ const noManual={...draft,checklist:{cte_provider_config:{...draft.checklist.cte_provider_config,numbering_verified:false}}};
+ const r=ctePreview({...valid,draft:noManual,issuerTax:{cteNumbering:{series:"3",nextNumber:35}},lastExternalCteNumber:34});
+ assert.equal(r.ready,true,r.missing.join("\\n"));
+ assert.equal(r.numberingEvidence?.matched,true);
+});
+test("Número DotCompany igual ou abaixo do arquivo histórico impede o próximo CT-e",()=>{
+ const r=ctePreview({...valid,issuerTax:{cteNumbering:{series:"3",nextNumber:34}},lastExternalCteNumber:34});
+ assert.equal(r.ready,false);
+ assert.ok(r.missing.some(x=>x.includes("não avança")));
+});

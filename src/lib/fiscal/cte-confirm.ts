@@ -23,7 +23,8 @@ export type CteVehicle={id:string;plate:string;nickname:string;status:string};
 export type CteProfile={rntrc:string|null;rntrc_checked_at:string|null;cte_defaults?:unknown};
 export type CteReviewInput={
  draft:CteDraft;notes:CteInvoice[];driver:CteDriver|null;vehicle:CteVehicle|null;
- profile:CteProfile|null;issuerTax?:{crt?:string;cst_icms?:string};configured:boolean;liveEnabled:boolean;existingSubmission:boolean;retryAllowed?:boolean;
+ profile:CteProfile|null;issuerTax?:{crt?:string;cst_icms?:string;cteNumbering?:{series:string;nextNumber:number}};lastExternalCteNumber?:number;
+ configured:boolean;liveEnabled:boolean;existingSubmission:boolean;retryAllowed?:boolean;
 };
 const normalize=(value:unknown)=>String(value??"").replace(/\D/g,"");
 const plate=(value:unknown)=>String(value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");
@@ -81,7 +82,21 @@ export function ctePreview(input:CteReviewInput){
  if(!/^[0-4]$/.test(c.tomador))missing.push("Identifique o tomador do frete.");
  if(c.produto_predominante.length<3)missing.push("Informe o produto predominante.");
  if(!/^[A-Z]{2}$/.test(c.uf_licenciamento))missing.push("Informe a UF correta de licenciamento do veículo.");
- if(!c.numbering_verified)missing.push("Confirme a sequência fiscal com o emissor anterior antes de transmitir.");
+ // Numbering is per CT-e model 57 and series, not merely a human checkbox.
+ // A number from a DACTE is only historical evidence; the emitter's live
+ // counter must match the series and be strictly higher before auto-reuse.
+ const numbering=input.issuerTax?.cteNumbering;
+ const historical=input.lastExternalCteNumber;
+ const matched=!!numbering&&numbering.series==="3"&&
+  Number.isSafeInteger(historical)&&Number.isSafeInteger(numbering.nextNumber)&&
+  numbering.nextNumber>(historical as number);
+ if(numbering&&numbering.series!=="3")
+  missing.push("DotCompany configurada na série CT-e "+numbering.series.padStart(3,"0")+
+   " (próximo número "+numbering.nextNumber+"). A Prime utiliza série 003. Ajuste no emissor antes de transmitir.");
+ else if(numbering&&historical!==undefined&&numbering.nextNumber<=historical)
+  missing.push("Numeração DotCompany não avança o último CT-e registrado na série 003 ("+historical+").");
+ if(!c.numbering_verified&&!matched&&(!numbering||numbering.series==="3"))
+  missing.push("Confirme a sequência fiscal com o emissor anterior antes de transmitir.");
  missing.push(...cteComplianceIssues(c.compliance,draft.ciot));
  const value=Number(draft.freight_value);
  const goods=notes.reduce((sum,x)=>sum+Number(x.goods_value||0),0);
@@ -102,12 +117,15 @@ export function ctePreview(input:CteReviewInput){
  const unique=[...new Set(missing)];
  const hash=createHash("sha256").update(JSON.stringify({
   id:draft.id,changed:draft.updated_at,checklist:draft.checklist,
-  payload,ciot:draft.ciot,goods,weight,compliance:c.compliance,rntrc:profile?.rntrc,checked:profile?.rntrc_checked_at
+  payload,ciot:draft.ciot,goods,weight,compliance:c.compliance,
+  cteNumbering:numbering,lastExternalCteNumber:historical,
+  rntrc:profile?.rntrc,checked:profile?.rntrc_checked_at
  })).digest("hex");
  return {payload,missing:unique,ready:unique.length===0,retryAllowed:input.retryAllowed===true,hash,invoiceCount:notes.length,
   freightValue:value,goodsValue:goods,grossWeight:weight,ciot:draft.ciot,
   cargoReference:draft.cargo_reference,rntrc:profile?.rntrc||null,config:c,
-  autofilled:auto.autofilled,advisories:auto.advisories};
+  autofilled:auto.autofilled,advisories:auto.advisories,
+  numberingEvidence:numbering?{...numbering,lastExternalNumber:historical??null,matched}:null};
 }
 export function productionKey(token:unknown):token is string{
  return typeof token==="string"&&/^dc_live_[a-zA-Z0-9._-]{16,}$/.test(token);

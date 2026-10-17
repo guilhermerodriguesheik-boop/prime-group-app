@@ -30,10 +30,17 @@ export async function gather(workspaceId:string,db:SupabaseClient,draftId:string
    .eq("workspace_id",workspaceId).eq("draft_id",draftId).maybeSingle(),
   issuerTaxDefaults(),
  ]);
+ // Historical XML/DACTE values are evidence of earlier numbering, not a live SEFAZ query.
+ const {data:history}=await db.from("cte_documents")
+  .select("number").eq("workspace_id",workspaceId).eq("series","003")
+  .order("issued_at",{ascending:false}).limit(100);
+ const knownNumbers=(history||[]).map(x=>Number(x.number))
+  .filter(n=>Number.isSafeInteger(n)&&n>0);
+ const lastExternalCteNumber=knownNumbers.length?Math.max(...knownNumbers):undefined;
  const preview=ctePreview({
   draft:draft as CteDraft,notes:(notesResult.data||[]) as CteInvoice[],
   driver:driverResult.data as CteDriver|null,vehicle:vehicleResult.data as CteVehicle|null,
-  profile:profileResult.data as CteProfile|null,issuerTax,
+  profile:profileResult.data as CteProfile|null,issuerTax,lastExternalCteNumber,
   configured:productionKey(process.env.DOTCOMPANY_PRODUCTION_API_KEY),
   liveEnabled:process.env.DOTCOMPANY_CTE_LIVE_ENABLED==="true",
   existingSubmission:!!transResult.data,

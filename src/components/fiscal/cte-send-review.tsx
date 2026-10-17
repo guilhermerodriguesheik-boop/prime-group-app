@@ -10,6 +10,7 @@ type Config={cfop:string;tomador:string;produto_predominante:string;uf_licenciam
 type Preview={
  hash:string;ready:boolean;retryAllowed:boolean;missing:string[];autofilled?:string[];advisories?:string[];invoiceCount:number;freightValue:number;goodsValue:number;
  grossWeight:number;cargoReference:string|null;ciot:string|null;rntrc:string|null;config:Config;
+ numberingEvidence?:{series:string;nextNumber:number;lastExternalNumber:number|null;matched:boolean}|null;
 };
 type Data={
  preview:Preview;retryHistory?:Array<{archived_at:string;previous_status:string;previous_error_code:string|null}>;submission:{status:string;access_key?:string|null;protocol?:string|null;error_code?:string|null;provider_response?:{message?:string;reason?:string;definitive_rejection?:boolean;reconciliation?:{checked_at?:string;cte_list_http_status?:number|null;total_rows_inspected?:number;possible_matches?:Array<Record<string,string>>;note?:string;emitter_profile_http_status?:number|null}}|null}|null;
@@ -205,6 +206,15 @@ export function CteSendReview({draftId}:{draftId:string}){
             </button>
           </div>
         </div>}
+        {data.preview.numberingEvidence&&<div className="fiscal-review-summary" role="status">
+          <strong>Numeração fiscal — DotCompany x histórico Cargozilla</strong>
+          <p>DotCompany: CT-e série {data.preview.numberingEvidence.series.padStart(3,"0")},
+            próximo número {data.preview.numberingEvidence.nextNumber}. Histórico local:
+            série 003, último número {data.preview.numberingEvidence.lastExternalNumber??"não identificado"}.</p>
+          <p>{data.preview.numberingEvidence.matched
+            ?"Sequência confrontada com o histórico local e o perfil do emissor. Não equivale a consulta atual à SEFAZ."
+            :"Sequência não conciliada. Marcar a caixa de conferência não corrige a série no emissor."}</p>
+        </div>}
         <div className="fiscal-review-form" id={"cte-review-edit-"+draftId}>
           <label>Veículo
             <select value={vehicle} onChange={e=>setVehicle(e.target.value)} disabled={!editable}>
@@ -236,8 +246,12 @@ export function CteSendReview({draftId}:{draftId:string}){
               maxLength={2} placeholder="RJ" disabled={!!data.submission}/>
           </label>
           <label className="span-two fiscal-check-field">
-            <input type="checkbox" checked={config.numbering_verified} onChange={e=>setConfig(c=>({...c,numbering_verified:e.target.checked}))} disabled={!!data.submission}/>
-            Confirmei com o emissor anterior a sequência de CT-e e verifiquei que esta carga ainda não possui CT-e autorizado.
+            <input type="checkbox" checked={config.numbering_verified||!!data.preview.numberingEvidence?.matched}
+              onChange={e=>setConfig(c=>({...c,numbering_verified:e.target.checked}))}
+              disabled={!!data.submission||!!data.preview.numberingEvidence?.matched}/>
+            {data.preview.numberingEvidence?.matched
+              ?"Sequência conferida automaticamente com histórico local e numeração da DotCompany; confira a carga antes do envio."
+              :"Confirmei com o emissor anterior a sequência de CT-e e verifiquei que esta carga ainda não possui CT-e autorizado."}
           </label>
         </div>
         <CteComplianceFields value={config.compliance}
