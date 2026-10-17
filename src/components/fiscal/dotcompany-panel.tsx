@@ -125,7 +125,7 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
       <li>Emissor MDF-e: {production.issuer?.mdfeReady?"pronto":"não pronto ou não confirmado"}</li>
       <li>RNTRC no perfil DotCompany: {production.issuer?.hasRntrc?"informado":"pendente ou não confirmado"}</li>
       <li>Configuração ICMS CT-e: {production.issuer?.hasCteIcMSConfig?"preenchida":"pendente ou não confirmada"}</li>
-      <li>Sequência CT-e modelo 57 / série 003: {production.issuer?.numberingCteConfigured?"presente":"não identificada no perfil"}</li>
+      <li>Numeração CT-e: {production.issuer?.numberingCteConfigured?"série encontrada na API":"a API não apresentou sequência modelo 57; confira o contador próprio do CT-e no cadastro, que pode não aparecer em numeracao[]"}</li>
     </ul>
     {production.issuer&&!production.issuer.cteReady&&<p role="alert">
       <strong>Bloqueio da DotCompany:</strong> {production.issuer.reason} Não tente emitir CT-e aqui antes da regularização.
