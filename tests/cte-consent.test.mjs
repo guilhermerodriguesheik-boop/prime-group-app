@@ -16,19 +16,30 @@ function loadTS(relative){
  const customRequire=(name)=>{
   if(name==="@/lib/fiscal/preflight")return loadTS("src/lib/fiscal/preflight.ts");
   if(name==="@/lib/fiscal/dotcompany")return loadTS("src/lib/fiscal/dotcompany.ts");
+  if(name==="@/lib/fiscal/cte-compliance")return loadTS("src/lib/fiscal/cte-compliance.ts");
   return nativeRequire(name);
  };
  new Function("require","module","exports",compiled)(customRequire,mod,mod.exports);
  return mod.exports;
 }
 const {ctePreview,productionKey,safeConfig}=loadTS("src/lib/fiscal/cte-confirm.ts");
+const {emptyCteCompliance,cteComplianceIssues,safeCteCompliance}=loadTS("src/lib/fiscal/cte-compliance.ts");
+const verifiedDocuments={
+ nfe_status:"consulta_oficial",nfe_consulta_ref:"protocolo SEFAZ consultado",
+ crt:"1",cst_icms:"90",tributacao_conferida:true,
+ municipio_inicio_ibge:"3304144",municipio_fim_ibge:"3304557",
+ antt_review:"conferido",antt_referencia:"ANTT consultada",
+ ciot_aplicabilidade:"obrigatorio",ciot_conferido:true,ciot_justificativa:"",
+ crlv_status:"conferido",crlv_exercicio:"2026",
+ cnh_status:"conferido",cnh_categoria:"D",cnh_validade:"2099-01-31",
+};
 const draft={
  id:"e631c36a-bb3c-4b69-a8b8-8502be5dc051",
  cargo_reference:"030198",ciot:"123456789012",freight_value:3420,
  updated_at:"2026-10-15T20:00:00Z",status:"draft",vehicle_id:"v",driver_id:"d",
  checklist:{cte_provider_config:{
   cfop:"5352",tomador:"0",produto_predominante:"COLCHOES E CAMAS",
-  uf_licenciamento:"RJ",numbering_verified:true,
+  uf_licenciamento:"RJ",numbering_verified:true,compliance:verifiedDocuments,
  }},
 };
 const notes=[
@@ -81,7 +92,7 @@ test("Stale hash invalidated by a change to freight or tax settings",()=>{
 });
 test("Fiscal configuration sanitizes untrusted user entries",()=>{
  assert.deepEqual(safeConfig({cfop:"5352OVERFLOW",tomador:"012",produto_predominante:"TEST",uf_licenciamento:"rj",
-  numbering_verified:"true"}),{cfop:"5352",tomador:"0",produto_predominante:"TEST",uf_licenciamento:"RJ",numbering_verified:false});
+  numbering_verified:"true"}),{cfop:"5352",tomador:"0",produto_predominante:"TEST",uf_licenciamento:"RJ",numbering_verified:false,compliance:emptyCteCompliance});
 });
 
 test("Reviewed CT-e template is reusable by route, but never reuses sending consent",()=>{
@@ -126,4 +137,27 @@ test("Server rejection without SEFAZ response must not permit a fiscal retry",()
  assert.equal(definitiveCteRejection(422,{message:"Autorizador não respondeu"}),false);
  assert.equal(definitiveCteRejection(200,{autorizado:false,codigo_status_sefaz:"539"}),true);
  assert.equal(definitiveCteRejection(200,{autorizado:false}),false);
+});
+
+test("Additional CT-e checklist is mandatory but cannot claim official validation automatically",()=>{
+ const x=ctePreview({...valid,draft:{
+  ...draft,checklist:{cte_provider_config:{
+   ...draft.checklist.cte_provider_config,compliance:emptyCteCompliance,
+  }}
+ }});
+ assert.equal(x.ready,false);
+ assert.ok(x.missing.some(t=>t.includes("consulta oficial da NF-e")));
+ assert.ok(x.missing.some(t=>t.includes("códigos IBGE")));
+ assert.ok(x.missing.some(t=>t.includes("documentação do veículo")));
+});
+test("CIOT exemption needs explicit justification and does not silently assume validity",()=>{
+ const waived={...verifiedDocuments,ciot_aplicabilidade:"dispensado",ciot_conferido:false,ciot_justificativa:""};
+ assert.ok(cteComplianceIssues(waived,null).some(x=>x.includes("CIOT")));
+ assert.equal(cteComplianceIssues({...waived,ciot_justificativa:"Dispensa revisada conforme operação e lei vigente"},null).some(x=>x.includes("CIOT")),false);
+});
+test("Additional compliance entries are sanitized before storage",()=>{
+ const c=safeCteCompliance({...verifiedDocuments,municipio_inicio_ibge:"<script>3304144",crt:"invalid",nfe_status:"automaticamente validada"});
+ assert.equal(c.municipio_inicio_ibge,"3304144");
+ assert.equal(c.crt,"");
+ assert.equal(c.nfe_status,"pendente");
 });
