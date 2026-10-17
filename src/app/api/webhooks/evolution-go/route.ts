@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { processWhatsAppQueue } from "@/lib/whatsapp/worker";
+import {parseEvolutionBankButtonClick} from "@/lib/banks/interactive-bank-buttons";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -47,6 +48,34 @@ export async function POST(request: Request) {
     return NextResponse.json({error:"Instância não autorizada."},{status:403});
   }
   const event = string(input.event).toLowerCase().replace(/[_\s.-]/g,"");
+  if(event==="buttonclick"){
+    const click=parseEvolutionBankButtonClick(input.data);
+    if(!click)return NextResponse.json({received:true,messages:0});
+    const payload={
+      entry:[{changes:[{value:{metadata:{phone_number_id:"evolution_go:"+instance}}}]}],
+      __evolutionGoButton:{buttonId:click.buttonId}
+    };
+    const response=await fetch(baseUrl.replace(/\/$/,"")+"/rest/v1/rpc/ingest_whatsapp_event",{
+      method:"POST",cache:"no-store",signal:AbortSignal.timeout(15000),
+      headers:{apikey:key,Authorization:"Bearer "+key,"Content-Type":"application/json"},
+      body:JSON.stringify({
+        p_ingress_secret:ingress,
+        p_provider_message_id:"evolution-go:"+instance+":button:"+click.messageId+":"+click.buttonId,
+        p_from_number:click.sender,
+        p_to_number:process.env.EVOLUTION_GO_PHONE_NUMBER||null,
+        p_message_type:"interactive",
+        p_body:click.buttonId,p_media_id:null,p_payload:payload,
+      })
+    });
+    if(!response.ok){
+      console.error("Evolution Go bank button queue failed",response.status);
+      return NextResponse.json({error:"Falha na fila do botão."},{status:502});
+    }
+    after(async()=>{try{await processWhatsAppQueue(2);}
+      catch(error){console.error("Bank button processing unavailable",
+        error instanceof Error?error.message:"unknown");}});
+    return NextResponse.json({received:true,buttons:1});
+  }
   if (event !== "message" && event !== "messagesupsert") {
     return NextResponse.json({received:true,messages:0});
   }
