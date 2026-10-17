@@ -1,12 +1,13 @@
 import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
+import type {SupabaseClient} from "@supabase/supabase-js";
 import {personalBankUserAllowed} from "@/lib/banks/pluggy";
 import {ensurePluggyWebhooks} from "@/lib/banks/webhook-setup";
 export const runtime="nodejs";
 export async function POST(req:Request){
  const origin=req.headers.get("origin");
  if(origin&&origin!==new URL(req.url).origin)return NextResponse.json({error:"Origem não autorizada."},{status:403});
- const db=await createClient();
+ const db=await createClient() as unknown as SupabaseClient;
  const {data:{user}}=await db.auth.getUser();
  if(!user)return NextResponse.json({error:"Faça login."},{status:401});
  if(!personalBankUserAllowed(user.id)||process.env.PLUGGY_PERSONAL_OWNER_ID!==user.id)
