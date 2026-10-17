@@ -31,10 +31,28 @@ test("Payment email for another cargo does not settle unrelated shipments",()=>{
  assert.equal(list.find(c=>c.cargo==="030151")?.pending,900);
  assert.equal(list.find(c=>c.cargo==="030061")?.pending,0);
 });
-test("Payment amount different from remaining amount leaves a visible pending difference",()=>{
+test("Period payment email settles the cargo even with declared period discounts",()=>{
  const [r]=buildCargoLedger([],[record("period_payment",[line("29925",3420,1710,1200)])]);
- assert.equal(r.received,1200);assert.equal(r.pending,510);
- assert.equal(r.status,"Pendente");
+ assert.equal(r.received,1200);assert.equal(r.pending,0);
+ assert.equal(r.status,"Pago");
+});
+test("Full advance leaves no pending balance",()=>{
+ const [r]=buildCargoLedger([],[record("advance",[line("31500",1800,1800)])]);
+ assert.equal(r.advance,1800);assert.equal(r.pending,0);
+ assert.equal(r.status,"Adiantado");
+});
+test("Period email records previously pending loads as paid without bank reconciliation",()=>{
+ const drafts=[{cargo_reference:"030061",freight_value:1800},
+  {cargo_reference:"029925",freight_value:3420},
+  {cargo_reference:"030151",freight_value:1800}];
+ const advance=record("advance",[line("30151",1800,900),line("30061",1800,900),
+  line("29925",3420,1710)],"2026-10-08T12:23:31Z");
+ const payment=record("period_payment",[line("30061",1800,900,900),
+  line("29925",3420,1710,1710)],"2026-10-16T19:28:19Z");
+ const rows=buildCargoLedger(drafts,[advance,payment]);
+ assert.equal(rows.find(x=>x.cargo==="030061")?.status,"Pago");
+ assert.equal(rows.find(x=>x.cargo==="029925")?.status,"Pago");
+ assert.equal(rows.find(x=>x.cargo==="030151")?.status,"Pendente");
 });
 test("No cargo or freight reference does not create an invented paid amount",()=>{
  const d=buildCargoLedger([],[record("period_payment",[line("not a cargo",1190,595,595)])]);

@@ -66,10 +66,14 @@ export function buildCargoLedger(drafts:LedgerDraft[],emails:LedgerEmail[]):Ledg
   const remaining=Math.max(0,Math.round((total-cappedAdvance)*100)/100);
   // Quando chegou o e-mail de pagamento, considera o saldo quitado conforme
   // valor discriminado; quando a linha não apresenta saldo, usa frete - adiantamento.
+  // O informe de "PAGAMENTO DE PERÍODO" é a baixa operacional definitiva
+  // conforme regra informada pela Prime Group. Diferenças entre o valor indicado
+  // e o restante calculado podem corresponder a descontos/acertos do período:
+  // não geram pendências fictícias após o informe.
   const received=row.hasPayment?Math.min(remaining,row.periodBalance??remaining):0;
-  const pending=Math.max(0,Math.round((remaining-received)*100)/100);
-  const status:LedgerCargo["status"]=pending>0.009?"Pendente":
-   row.hasPayment?"Pago":"Adiantado";
+  const pending=row.hasPayment?0:remaining;
+  const status:LedgerCargo["status"]=row.hasPayment?"Pago":
+   pending>0.009?"Pendente":"Adiantado";
   return {cargo:row.cargo,freight:total,advance:cappedAdvance,received,pending,status};
  }).sort((a,b)=>{
   const aOpen=(a.pending??0)>0.009?1:0,bOpen=(b.pending??0)>0.009?1:0;
