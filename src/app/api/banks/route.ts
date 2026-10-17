@@ -171,7 +171,7 @@ export async function POST(request:Request){
       if(result.newTransactions>0){
         try{
           const queued=await queueBankReviewDigests();
-          if(queued>0)await runPrimeOutbox();
+          if(queued>0)await runPrimeOutbox(3);
         }catch(error){console.error("Bank review delivery deferred",error instanceof Error?error.message:"unknown");}
       }
       return json({ok:true,...result});
