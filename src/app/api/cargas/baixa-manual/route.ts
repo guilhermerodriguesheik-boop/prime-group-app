@@ -64,12 +64,22 @@ export async function POST(req:Request){
  ]);
  if(draft.error||report.error)return err("Não foi possível verificar a carga.",503);
  if(!draft.data&&!report.data)return err("Carga não localizada nos registros importados.",404);
- const {error}=await db.from("prime_cargo_operations").upsert({
-  workspace_id:workspace.id,cargo_reference:cargo,
+ // A baixa não altera motorista, ajudantes, combustível ou outras despesas
+ // que estejam salvas na mesma carga.
+ const manualChange={
   manual_settled_on:body.date,manual_settled_amount:value,
   manual_settled_at:new Date().toISOString(),manual_settled_by:user.id,
   manual_settlement_note:body.note.trim(),updated_at:new Date().toISOString(),
- },{onConflict:"workspace_id,cargo_reference"});
- if(error)return err("Não foi possível registrar o recebimento manual.",503);
+ };
+ const {data:current,error:checkError}=await db.from("prime_cargo_operations").select("id")
+  .eq("workspace_id",workspace.id).eq("cargo_reference",cargo).maybeSingle();
+ if(checkError)return err("Não foi possível verificar a baixa existente.",503);
+ const response=current?
+  await db.from("prime_cargo_operations").update(manualChange)
+   .eq("workspace_id",workspace.id).eq("cargo_reference",cargo):
+  await db.from("prime_cargo_operations").insert({
+   workspace_id:workspace.id,cargo_reference:cargo,...manualChange,
+  });
+ if(response.error)return err("Não foi possível registrar o recebimento manual.",503);
  return NextResponse.json({ok:true,manual:true},{headers:{"Cache-Control":"no-store"}});
 }
