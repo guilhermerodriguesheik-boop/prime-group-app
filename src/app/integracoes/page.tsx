@@ -47,9 +47,9 @@ export default function Page() {
     },
     {
       name: "Cargozilla",
-      description: "Adaptador previsto para CT-e, fretes e viagens",
-      status: "Próxima etapa",
-      tone: "orange",
+      description: "CT-e e MDF-e emitidos externamente; documentos e acertos importados do Gmail",
+      status: "Emissão externa",
+      tone: "green",
     },
     {
       name: "Open Finance / Pluggy",

@@ -15,7 +15,7 @@ export async function gmailClientStatus():Promise<GoogleClientStatus>{
  clientStatusCache={time:Date.now(),value};
  return value;
 }
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send";
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export type GmailOAuthFailure = "invalid_client"|"invalid_grant"|"token_denied"|"missing_refresh"|"wrong_google_account"|"supabase_access"|"database_write"|"gmail_profile"|"session_or_workspace"|"unexpected";
 export class GmailOAuthError extends Error {
   constructor(public readonly code:GmailOAuthFailure){super(code);this.name="GmailOAuthError";}
@@ -257,10 +257,14 @@ export async function syncAllGmailWorkspaces(){
   const result=[];for(const item of data||[]){
     try{
       const cargos=await syncGmailWorkspace(item.workspace_id,item.owner_id);
-      let finance:FinancialGmailSync|{error:string};
-      try{finance=await syncOrtobomFinancialReports(item.workspace_id,item.owner_id);}
-      catch{finance={error:"finance_sync_failed"};}
-      result.push({workspace_id:item.workspace_id,...cargos,finance});
+      const [finance,cteEmails]=await Promise.allSettled([
+        syncOrtobomFinancialReports(item.workspace_id,item.owner_id),
+        syncOutboundCteEmails(item.workspace_id,item.owner_id),
+      ]);
+      result.push({workspace_id:item.workspace_id,...cargos,
+        finance:finance.status==="fulfilled"?finance.value:{error:"finance_sync_failed"},
+        cteEmails:cteEmails.status==="fulfilled"?cteEmails.value:{error:"cte_mail_sync_failed"},
+      });
     }catch{result.push({workspace_id:item.workspace_id,error:"sync_failed"});}
   }return result;
 }
@@ -370,6 +374,86 @@ export async function syncOrtobomFinancialReports(workspaceId:string,ownerId:str
   financial_next_page_token:page.nextPageToken||null,financial_last_sync_at:new Date().toISOString(),
  }).eq("workspace_id",workspaceId).eq("owner_id",ownerId);
  if(cursorError)throw Error("Não foi possível registrar o avanço na caixa de entrada.");
+ return stats;
+}
+
+/** Importa exclusivamente metadados dos CT-e anexados aos emails ENVIADOS.
+ * PDF/Minuta não constitui prova de autorização pela SEFAZ.
+ * Mesmo quando um XML declara cStat=100, o app não verifica SEFAZ.
+ */
+export type CteMailSync={scanned:number;imported:number;skipped:number;errors:number;hasMore:boolean};
+export async function syncOutboundCteEmails(workspaceId:string,ownerId:string):Promise<CteMailSync>{
+ const db=admin();
+ const {data:conn,error}=await db.from("fiscal_gmail_connections")
+  .select("encrypted_refresh_token,cte_next_page_token")
+  .eq("workspace_id",workspaceId).eq("owner_id",ownerId).maybeSingle();
+ if(error||!conn)throw Error("Gmail não conectado.");
+ const token=await accessToken(conn.encrypted_refresh_token);
+ const p=new URLSearchParams({
+  q:"in:sent to:ortobom.com.br has:attachment after:2026/01/01",
+  maxResults:"12",
+ });
+ if(conn.cte_next_page_token)p.set("pageToken",conn.cte_next_page_token);
+ const page=await gmailJson<{messages?:Array<{id:string}>;nextPageToken?:string}>(
+  token,"/users/me/messages?"+p.toString());
+ const ids=(page.messages||[]).map(x=>x.id).filter(x=>/^[A-Za-z0-9_-]{8,40}$/.test(x));
+ const knownResponse=ids.length?await db.from("ortobom_cte_email_documents").select("message_id")
+  .eq("workspace_id",workspaceId).in("message_id",ids):{data:[],error:null};
+ if(knownResponse.error)throw Error("Falha ao conferir e-mails CT-e.");
+ const known=new Set((knownResponse.data||[]).map(x=>x.message_id));
+ const stats:CteMailSync={scanned:0,imported:0,skipped:0,errors:0,hasMore:!!page.nextPageToken};
+ for(const id of ids){
+  stats.scanned++;
+  if(known.has(id)){stats.skipped++;continue;}
+  try{
+   const mail=await gmailJson<GmailMessage>(
+    token,"/users/me/messages/"+encodeURIComponent(id)+"?format=full");
+   if(!mail.labelIds?.includes("SENT")){stats.skipped++;continue;}
+   const subject=header(mail,"subject").slice(0,300);
+   const rawBody=mailBody(mail).slice(0,1200);
+   const parts=mail.payload?walk(mail.payload).filter(part=>/\.(?:pdf|xml)$/i.test(part.filename||"")):[];
+   if(!parts.length){stats.skipped++;continue;}
+   const names=parts.slice(0,40).map(part=>(part.filename||"").slice(0,220));
+   const hasPdf=names.some(n=>/\.pdf$/i.test(n));
+   const hasXml=names.some(n=>/\.xml$/i.test(n));
+   const from=header(mail,"from").slice(0,300);
+   const to=header(mail,"to").slice(0,500);
+   if(!/ortobom\.com\.br/i.test(to)){stats.skipped++;continue;}
+   const cargoMatch=(subject+"\n"+rawBody.slice(0,500))
+    .match(/\b(?:carga|cg)\s*[:#-]?\s*0*(\d{4,7})\b/i);
+   const cteMatch=(subject+"\n"+rawBody.slice(0,500))
+    .match(/\bCT[\s-]?[Ee]\s*(?:n[ºo.]\s*)?[:#-]?\s*(\d{1,9})\b/i);
+   let cteKey:string|null=null,cteNumber:string|null=cteMatch?.[1]||null,cteSeries:string|null=null;
+   let xmlAuthorizationClaim=false;
+   for(const part of parts.filter(p=>/\.xml$/i.test(p.filename||"")).slice(0,3)){
+    if((part.body?.size||0)>1024*1024)continue;
+    const xml=await xmlAttachment(token,mail,part);
+    if(!/<(?:\w+:)?(?:cteProc|CTe|infCte)\b/i.test(xml))continue;
+    const key=xml.match(/<(?:\w+:)?chCTe>\s*(\d{44})\s*<\/(?:\w+:)?chCTe>/i)?.[1];
+    const number=xml.match(/<(?:\w+:)?nCT>\s*(\d{1,9})\s*<\/(?:\w+:)?nCT>/i)?.[1];
+    const series=xml.match(/<(?:\w+:)?serie>\s*(\d{1,3})\s*<\/(?:\w+:)?serie>/i)?.[1];
+    if(key)cteKey=key;
+    if(number)cteNumber=number;
+    if(series)cteSeries=series;
+    xmlAuthorizationClaim=Boolean(key&&/<(?:\w+:)?protCTe\b/i.test(xml)&&/<(?:\w+:)?cStat>\s*100\s*<\/(?:\w+:)?cStat>/i.test(xml));
+    break;
+   }
+   const date=new Date(header(mail,"date"));
+   const {error:saveError}=await db.from("ortobom_cte_email_documents").upsert({
+    workspace_id:workspaceId,message_id:id,cargo_reference:cargoMatch?.[1]||null,
+    subject,sender:from,recipient:to,email_date:Number.isNaN(date.getTime())?null:date.toISOString(),
+    attachment_names:names,has_pdf:hasPdf,has_xml:hasXml,
+    cte_number:cteNumber,cte_series:cteSeries,cte_key:cteKey,
+    evidence_status:xmlAuthorizationClaim?"xml_authorization_claim_unverified":"document_attached_unverified",
+   },{onConflict:"workspace_id,message_id",ignoreDuplicates:true});
+   if(saveError)throw Error("Falha ao registrar CT-e recebido via e-mail.");
+   stats.imported++;
+  }catch{stats.errors++;}
+ }
+ const {error:cursorError}=await db.from("fiscal_gmail_connections").update({
+  cte_next_page_token:page.nextPageToken||null,cte_last_sync_at:new Date().toISOString(),
+ }).eq("workspace_id",workspaceId).eq("owner_id",ownerId);
+ if(cursorError)throw Error("Falha ao salvar cursor dos e-mails de CT-e.");
  return stats;
 }
 
