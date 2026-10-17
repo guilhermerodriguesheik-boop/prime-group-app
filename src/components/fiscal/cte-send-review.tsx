@@ -266,7 +266,7 @@ export function CteSendReview({draftId}:{draftId:string}){
           <button className="button" onClick={()=>void save()} disabled={loading||!editable||data.draft.status!=="draft"}><Save size={15}/> Salvar conferência</button>
         </div>
         <div className="fiscal-review-summary" role="status">
-          <strong>{data.preview.ready?"Pré-validação completa — pronto para confirmação.":"Pendências que impedem transmissão:"}</strong>
+          <strong>{data.preview.ready?"Conferência preenchida — sujeita ao autorizador fiscal.":"Pendências que impedem transmissão:"}</strong>
           {data.preview.missing.length>0&&<ul>{data.preview.missing.map((m,i)=><li key={i}>{m}</li>)}</ul>}
           <p>O envio à SEFAZ somente acontece depois de sua confirmação expressa e do processamento pela DotCompany.</p>
         </div>
