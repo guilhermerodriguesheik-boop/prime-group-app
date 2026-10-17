@@ -12,7 +12,8 @@ test("NativeFlow carousel holds precisely one bank movement and two image-backed
  assert.ok(payload.cards.every(c=>typeof c.body==="object" && typeof c.body.text==="string"));
  assert.equal(typeof payload.body,"string");
  const wire=JSON.parse(JSON.stringify(payload));
- assert.deepEqual(wire.cards[0].body,{text:"Empresa ou Pessoal"});
+ assert.deepEqual(wire.cards[0].body,{text:"SAÍDA · R$ 60,00"});
+ assert.deepEqual(wire.cards[1].body,{text:"SAÍDA · R$ 60,00"});
  assert.ok(payload.cards.every(c=>c.buttons.length===3));
  assert.ok(payload.cards.every(c=>c.buttons.every(b=>b.type==="REPLY")));
  assert.equal(new Set(payload.cards.flatMap(c=>c.buttons.map(b=>b.id))).size,6);
