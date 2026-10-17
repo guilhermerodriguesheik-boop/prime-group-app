@@ -273,7 +273,7 @@ export function BankDashboard(){
       <div className="card"><div className="bank-metric-top"><span className="metric-label">Saldo consultado</span><span className="bank-metric-icon"><Wallet size={17}/></span></div>
         <div className="bank-metric-val">{money((data?.accounts||[]).filter(a=>a.kind==="BANK"&&a.currency==="BRL"&&activeConnections.some(c=>c.id===a.connection_id)).reduce((s,a)=>s+Number(a.balance||0),0))}</div>
         <div className="metric-foot">Saldo bancário, separado do caixa contábil</div></div>
-      <div className="card"><div className="bank-metric-top"><span className="metric-label">Última sincronização</span><span className="bank-metric-icon"><Clock3 size={17}/></span></div>
+      <div className="card"><div className="bank-metric-top"><span className="metric-label">Última consulta do aplicativo</span><span className="bank-metric-icon"><Clock3 size={17}/></span></div>
         <div className="bank-metric-val" style={{fontSize:latest?17:22}}>{latest?date(latest):"—"}</div>
         <div className="metric-foot">Consulta feita pelo app, não necessariamente pelo banco</div></div>
       <div className="card"><div className="bank-metric-top"><span className="metric-label">Dados atualizados na origem</span>
@@ -357,7 +357,6 @@ export function BankDashboard(){
               <b>{date(c.last_synced_at)}</b></div>
             <div className="bank-connection-data"><span>Última importação</span>
               <b>{c.last_new_transaction_count} novos / {c.last_scanned_transaction_count} conferidos</b></div>
-            <div className="bank-connection-data"><span>Última sincronização</span><b>{date(c.last_synced_at)}</b></div>
             {c.last_error&&<div className="bank-risk" style={{marginTop:10}}>{c.last_error}</div>}
             <div className="bank-connection-actions">
               {!c.archived_at&&c.provider==="pluggy"&&<button type="button" className="button bank-button" disabled={!!busy||c.status==="disconnected"}
