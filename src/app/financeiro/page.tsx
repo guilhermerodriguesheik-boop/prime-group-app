@@ -49,6 +49,13 @@ export default async function FinanceiroPage(){
  ]);
  const errors=[bankConnections.error,bankAccounts.error,bankMoves.error,bankMatches.error,
   cargoOps.error,cargoDrafts.error,cargoEmails.error].filter(Boolean);
+ const movementIds=(bankMoves.data||[]).map(t=>t.id);
+ const bankClassifications=movementIds.length?
+   await db.from("prime_bank_classifications")
+    .select("bank_transaction_id,destination,category")
+    .eq("user_id",data.user.id).in("bank_transaction_id",movementIds):
+   {data:[] as Array<{bank_transaction_id:string;destination:string;category:string|null}>,error:null};
+ const bankClassificationError=bankClassifications.error;
  const bankNames=Object.fromEntries((bankAccounts.data||[]).map(a=>[a.id,a.display_name]));
  const bankAccountIds=(bankAccounts.data||[]).filter(a=>a.kind==="BANK"&&a.currency==="BRL").map(a=>a.id);
  const unreviewedCount=bankAccountIds.length?await db.from("bank_transactions")
@@ -217,7 +224,10 @@ export default async function FinanceiroPage(){
    {!fixed.length&&!recurring.length&&<tr><td colSpan={4}>Nenhuma despesa recorrente cadastrada.</td></tr>}
   </tbody></table></div>
   <SectionTitle title="Conciliação bancária" hint="A baixa só ocorre após você vincular o extrato à conta correta"/>
-  <BankBillMatcher movements={unmatched} bills={billData} recurring={recurringHints} cargos={[...cargoHints.values()]}
+  {bankClassificationError&&<p role="alert">As classificações bancárias estão temporariamente indisponíveis.</p>}
+  <BankBillMatcher movements={unmatched} bills={billData}
+   classifications={(bankClassifications.data||[]) as Array<{bank_transaction_id:string;destination:string;category:string|null}>}
+   recurring={recurringHints} cargos={[...cargoHints.values()]}
    matches={(bankMatches.data||[]) as Array<{bank_transaction_id:string;workspace_id:string;bill_kind:string;bill_id:string;amount:number|string;created_at:string}>}
    accountNames={bankNames}/>
   <p className="metric-foot" style={{marginTop:12}}>Baixas por e-mail da Ortobom e baixas manuais
