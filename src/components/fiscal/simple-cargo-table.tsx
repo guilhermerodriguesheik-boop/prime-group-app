@@ -118,7 +118,8 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
     A seleção é mantida ao trocar filtros.
    </p>
    <p style={{fontSize:11,opacity:.7,marginTop:4}}>Sem data da carga cadastrada, o filtro usa a data do primeiro e-mail da Ortobom.</p>
-   <div style={{display:"flex",gap:24,flexWrap:"wrap",marginTop:12}}>
+   <p style={{fontSize:11,opacity:.7,marginTop:12}}>Resumo das cargas visíveis (independente das caixas marcadas):</p>
+   <div style={{display:"flex",gap:24,flexWrap:"wrap",marginTop:6}}>
     <div><small>Cargas</small><p style={{fontWeight:700,margin:0}}>{filtered.length}</p></div>
     <div><small>Saldo pendente</small><p style={{fontWeight:700,margin:0}}>{brl(summary.pending)}</p></div>
     <div><small>Motoristas a pagar</small><p style={{fontWeight:700,margin:0}}>{brl(summary.driver)}</p></div>
