@@ -1,14 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {z} from "zod";
 import {whatsAppResponseSchema} from "../src/lib/whatsapp/response-schema.ts";
 test("all action fields must be required in OpenAI strict output",()=>{
- const json=z.toJSONSchema(whatsAppResponseSchema);
- assert.ok(json.required.includes("answer"));
- assert.ok(json.required.includes("actions"));
- const action=json.properties.actions.items;
- for(const name of Object.keys(action.properties)){
-  assert.ok(action.required.includes(name),"Missing required OpenAI output field "+name);
+ assert.equal(whatsAppResponseSchema.shape.answer.isOptional(),false);
+ assert.equal(whatsAppResponseSchema.shape.actions.isOptional(),false);
+ const action=whatsAppResponseSchema.shape.actions.element;
+ for(const [name,field] of Object.entries(action.shape)){
+  assert.equal(field.isOptional(),false,"Missing required OpenAI output field "+name);
  }
  const output=whatsAppResponseSchema.parse({
   answer:"Recebi sua mensagem.",actions:[{
