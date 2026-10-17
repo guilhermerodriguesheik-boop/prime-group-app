@@ -25,7 +25,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
    .select("cargo_reference,service_date,route_description,driver_id,driver_pay,driver_paid,helper_count,helper_rate,helpers_paid,diesel,tolls,other_expenses,notes,manual_settled_on,manual_settled_amount,manual_settlement_note")
    .eq("workspace_id",ws.id).limit(2000):
    Promise.resolve({data:[],error:null}),
-  ws?db.from("drivers").select("id,name,active").eq("workspace_id",ws.id).order("name").limit(500):
+  ws?db.from("drivers").select("id,name,active,phone").eq("workspace_id",ws.id).order("name").limit(500):
    Promise.resolve({data:[],error:null}),
  ]);
  const reports=(emails.data||[]) as LedgerEmail[];
