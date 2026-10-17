@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { processWhatsAppQueue } from "@/lib/whatsapp/worker";
-import {parseEvolutionBankButtonClick} from "@/lib/banks/interactive-bank-buttons";
+import {parseEvolutionBankButtonClick,readEvolutionGoBankReply} from "@/lib/banks/interactive-bank-buttons";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -106,9 +106,12 @@ export async function POST(request: Request) {
   const withCaption = object(object(message.documentWithCaptionMessage).message);
   const captionDoc = object(withCaption.documentMessage);
   const audio = object(message.audioMessage);
-  const type = Object.keys(audio).length ? "audio" : Object.keys(image).length ? "image" :
+  // Real Go v1 carousel taps arrive as Message.templateButtonReplyMessage,
+  // not as ButtonClick. Mark those verified quick replies as interactive.
+  const bankReplyId = readEvolutionGoBankReply(message);
+  const type = bankReplyId ? "interactive" : Object.keys(audio).length ? "audio" : Object.keys(image).length ? "image" :
     (Object.keys(document).length || Object.keys(captionDoc).length) ? "document" : "text";
-  const body = string(message.conversation || extended.text || image.caption ||
+  const body = bankReplyId || string(message.conversation || extended.text || image.caption ||
     document.caption || captionDoc.caption || document.fileName || captionDoc.fileName) || null;
 
   // This payload is only visible to the server-side worker and private event queue.
@@ -116,6 +119,7 @@ export async function POST(request: Request) {
   const payload = {
     entry:[{changes:[{value:{metadata:{phone_number_id:"evolution_go:"+instance}}}]}],
     __evolutionGo:{ message, instance },
+    ...(bankReplyId ? {__evolutionGoButton:{buttonId:bankReplyId}} : {}),
   };
 
   let response: Response;
@@ -130,7 +134,7 @@ export async function POST(request: Request) {
         p_to_number:process.env.EVOLUTION_GO_PHONE_NUMBER || null,
         p_message_type:type,
         p_body:body?.slice(0,8000) ?? null,
-        p_media_id:type==="text" ? null : messageId,
+        p_media_id:type==="audio"||type==="image"||type==="document" ? messageId : null,
         p_payload:payload,
       }),
     });
