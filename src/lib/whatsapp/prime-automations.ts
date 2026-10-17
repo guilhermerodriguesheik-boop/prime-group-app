@@ -38,17 +38,21 @@ export async function runPrimeOutbox(maxBatches=1){
   claimed+=items.length;
   // Sequential sends for the same phone avoid bursts of interactive messages.
   // Each claimed row has bounded attempts and a dedupe key in PostgreSQL.
-  for(const item of items){
-   try{
-    if(!/^[0-9]{10,15}$/.test(item.phone))throw new Error("Invalid linked recipient");
-    await sendScheduledWhatsAppMessage(item.phone,item.message,item.bankTransactionId?item.id:null);
-    await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
-    sent++;
-   }catch(err){
-    const reason=err instanceof Error?err.message:"Unavailable";
-    await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:false,p_error:reason}).catch(()=>undefined);
-    failed++;
-   }
+  for(let offset=0;offset<items.length;offset+=3){
+   const wave=await Promise.all(items.slice(offset,offset+3).map(async item=>{
+    try{
+     if(!/^[0-9]{10,15}$/.test(item.phone))throw new Error("Invalid linked recipient");
+     await sendScheduledWhatsAppMessage(item.phone,item.message,item.bankTransactionId?item.id:null);
+     await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
+     return true;
+    }catch(err){
+     const reason=err instanceof Error?err.message:"Unavailable";
+     await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:false,p_error:reason}).catch(()=>undefined);
+     return false;
+    }
+   }));
+   sent+=wave.filter(Boolean).length;
+   failed+=wave.filter(ok=>!ok).length;
   }
   if(items.length<8)break;
  }
@@ -65,6 +69,6 @@ export async function runPrimeDailyJobs(){
  const reports=await primeRpc<number>("prime_queue_scheduled_reports",{});
  const collections=await primeRpc<number>("prime_queue_contact_collections",{});
  const payroll=await primeRpc<number>("prime_queue_friday_payroll",{});
- const messages=await runPrimeOutbox();
+ const messages=await runPrimeOutbox(2);
  return {pluggyEvents,bills,reports,collections,payroll,messages};
 }
