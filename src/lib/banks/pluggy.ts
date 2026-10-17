@@ -6,6 +6,8 @@ export type PluggyItem = {
   clientUserId?: string | null;
   status?: string;
   executionStatus?: string;
+  lastUpdatedAt?: string | null; // Atualização de origem; não o horário de leitura local.
+  nextAutoSyncAt?: string | null;
   connector?: { name?: string };
 };
 export type PluggyAccount = {

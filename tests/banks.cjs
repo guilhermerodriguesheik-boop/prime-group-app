@@ -26,7 +26,7 @@ function fakeDb() {
   const db={ from(table) {
     return { update(value) { writes.push({ table, value }); return this; },
       upsert(value) { writes.push({ table, value }); return this; },
-      select() { return this; }, eq() { return this; },
+      select() { return this; }, eq() { return this; }, in() { return this; },
       single() { return Promise.resolve({data:{id:'account'},error:null}); },
       then(resolve) { return Promise.resolve({error:null}).then(resolve); } };
   }};
@@ -87,6 +87,28 @@ test('valid sync writes bank staging only and uses explicit debit/credit directi
   const {db,writes}=fakeDb();
   const result=await syncBankConnection(db,connection);
   assert.equal(result.transactions,1);
+  assert.equal(result.newTransactions,1);
+  assert.equal(result.providerUpdatedAt,null);
+  assert.equal(writes.find(w=>w.table==='bank_connections').value.last_new_transaction_count,1);
   assert.equal(writes.find(w=>w.table==='bank_transactions').value[0].direction,'debit');
   assert.deepEqual([...new Set(writes.map(w=>w.table))],['bank_accounts','bank_transactions','bank_connections']);
+});
+
+test('Pluggy lastUpdatedAt is stored distinctly from local import time', async () => {
+ global.fetch=async url=>{
+  const p=new URL(url).pathname;
+  if(p==='/auth')return response({apiKey:'key'});
+  if(p==='/items/item')return response({
+   id:'item',clientUserId:'owner',status:'UPDATED',lastUpdatedAt:'2026-10-16T13:00:00.000Z'});
+  if(p==='/accounts')return response({results:[{id:'a',type:'BANK',balance:1200}]});
+  return response({results:[],next:null});
+ };
+ const {db,writes}=fakeDb();
+ const result=await syncBankConnection(db,connection);
+ assert.equal(result.transactions,0);
+ assert.equal(result.newTransactions,0);
+ assert.equal(result.providerUpdatedAt,'2026-10-16T13:00:00.000Z');
+ const metadata=writes.find(w=>w.table==='bank_connections').value;
+ assert.equal(metadata.provider_last_updated_at,'2026-10-16T13:00:00.000Z');
+ assert.ok(metadata.last_synced_at!==metadata.provider_last_updated_at);
 });
