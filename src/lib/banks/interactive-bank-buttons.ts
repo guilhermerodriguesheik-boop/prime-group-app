@@ -20,3 +20,16 @@ export const extraBankButtons=(id:string)=>[
  {type:"reply",displayText:"Transferência",id:bankButtonId(id,"T")},
  {type:"reply",displayText:"Pendente",id:bankButtonId(id,"U")},
 ];
+
+export function parseEvolutionBankButtonClick(data:unknown){
+ if(!data||typeof data!=="object"||Array.isArray(data))return null;
+ const d=data as Record<string,unknown>;
+ const ref=readBankButtonId(d.buttonId);
+ if(!ref||d.fromMe===true)return null;
+ const jid=typeof d.jid==="string"?d.jid:"";
+ const number=typeof d.phone==="string"?d.phone.replace(/\D/g,""):"";
+ const messageId=typeof d.messageId==="string"?d.messageId:"";
+ if(!/^[0-9]{10,15}@s\.whatsapp\.net$/.test(jid))return null;
+ if(number!==jid.split("@")[0]||!/^[a-zA-Z0-9_-]{8,150}$/.test(messageId))return null;
+ return {sender:number,messageId,buttonId:d.buttonId as string,reference:ref};
+}
