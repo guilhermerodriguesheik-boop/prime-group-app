@@ -112,7 +112,7 @@ export async function POST(request: Request) {
     console.error("Evolution Go queue failed",response.status);
     return NextResponse.json({error:"Falha na fila."},{status:502});
   }
-  if (process.env.OPENAI_API_KEY) {
+  {
     after(async () => {
       // Drain one older retry plus the newly received message without waiting for cron.
       try { await processWhatsAppQueue(2); }
