@@ -56,3 +56,25 @@ export function whatsappDraftLink(message:string,phone:string){
  return number? "https://wa.me/"+number+"?text="+encodeURIComponent(message):
   "https://api.whatsapp.com/send?text="+encodeURIComponent(message);
 }
+
+
+/** Versão sem exigência de motorista: compartilha cargos selecionados por escolha do usuário. */
+export function selectedLoadsWhatsAppSummary(rows:SelectableCargo[],includeFreightValues=false){
+ if(!rows.length)return "";
+ const lines=rows.map(r=>{
+  const op=r.operation;
+  const date=op?.service_date||r.emailDate||"Sem data";
+  const route=op?.route_description?.trim()
+   ?" | "+op.route_description.replace(/[\r\n]+/g," ").slice(0,100):"";
+  return "• Carga "+r.cargo+" | "+date+route+
+   (includeFreightValues&&r.freight!==null?" | Frete: "+brl(r.freight):"");
+ });
+ const sums=selectedFreightTotals(rows);
+ return "PRIME GROUP | CARGAS SELECIONADAS\n\n"+lines.join("\n")+
+  "\n\nTotal de cargas: "+rows.length+
+  (includeFreightValues?"\nFretes somados: "+brl(sums.freight)+
+  "\nAdiantamentos: "+brl(sums.advance)+
+  "\nSaldo recebido: "+brl(sums.received)+
+  "\nSaldo pendente: "+brl(sums.pending):"")+
+  "\n\nResumo para conferência. Não comprova pagamento.";
+}
