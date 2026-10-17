@@ -6,7 +6,6 @@ import {createClient as adminClient} from "@supabase/supabase-js";
 import {session,gather} from "@/lib/fiscal/cte-data";
 import {productionKey} from "@/lib/fiscal/cte-confirm";
 import {ensureTransportPerson} from "@/lib/fiscal/dotcompany-person";
-import {checkDotCompanyProduction,checkPrimeEmitterReadiness} from "@/lib/fiscal/dotcompany-production";
 export const runtime="nodejs";
 export const maxDuration=60;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,48 +29,36 @@ export async function POST(req:Request){
  const key=process.env.DOTCOMPANY_PRODUCTION_API_KEY;
  if(!productionKey(key)||process.env.DOTCOMPANY_CTE_LIVE_ENABLED!=="true")
   return NextResponse.json({error:"Emissão real não habilitada. Configure chave de produção e valide o emissor antes de transmitir."},{status:409});
- // Read-only, fail-closed check against DotCompany before claiming a fiscal transmission.
- // A configured dc_live_ token is NOT proof that the provider has authorized it.
- const verified=await checkDotCompanyProduction(key,true);
- if(!verified.authenticated){
-  return NextResponse.json({
-   error:"Chave DotCompany de produção não autenticada. Nenhum CT-e foi enviado.",
-   reason:verified.reason||"A API fiscal não confirmou as credenciais.",
-   httpStatus:verified.status||null,
-  },{status:503,headers:{"Cache-Control":"no-store"}});
- }
- // Reject an unavailable emitter BEFORE persisting an idempotency claim.
- // This prevents 422 + unusable indeterminate records caused by incomplete CT-e setup.
- const issuer=await checkPrimeEmitterReadiness(key);
- if(!issuer.verified||!issuer.cteReady){
-  return NextResponse.json({
-   error:"O emissor CT-e da DotCompany não está habilitado para produção.",
-   reason:issuer.reason,
-   details:{rntrcConfigured:issuer.hasRntrc,
-    cteTaxProfileConfigured:issuer.hasCteIcMSConfig,
-    series3Configured:issuer.numberingCteConfigured},
-   noFiscalTransmission:true,
-  },{status:409,headers:{"Cache-Control":"no-store"}});
- }
- if(!issuer.numberingCteConfigured)return NextResponse.json({error:"Série CT-e 003 ainda não confirmada no perfil DotCompany; envio suspenso."},{status:409});
+ // Do not preempt the provider's fiscal decision with an internal issuer gate.
+ // DotCompany's response (including HTTP 4xx) will be shown to the user.
  const currentData=await gather(current.workspaceId,current.db,data.draftId);
  if(!currentData)return NextResponse.json({error:"CT-e não encontrado."},{status:404});
  const {preview}=currentData;
- if(!preview.ready)return NextResponse.json({error:"CT-e possui pendências de validação. Nenhum documento foi enviado.",
+ if(!preview.ready)return NextResponse.json({error:"Impedimento técnico de transmissão, não avaliação fiscal.",
   missing:preview.missing},{status:409});
  if(preview.hash!==data.hash)return NextResponse.json({error:"Dados do CT-e foram alterados. Reabra a conferência antes de autorizar."},{status:409});
+ // Add party IDs if known; missing fields are sent to the DotCompany for
+ // an explicit validation response instead of a self-imposed fiscal veto.
  const {data:nfes,error:partsError}=await current.db.from("fiscal_nfe_inbox")
   .select("sender_cnpj,sender_name,recipient_cnpj,recipient_name")
   .eq("workspace_id",current.workspaceId).eq("cargo_reference",preview.cargoReference).limit(41);
- if(partsError||!nfes||nfes.length!==preview.invoiceCount||
-  nfes.some(n=>n.sender_cnpj!==nfes[0].sender_cnpj||n.recipient_cnpj!==nfes[0].recipient_cnpj))
-  return NextResponse.json({error:"Remetente/destinatário divergente entre NF-e. Nenhum CT-e foi enviado."},{status:409});
- const sender=await ensureTransportPerson(key,{cpfCnpj:nfes[0].sender_cnpj,name:nfes[0].sender_name});
- const recipient=await ensureTransportPerson(key,{cpfCnpj:nfes[0].recipient_cnpj,name:nfes[0].recipient_name});
- if(!sender.ok||!recipient.ok||!sender.id||!recipient.id)
-  return NextResponse.json({error:"Cadastro de pessoas da DotCompany não concluído. Nenhum CT-e foi enviado.",
-   remetente:sender.reason,destinatario:recipient.reason},{status:409});
- const validatedPayload={...preview.payload,remetente_id:sender.id,destinatario_id:recipient.id};
+ if(partsError)return NextResponse.json({error:"Falha de acesso às NF-e no banco; tente novamente."},{status:503});
+ const first=nfes?.[0];
+ let senderId:string|undefined,recipientId:string|undefined;
+ if(first){
+  const resolved=await Promise.allSettled([
+   ensureTransportPerson(key,{cpfCnpj:first.sender_cnpj,name:first.sender_name}),
+   ensureTransportPerson(key,{cpfCnpj:first.recipient_cnpj,name:first.recipient_name}),
+  ]);
+  const sender=resolved[0].status==="fulfilled"?resolved[0].value:null;
+  const recipient=resolved[1].status==="fulfilled"?resolved[1].value:null;
+  if(sender?.ok&&sender.id)senderId=sender.id;
+  if(recipient?.ok&&recipient.id)recipientId=recipient.id;
+ }
+ const validatedPayload={...preview.payload,
+  ...(senderId?{remetente_id:senderId}:{}),
+  ...(recipientId?{destinatario_id:recipientId}:{}),
+ };
  // Claim persistente e único ANTES da chamada à SEFAZ. Mesmo timeout de rede não permite reemissão silenciosa.
  const client=admin(),idem=randomUUID();
  let claimId:string|null=null;
