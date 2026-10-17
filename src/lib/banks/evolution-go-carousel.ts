@@ -1,4 +1,4 @@
-import {firstBankButtons,extraBankButtons} from "@/lib/banks/interactive-bank-buttons";
+import {firstBankButtons,extraBankButtons} from "./interactive-bank-buttons.ts";
 /** Evolution Go NativeFlow carousel; legacy /send/button is rejected by some WhatsApp servers.
  * At least two cards with image headers; all actions stay bound to one outbox UUID.
  */
