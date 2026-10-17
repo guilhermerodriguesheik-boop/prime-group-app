@@ -92,7 +92,7 @@ begin
  return jsonb_build_object(
   'ok',true,'total',total_count,'selected',least(total_count,batch_limit),
   'queued',queued_count,'alreadyQueued',already_count,
-  'truncated',total_count>batch_limit,'limit',batch_limit
+  'truncated',total_count>batch_limit,'limit',batch_limit,'batchPrefix','bank-report-card:'||request_key||':'||p_mode||':'
  );
 end $cards$;
 revoke all on function public.prime_queue_requested_bank_cards(text,uuid,text,uuid,integer)
