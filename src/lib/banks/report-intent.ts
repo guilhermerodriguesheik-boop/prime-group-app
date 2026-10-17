@@ -5,7 +5,12 @@ export function detectBankReportIntent(raw:string):BankReportIntent|null{
  if(s.length>350)return null;
  const asks=/(?:\b(?:extrato|relatorio|resumo|movimentac(?:ao|oes)|lancamentos?)\b)/.test(s);
  const bankContext=/(?:\b(?:banco|bancos|bancario|bancaria|financeiro|contas?|pix|extrato)\b)/.test(s);
- if(!asks||!bankContext)return null;
+ // On a dedicated Finance WhatsApp, a bare dated "me envia o relatório de ontem
+ // e hoje" refers to the bank statement. Keep unrelated named reports out.
+ const datedBareReport=/(?:^|\b)(?:envi[ae]|manda|mande|mostr[ae]|quero|preciso)\b/.test(s)
+  && /\brelatorio\s+(?:de\s+)?(?:ontem|hoje)(?:\b|$)/.test(s)
+  && !/\b(?:fretes?|cargas?|motoristas?|cte|mdfe|clientes?|estoque|vendas?)\b/.test(s);
+ if(!asks||(!bankContext&&!datedBareReport))return null;
  const period:BankReportPeriod=/\b(?:ultimos?\s*(?:7|sete)\s*dias?|semana)\b/.test(s)?"last7":
   /\bontem\b/.test(s)&&/\bhoje\b/.test(s)?"yesterday_today":
   /\bontem\b/.test(s)?"yesterday":
