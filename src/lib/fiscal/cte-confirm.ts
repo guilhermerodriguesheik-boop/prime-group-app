@@ -1,6 +1,7 @@
 /** CT-e preview and blocking preflight; never trust client-provided fiscal payloads. */
 import {createHash} from "node:crypto";
 import {safeCteCompliance,cteComplianceIssues,type CteCompliance} from "@/lib/fiscal/cte-compliance";
+import {prefillCteCompliance} from "@/lib/fiscal/cte-autofill";
 import {validCpf} from "@/lib/fiscal/preflight";
 import {preflightCte,type ApiData} from "@/lib/fiscal/dotcompany";
 
@@ -15,14 +16,14 @@ export type CteDraft={
 };
 export type CteInvoice={
   access_key:string;invoice_number:string;origin_uf:string;destination_uf:string;
-  goods_value:number|string|null;gross_weight_kg:number|string|null;
+  goods_value:number|string|null;gross_weight_kg:number|string|null;xml_content?:string|null;
 };
-export type CteDriver={id:string;name:string;document:string;active:boolean};
+export type CteDriver={id:string;name:string;document:string;active:boolean;license_expires_on?:string|null};
 export type CteVehicle={id:string;plate:string;nickname:string;status:string};
 export type CteProfile={rntrc:string|null;rntrc_checked_at:string|null;cte_defaults?:unknown};
 export type CteReviewInput={
  draft:CteDraft;notes:CteInvoice[];driver:CteDriver|null;vehicle:CteVehicle|null;
- profile:CteProfile|null;configured:boolean;liveEnabled:boolean;existingSubmission:boolean;retryAllowed?:boolean;
+ profile:CteProfile|null;issuerTax?:{crt?:string;cst_icms?:string};configured:boolean;liveEnabled:boolean;existingSubmission:boolean;retryAllowed?:boolean;
 };
 const normalize=(value:unknown)=>String(value??"").replace(/\D/g,"");
 const plate=(value:unknown)=>String(value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");
@@ -47,6 +48,12 @@ export function ctePreview(input:CteReviewInput){
  const source=draft.checklist?.cte_provider_config||
   (routeMatch?{...defaults,numbering_verified:false}:{});
  const c=safeConfig(source);
+ const auto=prefillCteCompliance({current:c.compliance,notes,
+  transport:{rntrc_checked_at:profile?.rntrc_checked_at,ciot:draft.ciot,
+   license_expires_on:driver?.license_expires_on,
+   tax_crt:input.issuerTax?.crt||String(defaults.crt||""),
+   tax_cst:input.issuerTax?.cst_icms||String(defaults.cst_icms||"")}}); 
+ c.compliance=auto.compliance;
  const missing:string[]=[];
  if(draft.status!=="draft")missing.push("CT-e não está em rascunho editável.");
  if(draft.checklist?.do_not_issue_duplicate===true||
@@ -95,11 +102,12 @@ export function ctePreview(input:CteReviewInput){
  const unique=[...new Set(missing)];
  const hash=createHash("sha256").update(JSON.stringify({
   id:draft.id,changed:draft.updated_at,checklist:draft.checklist,
-  payload,ciot:draft.ciot,goods,weight,rntrc:profile?.rntrc,checked:profile?.rntrc_checked_at
+  payload,ciot:draft.ciot,goods,weight,compliance:c.compliance,rntrc:profile?.rntrc,checked:profile?.rntrc_checked_at
  })).digest("hex");
  return {payload,missing:unique,ready:unique.length===0,retryAllowed:input.retryAllowed===true,hash,invoiceCount:notes.length,
   freightValue:value,goodsValue:goods,grossWeight:weight,ciot:draft.ciot,
-  cargoReference:draft.cargo_reference,rntrc:profile?.rntrc||null,config:c};
+  cargoReference:draft.cargo_reference,rntrc:profile?.rntrc||null,config:c,
+  autofilled:auto.autofilled,advisories:auto.advisories};
 }
 export function productionKey(token:unknown):token is string{
  return typeof token==="string"&&/^dc_live_[a-zA-Z0-9._-]{16,}$/.test(token);

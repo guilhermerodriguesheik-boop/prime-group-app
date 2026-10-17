@@ -8,7 +8,7 @@ export function CteComplianceFields({value:v,onChange,disabled,ciot,onCiotChange
   <p>Campos declaratórios: preencher não substitui consulta real à SEFAZ, ANTT ou DETRAN.</p>
   <fieldset disabled={disabled}><legend>NF-e — consulta</legend>
    <label>Situação da NF-e<select value={v.nfe_status} onChange={e=>set("nfe_status",e.target.value as CteCompliance["nfe_status"])}>
-    <option value="pendente">Não consultada</option><option value="conferencia_manual">XML conferido manualmente</option>
+    <option value="pendente">Não consultada</option><option value="conferencia_manual">XML conferido manualmente</option><option value="xml_autorizado">Protocolo cStat 100 extraído do XML (sem consulta atual)</option>
     <option value="consulta_oficial">Consulta oficial realizada</option></select></label>
    <label>Referência da consulta oficial<input value={v.nfe_consulta_ref} maxLength={120}
     onChange={e=>set("nfe_consulta_ref",e.target.value)} placeholder="Protocolo/referência"/></label>
@@ -37,7 +37,7 @@ export function CteComplianceFields({value:v,onChange,disabled,ciot,onCiotChange
      <option value="pendente">Não consultado</option><option value="conferido">Conferido na ANTT</option></select></label>
    <label>Referência da ANTT<input value={v.antt_referencia} maxLength={120} onChange={e=>set("antt_referencia",e.target.value)}/></label>
    <label>Aplicabilidade do CIOT<select value={v.ciot_aplicabilidade} onChange={e=>set("ciot_aplicabilidade",e.target.value as CteCompliance["ciot_aplicabilidade"])}>
-    <option value="pendente">A verificar</option><option value="obrigatorio">Obrigatório</option>
+    <option value="pendente">A verificar</option><option value="informado">CIOT informado na carga (sem nova consulta)</option><option value="obrigatorio">Obrigatório</option>
     <option value="dispensado">Dispensado, mediante justificativa</option></select></label>
    <label>Número CIOT<input value={ciot} maxLength={12} inputMode="numeric"
     onChange={e=>onCiotChange(e.target.value.replace(/\D/g,"").slice(0,12))}/></label>

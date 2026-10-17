@@ -17,6 +17,7 @@ function loadTS(relative){
   if(name==="@/lib/fiscal/preflight")return loadTS("src/lib/fiscal/preflight.ts");
   if(name==="@/lib/fiscal/dotcompany")return loadTS("src/lib/fiscal/dotcompany.ts");
   if(name==="@/lib/fiscal/cte-compliance")return loadTS("src/lib/fiscal/cte-compliance.ts");
+  if(name==="@/lib/fiscal/cte-autofill")return loadTS("src/lib/fiscal/cte-autofill.ts");
   return nativeRequire(name);
  };
  new Function("require","module","exports",compiled)(customRequire,mod,mod.exports);
@@ -42,9 +43,11 @@ const draft={
   uf_licenciamento:"RJ",numbering_verified:true,compliance:verifiedDocuments,
  }},
 };
+const sampleXml='<NFe><enderEmit><cMun>3304144</cMun></enderEmit><enderDest><cMun>3302205</cMun></enderDest>'+
+ '<protNFe><infProt><cStat>100</cStat><nProt>333260123456789</nProt></infProt></protNFe></NFe>';
 const notes=[
- {access_key:"5".repeat(44),invoice_number:"22",origin_uf:"RJ",destination_uf:"RJ",goods_value:10000,gross_weight_kg:320},
- {access_key:"6".repeat(44),invoice_number:"23",origin_uf:"RJ",destination_uf:"RJ",goods_value:20000,gross_weight_kg:650},
+ {access_key:"5".repeat(44),invoice_number:"22",origin_uf:"RJ",destination_uf:"RJ",goods_value:10000,gross_weight_kg:320,xml_content:sampleXml},
+ {access_key:"6".repeat(44),invoice_number:"23",origin_uf:"RJ",destination_uf:"RJ",goods_value:20000,gross_weight_kg:650,xml_content:sampleXml},
 ];
 const valid={
  draft,notes,driver:{id:"d",name:"MOTORISTA TESTE",document:"52998224725",active:true},
@@ -139,16 +142,28 @@ test("Server rejection without SEFAZ response must not permit a fiscal retry",()
  assert.equal(definitiveCteRejection(200,{autorizado:false}),false);
 });
 
-test("Additional CT-e checklist is mandatory but cannot claim official validation automatically",()=>{
- const x=ctePreview({...valid,draft:{
-  ...draft,checklist:{cte_provider_config:{
-   ...draft.checklist.cte_provider_config,compliance:emptyCteCompliance,
-  }}
- }});
- assert.equal(x.ready,false);
- assert.ok(x.missing.some(t=>t.includes("consulta oficial da NF-e")));
- assert.ok(x.missing.some(t=>t.includes("códigos IBGE")));
- assert.ok(x.missing.some(t=>t.includes("documentação do veículo")));
+test("Auto fills XML cities and protocol without inventing current SEFAZ consultation",()=>{
+ const input={...valid,draft:{...draft,checklist:{cte_provider_config:{
+  ...draft.checklist.cte_provider_config,compliance:emptyCteCompliance
+ }}}};
+ const p=ctePreview(input);
+ assert.equal(p.config.compliance.municipio_inicio_ibge,"3304144");
+ assert.equal(p.config.compliance.municipio_fim_ibge,"3302205");
+ assert.equal(p.config.compliance.nfe_status,"xml_autorizado");
+ assert.ok(p.config.compliance.nfe_consulta_ref.includes("cStat 100"));
+ assert.ok(p.config.compliance.antt_referencia.includes("2026-10-15"));
+ assert.equal(p.config.compliance.ciot_aplicabilidade,"informado");
+ assert.equal(p.ready,true,p.missing.join("\n"));
+ assert.ok(!p.config.compliance.tributacao_conferida);
+});
+test("Without XML city the app warns but does not invent a municipality code",()=>{
+ const lacking=ctePreview({...valid,notes:[{...notes[0],xml_content:null}],
+  draft:{...draft,checklist:{cte_provider_config:{
+   ...draft.checklist.cte_provider_config,compliance:emptyCteCompliance
+  }}}});
+ assert.equal(lacking.ready,false);
+ assert.ok(lacking.missing.some(t=>t.includes("Código IBGE")));
+ assert.equal(lacking.config.compliance.nfe_status,"pendente");
 });
 test("CIOT exemption needs explicit justification and does not silently assume validity",()=>{
  const waived={...verifiedDocuments,ciot_aplicabilidade:"dispensado",ciot_conferido:false,ciot_justificativa:""};
@@ -160,4 +175,14 @@ test("Additional compliance entries are sanitized before storage",()=>{
  assert.equal(c.municipio_inicio_ibge,"3304144");
  assert.equal(c.crt,"");
  assert.equal(c.nfe_status,"pendente");
+});
+
+test("An imported CIOT is not mislabeled as verified in official source",()=>{
+ const {prefillCteCompliance}=loadTS("src/lib/fiscal/cte-autofill.ts");
+ const result=prefillCteCompliance({current:emptyCteCompliance,notes,
+  transport:{ciot:"520037581133",rntrc_checked_at:"2026-10-16T02:31:52Z",tax_crt:"1"}});
+ assert.equal(result.compliance.ciot_aplicabilidade,"informado");
+ assert.equal(result.compliance.ciot_conferido,false);
+ assert.equal(result.compliance.crt,"1");
+ assert.equal(result.compliance.tributacao_conferida,false);
 });
