@@ -56,6 +56,8 @@ export default async function FinanceiroPage(){
     .eq("user_id",data.user.id).in("bank_transaction_id",movementIds):
    {data:[] as Array<{bank_transaction_id:string;destination:string;category:string|null}>,error:null};
  const bankClassificationError=bankClassifications.error;
+ const {data:areaStats,error:areaStatsError}=await db.rpc("prime_bank_area_stats");
+ const areaSummary=(areaStats||[]) as Array<{destination:string;label:string;movements:number;inflows:number|string;outflows:number|string}>;
  const bankNames=Object.fromEntries((bankAccounts.data||[]).map(a=>[a.id,a.display_name]));
  const bankAccountIds=(bankAccounts.data||[]).filter(a=>a.kind==="BANK"&&a.currency==="BRL").map(a=>a.id);
  const unreviewedCount=bankAccountIds.length?await db.from("bank_transactions")
@@ -166,6 +168,19 @@ export default async function FinanceiroPage(){
   <p className="metric-foot">Fretes, equipe, empréstimos e contas possuem origens diferentes.
    Os totais acima são informativos e não são somados automaticamente ao caixa.
    Registrar uma baixa operacional não cria uma movimentação bancária.</p>
+  <SectionTitle title="Movimentações classificadas por área" hint="Totais bancários por finalidade — não representam lucro e não quitam contas"/>
+  {areaStatsError&&<p role="alert">Não foi possível carregar os direcionamentos bancários.</p>}
+  <div className="grid grid-3">
+   {areaSummary.map(area=><div className="card" key={area.destination}>
+    <div className="metric-label">{area.label}</div>
+    <strong>{area.movements} movimento(s)</strong>
+    <div className="metric-foot">Entradas: {brl(area.inflows)}</div>
+    <div className="metric-foot">Saídas: {brl(area.outflows)}</div>
+   </div>)}
+  </div>
+  <p className="metric-foot">Esses valores são movimentações confirmadas no extrato, separadas
+   conforme sua classificação manual. Contas bancárias de origem não são alteradas;
+   pagamentos e recebimentos só são baixados com conciliação específica.</p>
   <SectionTitle title="Integrações bancárias" hint="Conexões disponíveis e data do último dado importado"/>
   {errors.length>0&&<div className="notice attention">
    Algumas fontes estão indisponíveis. Confira as integrações antes de usar o resumo.</div>}
