@@ -47,7 +47,7 @@ if (process.env.VERCEL_ENV !== "production") {
    const out=[];
    if(["id","chave_acesso","numero","status","idempotency_key","protocolo"]
      .some(x=>Object.prototype.hasOwnProperty.call(obj,x)))out.push(obj);
-   for(const k of ["items","data","documentos","ctes","results","registros","resultado","lista"]){
+   for(const k of ["itens","items","data","documentos","ctes","results","registros","resultado","lista"]){
     if(k in obj)out.push(...records(obj[k],depth+1));
    }
    return out.slice(0,120);
