@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import { classifyBankMovement } from "@/app/actions/premium";
+import {BankMovementDestination,bankAreaLabels,type BankArea} from "@/components/banks/bank-movement-destination";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownLeft, ArrowUpRight, CheckCircle2, ChevronDown,
@@ -73,6 +74,7 @@ export function BankDashboard(){
   const [filterWorkspace,setFilterWorkspace]=useState("all");
   const [filterDirection,setFilterDirection]=useState("all");
   const [filterStatus,setFilterStatus]=useState("all");
+  const [filterArea,setFilterArea]=useState("all");
   const [startDate,setStartDate]=useState("");
   const [endDate,setEndDate]=useState("");
   const attempted=useRef(new Set<string>());
@@ -210,6 +212,8 @@ export function BankDashboard(){
     if(filterWorkspace!=="all"&&connection?.account_kind!==filterWorkspace)return false;
     if(filterDirection!=="all"&&t.direction!==filterDirection)return false;
     if(filterStatus!=="all"&&t.review_status!==filterStatus)return false;
+    const bucket=classificationMap.get(t.id)?.destination||"pending";
+    if(filterArea!=="all"&&bucket!==filterArea)return false;
     if(startDate&&t.occurred_on<startDate)return false;
     if(endDate&&t.occurred_on>endDate)return false;
     if(search&&!((t.description+" "+(account?.display_name||"")).toLocaleLowerCase("pt-BR").includes(search.toLocaleLowerCase("pt-BR"))))return false;
@@ -395,13 +399,19 @@ export function BankDashboard(){
         <select className="bank-select" aria-label="Filtrar movimento" value={filterDirection} onChange={e=>setFilterDirection(e.target.value)}>
           <option value="all">Entradas e saídas</option><option value="credit">Entradas</option><option value="debit">Saídas</option>
         </select>
+        <select className="bank-select" aria-label="Filtrar por área financeira" value={filterArea} onChange={e=>setFilterArea(e.target.value)}>
+         <option value="all">Todas as classificações</option>
+         {(["prime","personal","interest","transfer","pending"] as BankArea[]).map(k=>
+           <option key={k} value={k}>{bankAreaLabels[k]}</option>
+         )}
+        </select>
         <select className="bank-select" aria-label="Filtrar conferência" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
           <option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="ignored">Ignorados</option><option value="matched">Conciliados</option>
         </select>
         <input className="bank-input" type="date" aria-label="A partir de" value={startDate} onChange={e=>setStartDate(e.target.value)}/>
         <input className="bank-input" type="date" aria-label="Até" value={endDate} onChange={e=>setEndDate(e.target.value)}/>
       </div>
-      <div className="table-wrap"><table><thead><tr><th>Data</th><th>Conta</th><th>Descrição</th><th>Valor</th><th>Conferência</th></tr></thead>
+      <div className="table-wrap"><table><thead><tr><th>Data</th><th>Conta</th><th>Descrição</th><th>Valor</th><th>Área financeira</th><th>Conferência</th></tr></thead>
       <tbody>{filteredTransactions.map(t=><tr key={t.id}>
         <td style={{whiteSpace:"nowrap"}}>{new Date(t.occurred_on+"T12:00:00").toLocaleDateString("pt-BR")}</td>
         <td>{accountMap.get(t.bank_account_id)?.display_name||"Conta"}</td>
@@ -409,23 +419,22 @@ export function BankDashboard(){
         <td><span className={"bank-money "+(t.direction==="credit"?"credit":"debit")}>
           {t.direction==="credit"?<ArrowDownLeft size={13} style={{verticalAlign:"middle"}}/>:<ArrowUpRight size={13} style={{verticalAlign:"middle"}}/>} {t.direction==="credit"?"+":"−"} {money(Number(t.amount))}
         </span></td>
+        <td><BankMovementDestination key={t.id+":"+(classificationMap.get(t.id)?.destination||"pending")}
+            id={t.id} destination={classificationMap.get(t.id)?.destination}
+            category={classificationMap.get(t.id)?.category}
+            onSaved={load}/></td>
         <td><div className="bank-transaction-actions">
           {t.review_status==="matched"?<span className="bank-inline-badge good"><CheckCircle2 size={12}/> Conciliada</span>:<>
-          {classificationMap.has(t.id)&&<span className="bank-inline-badge good">Direcionado: {classificationMap.get(t.id)?.destination}</span>}
-          <details className="premium-disclosure"><summary>Direcionar</summary>
+          <details className="premium-disclosure"><summary>Detalhar categoria</summary>
             <form onSubmit={async e=>{e.preventDefault();setBusy(t.id);
               try{await classifyBankMovement(new FormData(e.currentTarget));setNotice("Classificação salva para conferência, sem alterar caixa.");await load();}
               catch(error){setNotice(error instanceof Error?error.message:"Falha ao classificar.");}
               finally{setBusy("");}
             }} className="bank-classify-form">
               <input type="hidden" name="id" value={t.id}/>
-              <select name="destination" className="bank-select" defaultValue={classificationMap.get(t.id)?.destination||"pending"} aria-label="Destino da movimentação">
-                <option value="prime">Prime Group</option><option value="personal">Pessoal</option>
-                <option value="interest">Empréstimos/Juros</option><option value="transfer">Transferência entre contas</option>
-                <option value="pending">Ainda não sei</option>
-              </select>
+              <input type="hidden" name="destination" value={classificationMap.get(t.id)?.destination||"pending"}/>
               <input className="bank-input" type="text" name="category" maxLength={80} placeholder="Categoria (ex.: combustível)" defaultValue={classificationMap.get(t.id)?.category||""}/>
-              <button type="submit" className="button primary compact" disabled={!!busy}>Salvar destino</button>
+              <button type="submit" className="button primary compact" disabled={!!busy}>Salvar categoria</button>
             </form>
           </details>
           <button type="button" className="button compact bank-button" disabled={!!busy}
@@ -434,9 +443,14 @@ export function BankDashboard(){
           </button></>}
         </div></td>
       </tr>)}
-      {!filteredTransactions.length&&<tr><td colSpan={5} style={{textAlign:"center",padding:25,color:"var(--muted)"}}>Nenhum lançamento encontrado para esses filtros.</td></tr>}
+      {!filteredTransactions.length&&<tr><td colSpan={6} style={{textAlign:"center",padding:25,color:"var(--muted)"}}>Nenhum lançamento encontrado para esses filtros.</td></tr>}
       </tbody></table></div>
-      <div className="bank-tx-count">{filteredTransactions.length} movimento(s) exibido(s). Os filtros atuam sobre os últimos 150 resultados, não sobre todo o histórico.</div>
+      <div className="bank-tx-count">
+        {filteredTransactions.length} movimento(s) exibido(s).
+        {" "}{filteredTransactions.filter(t=>["prime","personal","interest"].includes(classificationMap.get(t.id)?.destination||"")).length} marcado(s) como Empresa, Pessoal ou Empréstimo.
+        Os filtros atuam sobre os últimos 150 resultados, não sobre todo o histórico.
+        A classificação não altera a origem do dinheiro nem quita contas automaticamente.
+      </div>
     </section>
     {preview&&<div className="bank-modal-backdrop" role="presentation">
       <div className="bank-modal" role="dialog" aria-modal="true" aria-labelledby="bank-preview-heading">
