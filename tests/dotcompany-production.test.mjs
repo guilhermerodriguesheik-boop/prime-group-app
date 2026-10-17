@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {checkDotCompanyProduction,validProductionKey} from "../src/lib/fiscal/dotcompany-production.ts";
+import {checkDotCompanyProduction,validProductionKey,checkPrimeEmitterReadiness} from "../src/lib/fiscal/dotcompany-production.ts";
 const key="dc_live_123."+"a".repeat(36);
 test("Production-only gate rejects a sandbox token",()=>{
  assert.equal(validProductionKey(undefined),false);
@@ -67,4 +67,29 @@ test("Two independent 401s mean the live key is rejected by both endpoints",asyn
  const result=await checkDotCompanyProduction(key,false,async()=>new Response("{}",{status:401}));
  assert.equal(result.authenticated,false);assert.equal(result.status,401);
  assert.match(result.reason,/Ambos os endpoints/);
+});
+
+test("Provider fiscal readiness is false even if the live key works",async()=>{
+ const calls=[];
+ const fetcher=async(url,opts)=>{
+  calls.push({url,method:opts.method});
+  return new Response(JSON.stringify({cnpj:"42.361.401/0001-17",pronta_cte:false,pronta_mdfe:false,
+   perfil:{rntrc:"",cte_cst_icms:""},numeracao:[{modelo:55,serie:1,proximo_numero:1}]}),{status:200});
+ };
+ const r=await checkPrimeEmitterReadiness(key,fetcher);
+ assert.equal(r.verified,true);assert.equal(r.cteReady,false);assert.equal(r.mdfeReady,false);
+ assert.equal(r.hasRntrc,false);assert.equal(r.numberingCteConfigured,false);
+ assert.equal(calls.length,1);assert.equal(calls[0].method,"GET");
+ assert.ok(!JSON.stringify(r).includes(key));
+});
+test("Provider CT-e readiness requires the actual emitter and CNPJ",async()=>{
+ const wrong=await checkPrimeEmitterReadiness(key,async()=>new Response(
+  JSON.stringify({cnpj:"00.000.000/0001-00",pronta_cte:true}),{status:200}));
+ assert.equal(wrong.verified,false);assert.equal(wrong.cteReady,false);
+ const right=await checkPrimeEmitterReadiness(key,async()=>new Response(
+  JSON.stringify({cnpj:"42361401000117",pronta_cte:true,pronta_mdfe:true,
+   perfil:{rntrc:"057592188",cte_cst_icms:"00"},numeracao:[{modelo:"57",serie:"3",proximo_numero:35}]}),
+   {status:200}));
+ assert.equal(right.verified,true);assert.equal(right.cteReady,true);assert.equal(right.mdfeReady,true);
+ assert.equal(right.hasRntrc,true);assert.equal(right.numberingCteConfigured,true);
 });
