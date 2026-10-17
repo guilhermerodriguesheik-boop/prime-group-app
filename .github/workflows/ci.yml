@@ -41,6 +41,9 @@ jobs:
       - name: Ortobom financial reconciliation parser tests
         run: npm run test:ortobom-finance
 
+      - name: Simple cargo payment ledger tests
+        run: node --experimental-strip-types --test tests/simple-cargo-ledger.test.mjs
+
       - name: Google OAuth and fiscal readiness tests
         run: npm run test:fiscal-readiness
 
