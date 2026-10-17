@@ -18,8 +18,8 @@ test("driver messages include selected rows and agreed vs due, not customer frei
  const summary=driverWhatsAppSummary([row("030061"),row("030151","driver-a",350,true)],"Motorista A");
  assert.ok(summary?.includes("Carga 030061"));
  assert.ok(summary?.includes("Carga 030151"));
- assert.ok(summary?.includes("Total a pagar: R$ 250,00"));
- assert.ok(summary?.includes("Total combinado: R$ 600,00"));
+ assert.ok(summary?.replace(/\u00a0/g," ").includes("Total a pagar: R$ 250,00"));
+ assert.ok(summary?.replace(/\u00a0/g," ").includes("Total combinado: R$ 600,00"));
  assert.ok(!summary?.includes("R$ 3.600,00"));
  assert.ok(!summary?.includes("Diesel"));
 });
@@ -29,7 +29,7 @@ test("do not mix drivers or send unknown driver pay",()=>{
  assert.equal(driverWhatsAppSummary([row("030061","d1",0)],"D1"),null);
 });
 test("WhatsApp phone normalizes Brazil numbers or opens recipient chooser",()=>{
- assert.ok(whatsappDraftLink("Teste","21988887777")?.startsWith("https://wa.me/5521988877777?text="));
+ assert.ok(whatsappDraftLink("Teste","21988887777")?.startsWith("https://wa.me/5521988887777?text="));
  assert.ok(whatsappDraftLink("Teste","")?.startsWith("https://api.whatsapp.com/send?text="));
  assert.equal(whatsappDraftLink("Teste","123"),null);
 });
