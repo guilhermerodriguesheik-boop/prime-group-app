@@ -69,7 +69,7 @@ export async function GET(req:Request){
  try{
   const queued=await queueBankReviewDigests();
   // Same outgoing WhatsApp queue used by existing daily reminders.
-  const messages=queued>0?await runPrimeOutbox():{sent:0};
+  const messages=queued>0?await runPrimeOutbox(3):{sent:0};
   digest={queued,messages};
  }catch(error){
   console.error("Bank review summary pending",error instanceof Error?error.message:"unknown");
