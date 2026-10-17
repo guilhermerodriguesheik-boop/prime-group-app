@@ -2,7 +2,7 @@
 import {useState} from "react";
 import {useRouter} from "next/navigation";
 import Link from "next/link";
-import {reviewSuggestions,type ReviewCargo,type ReviewRecurring} from "@/lib/finance/bank-review-suggestions";
+import {bankMovementNature,reviewSuggestions,type ReviewCargo,type ReviewRecurring} from "@/lib/finance/bank-review-suggestions";
 type BankMovement={id:string;workspace_id:string;bank_account_id:string;occurred_on:string;
  description:string;amount:number|string;direction:"credit"|"debit";review_status:string};
 type Bill={id:string;workspace_id:string;description:string;amount:number|string;
