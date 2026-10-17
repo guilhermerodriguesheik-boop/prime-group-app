@@ -67,5 +67,7 @@ export function cteComplianceIssues(c:CteCompliance,ciot:string|null):string[]{
  const ciotDigits=(ciot||"").replace(/\D/g,"");
  if(c.ciot_aplicabilidade==="obrigatorio"&&!/^\d{11,12}$/.test(ciotDigits))
   issues.push("CIOT obrigatório não informado ou com formato inválido.");
+ if(c.ciot_aplicabilidade==="dispensado"&&c.ciot_justificativa.length<10)
+  issues.push("Registre o fundamento para a dispensa do CIOT.");
  return issues;
 }
