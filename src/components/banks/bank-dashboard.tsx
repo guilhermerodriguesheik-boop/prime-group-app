@@ -128,42 +128,6 @@ export function BankDashboard(){
       widget.init();
     }catch(e){setNotice(e instanceof Error?e.message:"Erro ao abrir autorização.");setBusy("");}
   }
-  async function refreshAtBank(connection:Connection){
-    if(connection.provider!=="pluggy"||connection.status==="disconnected"||connection.archived_at)return;
-    const pluggy=(window as Window & {PluggyConnect?:WidgetCtor}).PluggyConnect;
-    if(!sdkReady||!pluggy){
-      setNotice("A janela de atualização bancária ainda está carregando. Atualize a página e tente novamente.");
-      return;
-    }
-    setBusy(connection.id);setNotice("");
-    try{
-      const response=await fetch("/api/banks/token",{
-        method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({workspaceId:connection.workspace_id,connectionId:connection.id}),
-      });
-      const body=await response.json();
-      if(!response.ok)throw new Error(body.error||"Não foi possível atualizar a conta.");
-      if(!body.updateItem)throw new Error("Item bancário não identificado.");
-      const widget=new pluggy({
-        connectToken:body.accessToken,
-        includeSandbox:false,
-        updateItem:body.updateItem,
-        onSuccess:()=>{
-          setNotice("A Pluggy concluiu a consulta ao banco. Importando os extratos disponíveis...");
-          void sync(connection.id,true);
-        },
-        onError:(error)=>{
-          setNotice(error.message||"Não foi possível atualizar a conexão no banco.");
-          setBusy("");
-        },
-        onClose:()=>setBusy(""),
-      });
-      widget.init();
-    }catch(e){
-      setNotice(e instanceof Error?e.message:"Falha ao solicitar atualização ao banco.");
-      setBusy("");
-    }
-  }
   async function sync(id:string,force=false){
     setBusy(id);
     try{
@@ -255,11 +219,12 @@ export function BankDashboard(){
       <div>
         <div className="bank-overline">Open Finance • Leitura segura</div>
         <h2>Suas contas, em um só lugar</h2>
-        <p>Consulte saldos e movimentações mantendo as finanças da Prime Group separadas das pessoais.</p>
+        <p>Consulte saldos e movimentações mantendo a Prime Group separada das finanças pessoais. 
+        O Meu Pluggy atualiza a origem no próprio ciclo diário; o Prime Finance importa os dados recebidos automaticamente e por esta tela.</p>
       </div>
       <div className="bank-toolbar">
         <button type="button" className="button bank-button" disabled={!!busy} onClick={()=>void syncAll()}>
-          <RefreshCw size={15}/> Consultar Pluggy
+          <RefreshCw size={15}/> Importar extratos disponíveis
         </button>
         <button type="button" className="button primary bank-button" onClick={()=>document.getElementById("bank-connect")?.scrollIntoView({behavior:"smooth"})}>
           <Plus size={16}/> Conectar banco
@@ -360,7 +325,11 @@ export function BankDashboard(){
             {c.last_error&&<div className="bank-risk" style={{marginTop:10}}>{c.last_error}</div>}
             <div className="bank-connection-actions">
               {!c.archived_at&&c.provider==="pluggy"&&<button type="button" className="button bank-button" disabled={!!busy||c.status==="disconnected"}
-                onClick={()=>void refreshAtBank(c)}><RefreshCw size={14}/>{busy===c.id?"Atualizando...":"Atualizar no banco"}</button>}
+                onClick={()=>void sync(c.id,true)}><RefreshCw size={14}/>{busy===c.id?"Importando...":"Importar dados disponíveis"}</button>}
+              {!c.archived_at&&c.provider==="pluggy"&&<a className="button bank-button"
+                href="https://meu.pluggy.ai/" target="_blank" rel="noopener noreferrer">
+                Conferir atualização no Meu Pluggy
+              </a>}
               {!c.archived_at&&<button type="button" className="button bank-button" disabled={!!busy}
                 onClick={()=>void toggle(c)}>{c.status==="disconnected"?"Reativar":"Pausar"}</button>}
               <button type="button" className="button bank-button danger" disabled={!!busy} onClick={()=>openDelete(c)}>
