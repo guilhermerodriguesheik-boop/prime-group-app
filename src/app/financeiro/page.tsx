@@ -70,7 +70,7 @@ export default async function FinanceiroPage(){
  const cargoById=new Map(ops.map(o=>[o.cargo_reference,o]));
  const cargoList=buildCargoLedger((cargoDrafts.data||[]) as LedgerDraft[],(cargoEmails.data||[]) as LedgerEmail[]);
  const cargoOutstanding=cargoList.reduce((sum,c)=>sum+Number(
-  applyManualBalanceReceipt(c,cargoById.get(c.cargo.replace(/^0+(?=\\d)/,""))||null).pending||0),0);
+  applyManualBalanceReceipt(c,cargoById.get(c.cargo.replace(/^0+(?=\d)/,""))||null).pending||0),0);
  const crewTotals=ops.reduce((sum,o)=>{
   const item=cargoCosts(o,null);
   return {drivers:sum.drivers+item.driverDue,helpers:sum.helpers+item.helperDue};
