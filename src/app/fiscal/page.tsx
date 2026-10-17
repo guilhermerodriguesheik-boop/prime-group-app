@@ -2,6 +2,7 @@ import {Header} from "@/components/ui";
 import {SimpleCargoTable,type CargoDisplay,type CargoDriver,type CargoOperation} from "@/components/fiscal/simple-cargo-table";
 import {gmailStatus} from "@/lib/fiscal/gmail";
 import {buildCargoLedger,type LedgerDraft,type LedgerEmail} from "@/lib/fiscal/simple-cargo-ledger";
+import {applyManualBalanceReceipt} from "@/lib/fiscal/manual-balance";
 import {createClient} from "@/lib/supabase/server";
 import type {SupabaseClient} from "@supabase/supabase-js";
 import {redirect} from "next/navigation";
@@ -21,7 +22,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
    .eq("workspace_id",ws.id).order("email_date",{ascending:true}).limit(2000):
    Promise.resolve({data:[],error:null}),
   ws?db.from("prime_cargo_operations")
-   .select("cargo_reference,service_date,route_description,driver_id,driver_pay,driver_paid,helper_count,helper_rate,helpers_paid,diesel,tolls,other_expenses,notes")
+   .select("cargo_reference,service_date,route_description,driver_id,driver_pay,driver_paid,helper_count,helper_rate,helpers_paid,diesel,tolls,other_expenses,notes,manual_settled_on,manual_settled_amount,manual_settlement_note")
    .eq("workspace_id",ws.id).limit(2000):
    Promise.resolve({data:[],error:null}),
   ws?db.from("drivers").select("id,name,active").eq("workspace_id",ws.id).order("name").limit(500):
@@ -40,7 +41,8 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
  for(const op of (operations.data||[]) as CargoOperation[])opMap.set(op.cargo_reference,op);
  const cargo:CargoDisplay[]=buildCargoLedger((drafts.data||[]) as LedgerDraft[],reports).map(c=>{
   const key=c.cargo.replace(/^0+(?=\d)/,"");
-  return {...c,emailDate:firstEmail.get(key)||null,operation:opMap.get(key)||null};
+  const operation=opMap.get(key)||null;
+  return {...applyManualBalanceReceipt(c,operation),emailDate:firstEmail.get(key)||null,operation};
  });
  const missing=Boolean(drafts.error||emails.error||operations.error||drivers.error);
  return <>
