@@ -99,7 +99,7 @@ export function ctePreview(input:CteReviewInput){
  })).digest("hex");
  return {payload,missing:unique,ready:unique.length===0,retryAllowed:input.retryAllowed===true,hash,invoiceCount:notes.length,
   freightValue:value,goodsValue:goods,grossWeight:weight,ciot:draft.ciot,
-  cargoReference:draft.cargo_reference,config:c};
+  cargoReference:draft.cargo_reference,rntrc:profile?.rntrc||null,config:c};
 }
 export function productionKey(token:unknown):token is string{
  return typeof token==="string"&&/^dc_live_[a-zA-Z0-9._-]{16,}$/.test(token);
