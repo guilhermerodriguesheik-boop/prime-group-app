@@ -91,7 +91,7 @@ async function main(){
   }
   const p=body&&typeof body==="object"&&!Array.isArray(body)?body:{};
   const sub=p.data&&typeof p.data==="object"?p.data:p.cte&&typeof p.cte==="object"?p.cte:p;
-  const ctId=sub?.cte_id??sub?.id??sub?.documento_id;
+  const ctId=sub?.cte_id??sub?.id??sub?.documento_id??p.documento?.id??p.resultado?.cte_id??p.resultado?.id;
   const id=(typeof ctId==="string"||typeof ctId==="number")?String(ctId):null;
   const details={http:response.status,operation:"cte.criar",hasProviderId:!!id,
     responseKeys:Object.keys(p).slice(0,25),
@@ -100,7 +100,7 @@ async function main(){
     returnedAuthorized:p.autorizado===true,
     note:"Draft only; cte.emitir was not called. Existing inconclusive fiscal emission was not repeated."};
   const state=response.ok&&id&&p.autorizado!==true?"prepared":
-    response.ok&&p.autorizado===true?"unknown":"failed";
+    response.ok?"unknown":"failed";
   await finish(state,details,id);
   log("http="+response.status+" state="+state+" hasId="+!!id);
  }catch(e){
