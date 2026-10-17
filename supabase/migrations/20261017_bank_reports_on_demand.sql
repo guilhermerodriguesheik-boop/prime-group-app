@@ -58,7 +58,7 @@ begin
  if found then return jsonb_build_object('queued',false,'id',present.id,'status',present.status);end if;
  message:=public.prime_render_bank_report(p_owner_id,p_mode);
  insert into public.prime_outbox(user_id,dedupe_key,category,reference,message)
- values(p_owner_id,key,'bank',to_char((now() at time zone 'America/Sao_Paulo')::date,'YYYYMMDD'),message)
+ values(p_owner_id,key,'report',to_char((now() at time zone 'America/Sao_Paulo')::date,'YYYYMMDD'),message)
  on conflict(dedupe_key) do nothing returning id into queued;
  if queued is null then
   select o.id,o.status into present from public.prime_outbox o where o.dedupe_key=key;
