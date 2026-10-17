@@ -1,4 +1,5 @@
 import {Header} from "@/components/ui";
+import Link from "next/link";
 import {SimpleCargoTable,type CargoDisplay,type CargoDriver,type CargoOperation} from "@/components/fiscal/simple-cargo-table";
 import {gmailStatus} from "@/lib/fiscal/gmail";
 import {buildCargoLedger,type LedgerDraft,type LedgerEmail} from "@/lib/fiscal/simple-cargo-ledger";
@@ -25,7 +26,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
    .select("cargo_reference,service_date,route_description,driver_id,driver_pay,driver_paid,helper_count,helper_rate,helpers_paid,diesel,tolls,other_expenses,notes,manual_settled_on,manual_settled_amount,manual_settlement_note")
    .eq("workspace_id",ws.id).limit(2000):
    Promise.resolve({data:[],error:null}),
-  ws?db.from("drivers").select("id,name,active").eq("workspace_id",ws.id).order("name").limit(500):
+  ws?db.from("drivers").select("id,name,active,phone").eq("workspace_id",ws.id).order("name").limit(500):
    Promise.resolve({data:[],error:null}),
  ]);
  const reports=(emails.data||[]) as LedgerEmail[];
@@ -53,6 +54,8 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
   <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",margin:"12px 0 18px"}}>
    <span style={{fontSize:13}}>{gmail?"Gmail conectado":"Gmail não conectado"}</span>
    {!gmail&&<a className="button primary" href="/api/fiscal/gmail/connect">Conectar Gmail</a>}
+   <Link className="button" href="/prime">Gestão Prime Group</Link>
+   <Link className="button" href="/frota">Frota</Link>
   </div>
   <SimpleCargoTable cargo={cargo} drivers={(drivers.data||[]) as CargoDriver[]} connected={Boolean(gmail)}/>
  </>;

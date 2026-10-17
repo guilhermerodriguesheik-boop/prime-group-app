@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, FileCheck2, Landmark, Route } from "lucide-react";
+import { ArrowUpRight, FileCheck2, Landmark, ClipboardList } from "lucide-react";
 import { Header, Metric, SectionTitle } from "@/components/ui";
 import { CommandCenter } from "@/components/assistant/command-center";
 import { HomeTabs,HomeTabPanel } from "@/components/home/home-tabs";
@@ -31,9 +31,9 @@ export default async function Home() {
           <p>Priorize sua operação. Os módulos da transportadora e os dados pessoais continuam separados no banco.</p>
         </div>
         <nav className="home-workflow-actions" aria-label="Atalhos principais">
-          <Link href="/fiscal"><FileCheck2 size={19}/><span><strong>Emissor fiscal</strong><small>Cargas, XML e manifestos</small></span><ArrowUpRight size={16}/></Link>
-          <Link href="/viagens"><Route size={19}/><span><strong>Viagens e fretes</strong><small>Rotas e resultado operacional</small></span><ArrowUpRight size={16}/></Link>
-          <Link href="/bancos"><Landmark size={19}/><span><strong>Conciliação bancária</strong><small>Contas e movimentações</small></span><ArrowUpRight size={16}/></Link>
+          <Link href="/fiscal"><FileCheck2 size={19}/><span><strong>Transporte</strong><small>Cargas, acertos e despesas</small></span><ArrowUpRight size={16}/></Link>
+          <Link href="/financeiro"><ClipboardList size={19}/><span><strong>Financeiro</strong><small>Pagamentos pendentes e recorrentes</small></span><ArrowUpRight size={16}/></Link>
+          <Link href="/bancos"><Landmark size={19}/><span><strong>Bancos</strong><small>Open Finance e movimentações</small></span><ArrowUpRight size={16}/></Link>
         </nav>
       </section>
       <div className="grid grid-4">
