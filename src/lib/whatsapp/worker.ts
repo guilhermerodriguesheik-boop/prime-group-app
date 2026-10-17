@@ -5,7 +5,8 @@ import { summarizeFiscalXml } from "@/lib/assistant/fiscal-xml";
 import { chooseAiProfile } from "@/lib/ai/cost-routing";
 import {detectBankReportIntent} from "@/lib/banks/report-intent";
 import {parseWhatsAppBankNumber} from "@/lib/banks/whatsapp-classification";
-import {firstBankButtons,extraBankButtons,readBankButtonId} from "@/lib/banks/interactive-bank-buttons";
+import {readBankButtonId} from "@/lib/banks/interactive-bank-buttons";
+import {bankCarouselPayload} from "@/lib/banks/evolution-go-carousel";
 
 type Obj = Record<string, unknown>;
 type Event = {
@@ -98,18 +99,24 @@ async function sendEvolutionGoBankButtons(to:string,body:string,outboxId:string,
  const {base,token}=evolutionGoConfig();
  const number=to.replace(/\D/g,"");
  if(!/^[0-9]{10,15}$/.test(number))throw new Error("Recipient invalid");
- const buttons=more?extraBankButtons(outboxId):firstBankButtons(outboxId);
- const response=await fetch(base+"/send/button",{
-  method:"POST",cache:"no-store",signal:AbortSignal.timeout(15000),
-  headers:{apikey:token,"Content-Type":"application/json"},
-  body:JSON.stringify({
-   number,title:more?"Mais opções":"Prime Finance",
-   description:body.slice(0,450),
-   footer:"Classificar apenas · sem lançar pagamento",buttons
-  })
+ const headers={apikey:token,"Content-Type":"application/json"};
+ const payload=bankCarouselPayload(number,body,outboxId,more);
+ // Send a single carousel containing the options for ONE bank movement.
+ // Do not re-try /send/button once its compatibility failure is established.
+ const response=await fetch(base+"/send/carousel",{
+  method:"POST",cache:"no-store",signal:AbortSignal.timeout(19000),
+  headers,body:JSON.stringify(payload)
  });
- if(!response.ok)throw new Error("Evolution Go /send/button HTTP "+response.status);
+ if(!response.ok){
+  const info=(await response.text().catch(()=>"")).slice(0,240);
+  throw new Error("Evolution Go /send/carousel HTTP "+response.status+
+   (info?" "+info.replace(/[\r\n]/g," "):""));
+ }
+ const data=await response.json().catch(()=>null) as
+  {message?:string;data?:{Info?:{ID?:string;Type?:string}}}|null;
+ if(!data?.data?.Info?.ID)throw new Error("Evolution Go carousel não confirmou ID de mensagem");
 }
+
 
 // Automatic reminders may use only the already-configured Evolution Go provider.
 // Do not route scheduled financial notifications through legacy Meta configuration.
