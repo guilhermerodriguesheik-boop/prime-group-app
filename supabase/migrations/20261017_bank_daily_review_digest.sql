@@ -111,6 +111,8 @@ end $function$
 
 revoke all on function public.prime_queue_bank_review_digest(text,integer) from public,anon,authenticated;
 grant execute on function public.prime_queue_bank_review_digest(text,integer) to service_role;
+-- primeRpc authenticates with the public API role and a server-only shared secret.
+grant execute on function public.prime_queue_bank_review_digest(text,integer) to anon;
 -- Replaces old per-transaction WhatsApp sends with grouped notifications.
 CREATE OR REPLACE FUNCTION public.prime_bank_import_event(p_secret text, p_item_id uuid, p_account_id uuid, p_rows jsonb)
  RETURNS integer
