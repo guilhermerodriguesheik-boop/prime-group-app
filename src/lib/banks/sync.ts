@@ -27,9 +27,10 @@ export async function syncBankConnection(
   db: BankDb,
   connection: Connection,
   days=120
-):Promise<{accounts:number;transactions:number;at:string}>{
+):Promise<{accounts:number;transactions:number;newTransactions:number;providerUpdatedAt:string|null;at:string}>{
   if(connection.status==="disconnected")throw new Error("Conexão desconectada.");
   let imported=0;
+  let newlyAdded=0;
   try {
     const key=await pluggyApiKey();
     const item=await pluggyItem(key,connection.provider_item_id);
@@ -39,6 +40,9 @@ export async function syncBankConnection(
     if(item.status!=="UPDATED")
       throw new Error(item.status==="UPDATING" ? "O banco ainda está atualizando os dados. Tente novamente em instantes." :
         "A conexão precisa de atenção no Meu Pluggy. Confira a autorização do banco.");
+    const parsedSourceDate=item.lastUpdatedAt?new Date(item.lastUpdatedAt):null;
+    const providerUpdatedAt=parsedSourceDate&&!Number.isNaN(parsedSourceDate.getTime())
+      ?parsedSourceDate.toISOString():null;
     const accounts=await pluggyAccounts(key,item.id);
     if(accounts.length>20)throw new Error("Número inesperado de contas.");
     if(!accounts.length)throw new Error("Nenhuma conta disponível. Confira o consentimento no Meu Pluggy.");
@@ -77,19 +81,28 @@ export async function syncBankConnection(
           updated_at:at,
         }));
         if(batch.length){
+          const ids=[...new Set(batch.map(row=>row.provider_transaction_id))];
+          const {data:previous,error:lookupError}=await db.from("bank_transactions")
+            .select("provider_transaction_id").eq("bank_account_id",stored.id)
+            .in("provider_transaction_id",ids);
+          if(lookupError)throw new Error("Falha ao conferir extratos existentes: "+lookupError.code);
+          const known=new Set((previous||[]).map(row=>row.provider_transaction_id));
           const {error}=await db.from("bank_transactions")
             .upsert(batch,{onConflict:"bank_account_id,provider_transaction_id"});
           if(error)throw new Error("Falha ao salvar extrato: "+error.code);
           imported+=batch.length;
+          newlyAdded+=ids.filter(id=>!known.has(id)).length;
         }
       }
     }
     const at=new Date().toISOString();
     const {error}=await db.from("bank_connections").update({
-      last_synced_at:at,last_error:null,status:"connected",updated_at:at
+      last_synced_at:at,last_error:null,status:"connected",updated_at:at,
+      last_new_transaction_count:newlyAdded,last_scanned_transaction_count:imported,
+      ...(providerUpdatedAt?{provider_last_updated_at:providerUpdatedAt}:{})
     }).eq("id",connection.id).eq("owner_id",connection.owner_id);
     if(error)throw new Error("Falha ao atualizar status: "+error.code);
-    return {accounts:accounts.length,transactions:imported,at};
+    return {accounts:accounts.length,transactions:imported,newTransactions:newlyAdded,providerUpdatedAt,at};
   } catch(err){
     await db.from("bank_connections").update({
       status:"attention",last_error:plainError(err),
