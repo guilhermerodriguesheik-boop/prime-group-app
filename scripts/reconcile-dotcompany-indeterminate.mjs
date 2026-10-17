@@ -78,6 +78,17 @@ if (process.env.VERCEL_ENV !== "production") {
     // no certificate content, credentials, addresses or personal information.
     if(profile.payload&&typeof profile.payload==="object"){
       const p=profile.payload;
+      if(typeof p.pronta_cte==="boolean")fiscalProfile.pronta_cte=p.pronta_cte;
+      if(typeof p.pronta_cte==="string")fiscalProfile.pronta_cte=p.pronta_cte.slice(0,60);
+      if(typeof p.pronta_mdfe==="boolean")fiscalProfile.pronta_mdfe=p.pronta_mdfe;
+      if(p.perfil&&typeof p.perfil==="object"&&!Array.isArray(p.perfil)){
+        fiscalProfile.perfil_cte=pick(p.perfil,[
+          "serie_cte","proximo_numero_cte","rntrc","modal","tipo_emitente","tp_amb",
+          "cst_icms","crt","regime_tributario","serie_mdfe","proximo_numero_mdfe"
+        ]);
+        fiscalProfile.perfil_cte_fields=Object.keys(p.perfil).filter(k=>
+          /ct.?e|mdf.?e|rntrc|serie|numero|ambiente|pront|modal/i.test(k)).slice(0,24);
+      }
       fiscalProfile.fields_present=Object.keys(p).filter(k=>
         /serie|numero|numeracao|modelo|ambiente|emiss|certificad|perfil|ct.?e/i.test(k)).slice(0,24);
       const rows=Array.isArray(p.numeracao)?p.numeracao:
