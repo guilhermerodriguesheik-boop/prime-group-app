@@ -1,5 +1,6 @@
 import { sendScheduledWhatsAppMessage } from "@/lib/whatsapp/worker";
 import {ensurePluggyWebhooks} from "@/lib/banks/webhook-setup";
+import {parseEvolutionGoDeliveryStatus} from "@/lib/banks/evolution-go-delivery-status";
 
 type OutboxItem={id:string;phone:string;message:string;bankTransactionId:string|null};
 function settings(){
@@ -30,13 +31,6 @@ export async function queueBankReviewDigests(maxBatches=6){
 }
 
 type OutboxReceipt={id:string;providerId:string};
-type ProviderResult={data?:{result?:{status?:string}}};
-function deliveryStatus(raw:unknown):"sent"|"delivered"|"read"|"unavailable"{
- const obj=raw as ProviderResult|null;
- const status=String(obj?.data?.result?.status||"").toUpperCase();
- return status==="READ"?"read":status==="DELIVERED"?"delivered":
-  status==="SENT"?"sent":"unavailable";
-}
 async function checkDelivery(receipt:OutboxReceipt){
  const url=process.env.EVOLUTION_GO_API_URL||"";
  const key=process.env.EVOLUTION_GO_TOKEN||"";
@@ -52,7 +46,7 @@ async function checkDelivery(receipt:OutboxReceipt){
    headers:{apikey:key,"Content-Type":"application/json"},
    body:JSON.stringify({id:receipt.providerId})
   });
-  if(response.ok)delivery=deliveryStatus(await response.json());
+  if(response.ok)delivery=parseEvolutionGoDeliveryStatus(await response.json());
  }catch { /* Provider can disable message history; HTTP acceptance is not delivery. */ }
  try{await primeRpc("prime_update_outbox_delivery_status",{
   p_id:receipt.id,p_provider_message_id:receipt.providerId,p_status:delivery
