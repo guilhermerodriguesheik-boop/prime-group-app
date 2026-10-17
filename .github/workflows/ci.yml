@@ -44,6 +44,9 @@ jobs:
       - name: WhatsApp AI strict response schema regression tests
         run: node --experimental-strip-types --test tests/whatsapp-response-schema.test.mjs
 
+      - name: WhatsApp bank movement classification command tests
+        run: node --experimental-strip-types --test tests/whatsapp-bank-classification.test.mjs
+
       - name: AI and WhatsApp bank statement command tests
         run: node --experimental-strip-types --test tests/bank-report-intent.test.mjs
 
