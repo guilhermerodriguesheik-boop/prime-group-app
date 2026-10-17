@@ -72,7 +72,21 @@ if (process.env.VERCEL_ENV !== "production") {
     catch{profile={status:null,payload:null};}
     const allDocs=records(provider.payload);
     const fiscalProfile=profile.payload&&typeof profile.payload==="object"?
-      pick(profile.payload,["serie_cte","proximo_numero_cte","tp_amb","cnpj","perfil_fiscal_completo"]):{};
+      pick(profile.payload,["serie_cte","proximo_numero_cte","tp_amb","cnpj","perfil_fiscal_completo",
+       "emitente_id","crt","ie","status","ambiente"]):{};
+    // Field names vary between providers. Record ONLY fiscal numbering metadata,
+    // no certificate content, credentials, addresses or personal information.
+    if(profile.payload&&typeof profile.payload==="object"){
+      const p=profile.payload;
+      fiscalProfile.fields_present=Object.keys(p).filter(k=>
+        /serie|numero|numeracao|modelo|ambiente|emiss|certificad|perfil|ct.?e/i.test(k)).slice(0,24);
+      const rows=Array.isArray(p.numeracao)?p.numeracao:
+        Array.isArray(p.numeracoes)?p.numeracoes:[];
+      fiscalProfile.numeracao=rows.slice(0,15).map(row=>
+        row&&typeof row==="object"?pick(row,[
+          "modelo","serie","proximo_numero","numero_atual","tipo","documento","ambiente"
+        ]):{});
+    }
     for(const attempt of attempts){
      const cargo=drafts.find(x=>x.id===attempt.draft_id)?.cargo_reference||"";
      const keys=nfe.filter(x=>x.cargo_reference===cargo).map(x=>x.access_key);
