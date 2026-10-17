@@ -42,7 +42,25 @@ export function BankDashboard(){
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState("");
   const [notice,setNotice]=useState("");
+  const [reportMode,setReportMode]=useState("imported_today");
+  const [reportBusy,setReportBusy]=useState(false);
   const [bank,setBank]=useState<BankSlug>("itau");
+  async function sendBankReport(){
+   setReportBusy(true);setNotice("");
+   try{
+    const response=await fetch("/api/banks/report",{
+     method:"POST",headers:{"Content-Type":"application/json"},
+     body:JSON.stringify({mode:reportMode})
+    });
+    const result=await response.json() as {error?:string;status?:string};
+    if(!response.ok)throw Error(result.error||"Não foi possível preparar o envio.");
+    setNotice(result.status==="sent"?
+     "Relatório enviado ao provedor WhatsApp. Confira seu telefone vinculado.":
+     "Relatório colocado na fila do WhatsApp. Situação: "+(result.status||"aguardando")+
+      ". Se a Evolution Go não responder, a rotina automática tentará novamente.");
+   }catch(e){setNotice(e instanceof Error?e.message:"Falha ao enviar relatório.");}
+   finally{setReportBusy(false);}
+  }
   const [manualId,setManualId]=useState("");
   const [sdkReady,setSdkReady]=useState(false);
   const [showArchived,setShowArchived]=useState(false);
@@ -224,6 +242,20 @@ export function BankDashboard(){
         O Meu Pluggy atualiza a origem no próprio ciclo diário; o Prime Finance importa os dados recebidos automaticamente e por esta tela.</p>
       </div>
       <div className="bank-toolbar">
+        <label style={{display:"flex",gap:5,alignItems:"center",fontSize:12}}>
+         Relatório
+         <select aria-label="Período do relatório bancário" value={reportMode}
+          onChange={e=>setReportMode(e.target.value)} disabled={reportBusy}>
+          <option value="imported_today">Importados hoje</option>
+          <option value="today">Movimentos de hoje</option>
+          <option value="yesterday">Ontem</option>
+          <option value="last7">Últimos 7 dias</option>
+         </select>
+        </label>
+        <button className="button primary bank-button" type="button"
+         disabled={reportBusy||loading} onClick={()=>void sendBankReport()}>
+         {reportBusy?"Enviando...":"Enviar relatório agora pelo WhatsApp"}
+        </button>
         <button type="button" className="button bank-button" disabled={!!busy} onClick={()=>void syncAll()}>
           <RefreshCw size={15}/> Importar extratos disponíveis
         </button>

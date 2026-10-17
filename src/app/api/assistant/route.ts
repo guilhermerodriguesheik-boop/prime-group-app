@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAssistantTools } from "@/lib/assistant/actions";
 import { loadAssistantDocuments } from "@/lib/assistant/documents";
 import { chooseAiProfile, estimateAiCostUsd } from "@/lib/ai/cost-routing";
+import {detectBankReportIntent} from "@/lib/banks/report-intent";
+import {primeRpc,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
+import type {SupabaseClient} from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
@@ -32,13 +35,6 @@ export async function POST(request: Request) {
   }
 
   const { message, workspaceId, conversationId, documentIds } = parsed.data;
-  if (!process.env.OPENAI_API_KEY?.trim()) {
-    return NextResponse.json(
-      { error: "A integração OpenAI ainda não foi ativada. Configure OPENAI_API_KEY na Vercel e publique novamente." },
-      { status: 503 },
-    );
-  }
-
   if (!message && !documentIds.length) {
     return NextResponse.json({ error: "Envie uma mensagem ou pelo menos um arquivo." }, { status: 400 });
   }
@@ -169,6 +165,46 @@ export async function POST(request: Request) {
     content: effectiveMessage,
     metadata: { document_ids: documentIds },
   });
+
+  // The AI can answer bank statements accurately without guessing from prior
+  // chat context. All values come from the user's own RLS-authenticated bank data.
+  const bankIntent=!documentIds.length?detectBankReportIntent(message):null;
+  if(bankIntent){
+    const client=supabase as unknown as SupabaseClient;
+    const {data:report,error:bankError}=await client.rpc("prime_bank_report_for_owner",{
+     p_mode:bankIntent.period
+    });
+    if(bankError||typeof report!=="string"){
+      return NextResponse.json({error:"Não foi possível consultar o extrato bancário."},{status:503});
+    }
+    let answer=report;
+    if(bankIntent.sendWhatsApp){
+      try{
+        const queued=await primeRpc<{queued:boolean;id:string;status:string}>(
+          "prime_queue_requested_bank_report",{p_owner_id:user.id,p_mode:bankIntent.period});
+        if(queued.status!=="sent")await runPrimeOutbox();
+        const {data:state}=await client.from("prime_outbox").select("status")
+          .eq("id",queued.id).eq("user_id",user.id).maybeSingle();
+        answer=(state?.status==="sent"?
+          "Relatório enviado ao provedor WhatsApp.\n\n":
+          "Relatório preparado e aguardando envio pelo WhatsApp.\n\n")+report;
+      }catch(err){
+        answer="Não foi possível enviar pelo WhatsApp. O extrato consultado está abaixo.\n\n"+report;
+        console.error("Assistant bank report delivery",err instanceof Error?err.message:"unknown");
+      }
+    }
+    await supabase.from("ai_messages").insert({
+     conversation_id:activeConversationId,role:"assistant",content:answer,
+     metadata:{source:"bank_report",period:bankIntent.period,read_only:true}
+    });
+    return NextResponse.json({
+      answer,conversationId:activeConversationId,model:"bank-report-live",
+      actions:[],documents:[]
+    });
+  }
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+   return NextResponse.json({error:"A integração OpenAI ainda não foi ativada."},{status:503});
+  }
 
   const scopeIds = allowedWorkspace ? [allowedWorkspace.id] : workspaces.map((item) => item.id);
   const inScope = (workspace: string) => scopeIds.includes(workspace);

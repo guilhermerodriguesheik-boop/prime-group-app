@@ -3,6 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { summarizeFiscalXml } from "@/lib/assistant/fiscal-xml";
 import { chooseAiProfile } from "@/lib/ai/cost-routing";
+import {detectBankReportIntent} from "@/lib/banks/report-intent";
 
 type Obj = Record<string, unknown>;
 type Event = {
@@ -323,7 +324,7 @@ export async function processWhatsAppQueue(maxMessages=1) {
       process.env.EVOLUTION_INSTANCE && (process.env.EVOLUTION_WEBHOOK_SECRET||"").length>=32) :
     Boolean(process.env.META_WHATSAPP_APP_SECRET &&
       process.env.META_WHATSAPP_ACCESS_TOKEN && process.env.META_WHATSAPP_PHONE_NUMBER_ID);
-  if (!ready || !process.env.OPENAI_API_KEY) return {processed:0,disabled:true};
+  if (!ready) return {processed:0,disabled:true};
   const {secret} = bridgeConfig();
   const events = await rpc<Event[]>("whatsapp_claim_events",{
     p_secret:secret,p_limit:Math.min(2,maxMessages),
@@ -363,6 +364,22 @@ export async function processWhatsAppQueue(maxMessages=1) {
       if (!context.linked) {
         await rpc("whatsapp_finish_event",{p_secret:secret,p_event_id:event.id,p_state:"ignored"});
         continue;
+      }
+      // A verified linked phone may ask for its own read-only bank report without AI
+      // quota or model interpretation. No bank posting or financial classification.
+      const bankRequest=event.type==="text"?detectBankReportIntent(event.body||""):null;
+      if(bankRequest){
+        const answer=await rpc<string>("prime_bank_report_for_whatsapp_event",{
+         p_secret:secret,p_event_id:event.id,p_mode:bankRequest.period
+        });
+        await sendText(event.from||"",answer);
+        await rpc("whatsapp_finish_event",{
+         p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:answer
+        });
+        await rpc("whatsapp_mark_reply_sent",{
+         p_secret:secret,p_event_id:event.id
+        });
+        processed++;continue;
       }
       const limit = Math.min(500,Math.max(5,Number(process.env.WHATSAPP_DAILY_LIMIT||60)||60));
       const withinLimit = await rpc<boolean>("whatsapp_usage_within_limit",{

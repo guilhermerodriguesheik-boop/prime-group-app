@@ -41,6 +41,9 @@ jobs:
       - name: Ortobom financial reconciliation parser tests
         run: npm run test:ortobom-finance
 
+      - name: AI and WhatsApp bank statement command tests
+        run: node --experimental-strip-types --test tests/bank-report-intent.test.mjs
+
       - name: Bank review reconciliation suggestion tests
         run: node --experimental-strip-types --test tests/bank-review-suggestions.test.mjs
 
