@@ -68,7 +68,7 @@ function pick(row: JsonMap) {
 function entries(payload: unknown): JsonMap[] {
   if (Array.isArray(payload)) return payload.filter(record).slice(0, 30).map(pick);
   if (!record(payload)) return [];
-  for (const candidate of ["items", "documentos", "registros", "ctes", "mdfes", "manifestos", "results", "data"]) {
+  for (const candidate of ["itens", "items", "documentos", "registros", "ctes", "mdfes", "manifestos", "results", "data"]) {
     const value = payload[candidate];
     if (Array.isArray(value)) return value.filter(record).slice(0, 30).map(pick);
     if (record(value)) {
