@@ -96,20 +96,48 @@ async function sendText(to: string, body: string) {
 async function sendEvolutionGoBankButtons(to:string,body:string,outboxId:string,more=false){
  if(!isEvolutionGoProvider())throw new Error("Botões exigem Evolution Go");
  const {base,token}=evolutionGoConfig();
- const number=to.replace(/\D/g,"");
+ const number=to.replace(/\\D/g,"");
  if(!/^[0-9]{10,15}$/.test(number))throw new Error("Recipient invalid");
  const buttons=more?extraBankButtons(outboxId):firstBankButtons(outboxId);
- const response=await fetch(base+"/send/button",{
-  method:"POST",cache:"no-store",signal:AbortSignal.timeout(15000),
-  headers:{apikey:token,"Content-Type":"application/json"},
-  body:JSON.stringify({
-   number,title:more?"Mais opções":"Prime Finance",
-   description:body.slice(0,450),
-   footer:"Classificar apenas · sem lançar pagamento",buttons
-  })
+ const headers={apikey:token,"Content-Type":"application/json"};
+ // Legacy ButtonsMessage receives HTTP 500 (often underlying WhatsApp 405) on
+ // Evolution GO 0.7.x consumer accounts. The InteractiveMessage carousel uses
+ // NativeFlow and accepts clickable REPLY identifiers across WhatsApp clients.
+ const art="https://prime-finance-ochre.vercel.app/api/banks/card-image";
+ const payload={
+  number,body:body.slice(0,280),
+  footer:"Prime Finance · Classificação sem baixa",
+  cards:[
+   {
+    header:{title:"Classificação bancária",imageUrl:art},
+    body:"Escolha Empresa, Pessoal ou Mais opções.",
+    footer:"Movimentação individual",
+    buttons:buttons.map(button=>({...button,type:"REPLY"}))
+   },
+   {
+    header:{title:"Outras categorias",imageUrl:art},
+    body:"Também é possível classificar como Empréstimos, Transferência ou Pendente.",
+    footer:"Mesmo movimento, escolha apenas uma área",
+    buttons:extraBankButtons(outboxId).map(button=>({...button,type:"REPLY"}))
+   }
+  ]
+ };
+ // Send a single carousel containing the options for ONE bank movement.
+ // Do not re-try /send/button once its compatibility failure is established.
+ const response=await fetch(base+"/send/carousel",{
+  method:"POST",cache:"no-store",signal:AbortSignal.timeout(19000),
+  headers,body:JSON.stringify(payload)
  });
- if(!response.ok)throw new Error("Evolution Go /send/button HTTP "+response.status);
+ if(!response.ok){
+  const info=(await response.text().catch(()=>"")).slice(0,240);
+  throw new Error("Evolution Go /send/carousel HTTP "+response.status+
+   (info?" "+info.replace(/[\\r\\n]/g," "):""));
+ }
+ const data=await response.json().catch(()=>null) as
+  {message?:string;data?:{Info?:{ID?:string;Type?:string}}}|null;
+ if(!data?.data?.Info?.ID)throw new Error("Evolution Go carousel não confirmou ID de mensagem");
 }
+
 
 // Automatic reminders may use only the already-configured Evolution Go provider.
 // Do not route scheduled financial notifications through legacy Meta configuration.
