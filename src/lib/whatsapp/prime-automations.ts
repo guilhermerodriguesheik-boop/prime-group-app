@@ -18,6 +18,17 @@ export async function primeRpc<T>(name:string,parameters:Record<string,unknown>)
  if(!response.ok)throw new Error("Automation "+name+" failed (HTTP "+response.status+")");
  return response.json() as Promise<T>;
 }
+/** Queue bounded pages so large daily imports do not leave most movements until tomorrow. */
+export async function queueBankReviewDigests(maxBatches=6){
+ let queued=0;
+ for(let i=0;i<Math.min(Math.max(maxBatches,1),8);i++){
+  const added=await primeRpc<number>("prime_queue_bank_review_digest",{});
+  queued+=Math.max(0,Number(added)||0);
+  if(!added)break;
+ }
+ return queued;
+}
+
 export async function runPrimeOutbox(){
  if(process.env.WHATSAPP_PROVIDER!=="evolution_go")return {sent:0,disabled:true};
  const items=await primeRpc<OutboxItem[]>("prime_claim_outbox",{p_limit:8});
