@@ -102,7 +102,7 @@ export function ctePreview(input:CteReviewInput){
  const unique=[...new Set(missing)];
  const hash=createHash("sha256").update(JSON.stringify({
   id:draft.id,changed:draft.updated_at,checklist:draft.checklist,
-  payload,ciot:draft.ciot,goods,weight,rntrc:profile?.rntrc,checked:profile?.rntrc_checked_at
+  payload,ciot:draft.ciot,goods,weight,compliance:c.compliance,rntrc:profile?.rntrc,checked:profile?.rntrc_checked_at
  })).digest("hex");
  return {payload,missing:unique,ready:unique.length===0,retryAllowed:input.retryAllowed===true,hash,invoiceCount:notes.length,
   freightValue:value,goodsValue:goods,grossWeight:weight,ciot:draft.ciot,
