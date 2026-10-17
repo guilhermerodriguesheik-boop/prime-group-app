@@ -2,7 +2,10 @@ import "server-only";
 /** Read issuer values without exposing provider credentials or treating
  * tax classifications as verified for a particular trip.
  */
-export async function issuerTaxDefaults():Promise<{crt?:string;cst_icms?:string}>{
+export type IssuerCteNumbering={series:string;nextNumber:number};
+export type IssuerTaxDefaults={crt?:string;cst_icms?:string;cteNumbering?:IssuerCteNumbering};
+/** Read-only provider evidence; no number mutation or SEFAZ transmission. */
+export async function issuerTaxDefaults():Promise<IssuerTaxDefaults>{
  const token=process.env.DOTCOMPANY_PRODUCTION_API_KEY;
  if(!token||!/^dc_live_[A-Za-z0-9._-]{16,}$/.test(token))return {};
  try{
@@ -20,7 +23,16 @@ export async function issuerTaxDefaults():Promise<{crt?:string;cst_icms?:string}
    /simples nacional/i.test(regime)?/excesso/i.test(regime)?"2":"1":
    /regime normal|lucro (presumido|real)/i.test(regime)?"3":"";
   const cst=String(p.cte_cst_icms??"");
+  const cteRows=(Array.isArray(data.numeracao)?data.numeracao:[])
+   .filter((row:unknown)=>!!row&&typeof row==="object"&&!Array.isArray(row)&&
+     String((row as Record<string,unknown>).modelo)==="57");
+  const row=cteRows.length===1?cteRows[0] as Record<string,unknown>:null;
+  const series=String(row?.serie??"").replace(/^0+(?=\\d)/,"");
+  const next=Number(row?.proximo_numero);
+  const cteNumbering=row&&/^\\d{1,3}$/.test(series)&&Number.isSafeInteger(next)&&next>=1
+    ?{series,nextNumber:next}:undefined;
   return {
+   ...(cteNumbering?{cteNumbering}:{}),
    ...( /^[123]$/.test(crt)?{crt}:{}),
    ...( /^(00|20|40|41|50|51|60|90)$/.test(cst)?{cst_icms:cst}:{})
   };
