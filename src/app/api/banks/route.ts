@@ -49,7 +49,7 @@ export async function GET(request:Request){
   const archivedView=new URL(request.url).searchParams.get("archived")==="1";
   const [workspaces,connections,accounts]=await Promise.all([
     db.from("workspaces").select("id,name,kind").eq("owner_id",user.id),
-    db.from("bank_connections").select("id,provider,workspace_id,display_name,institution_name,account_kind,status,last_synced_at,provider_last_updated_at,last_new_transaction_count,last_scanned_transaction_count,last_error,created_at,archived_at").eq("owner_id",user.id).order("created_at",{ascending:false}),
+    db.from("bank_connections").select("id,provider,workspace_id,display_name,institution_name,account_kind,status,last_synced_at,provider_last_updated_at,last_new_transaction_count,last_scanned_transaction_count,webhook_check_at,webhook_check_status,webhook_check_error,last_error,created_at,archived_at").eq("owner_id",user.id).order("created_at",{ascending:false}),
     db.from("bank_accounts").select("id,workspace_id,connection_id,display_name,account_last4,kind,currency,balance,balance_updated_at").eq("owner_id",user.id),
   ]);
   const err=[workspaces.error,connections.error,accounts.error].find(Boolean);
