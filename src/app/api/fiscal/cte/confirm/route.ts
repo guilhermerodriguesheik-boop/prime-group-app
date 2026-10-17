@@ -4,6 +4,7 @@ import {NextResponse} from "next/server";
 import {createClient as adminClient} from "@supabase/supabase-js";
 import {session,gather} from "@/lib/fiscal/cte-data";
 import {productionKey} from "@/lib/fiscal/cte-confirm";
+import {ensureTransportPerson} from "@/lib/fiscal/dotcompany-person";
 import {checkDotCompanyProduction,checkPrimeEmitterReadiness} from "@/lib/fiscal/dotcompany-production";
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -57,6 +58,18 @@ export async function POST(req:Request){
  if(!preview.ready)return NextResponse.json({error:"CT-e possui pendências de validação. Nenhum documento foi enviado.",
   missing:preview.missing},{status:409});
  if(preview.hash!==data.hash)return NextResponse.json({error:"Dados do CT-e foram alterados. Reabra a conferência antes de autorizar."},{status:409});
+ const {data:nfes,error:partsError}=await current.db.from("fiscal_nfe_inbox")
+  .select("sender_cnpj,sender_name,recipient_cnpj,recipient_name")
+  .eq("workspace_id",current.workspaceId).eq("cargo_reference",preview.cargoReference).limit(41);
+ if(partsError||!nfes||nfes.length!==preview.invoiceCount||
+  nfes.some(n=>n.sender_cnpj!==nfes[0].sender_cnpj||n.recipient_cnpj!==nfes[0].recipient_cnpj))
+  return NextResponse.json({error:"Remetente/destinatário divergente entre NF-e. Nenhum CT-e foi enviado."},{status:409});
+ const sender=await ensureTransportPerson(key,{cpfCnpj:nfes[0].sender_cnpj,name:nfes[0].sender_name});
+ const recipient=await ensureTransportPerson(key,{cpfCnpj:nfes[0].recipient_cnpj,name:nfes[0].recipient_name});
+ if(!sender.ok||!recipient.ok||!sender.id||!recipient.id)
+  return NextResponse.json({error:"Cadastro de pessoas da DotCompany não concluído. Nenhum CT-e foi enviado.",
+   remetente:sender.reason,destinatario:recipient.reason},{status:409});
+ const validatedPayload={...preview.payload,remetente_id:sender.id,destinatario_id:recipient.id};
  // Claim persistente e único ANTES da chamada à SEFAZ. Mesmo timeout de rede não permite reemissão silenciosa.
  const client=admin(),idem=randomUUID();
  const {data:claim,error:claimError}=await client.from("fiscal_cte_transmissions").insert({
@@ -75,7 +88,7 @@ export async function POST(req:Request){
    method:"POST",
    headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json",
     "Accept":"application/json","Idempotency-Key":idem},
-   body:JSON.stringify({...preview.payload,idempotency_key:idem}),
+   body:JSON.stringify({...validatedPayload,idempotency_key:idem}),
    cache:"no-store",signal:AbortSignal.timeout(24000),
   });
   const received=await response.json().catch(()=>null) as
