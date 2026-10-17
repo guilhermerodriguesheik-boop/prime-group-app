@@ -4,6 +4,7 @@ import {NextResponse} from "next/server";
 import {createClient as adminClient} from "@supabase/supabase-js";
 import {session,gather} from "@/lib/fiscal/cte-data";
 import {productionKey} from "@/lib/fiscal/cte-confirm";
+import {ensureTransportPerson} from "@/lib/fiscal/dotcompany-person";
 import {checkDotCompanyProduction,checkPrimeEmitterReadiness} from "@/lib/fiscal/dotcompany-production";
 export const runtime="nodejs";
 export const maxDuration=60;
