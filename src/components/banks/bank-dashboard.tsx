@@ -54,12 +54,18 @@ export function BankDashboard(){
      method:"POST",headers:{"Content-Type":"application/json"},
      body:JSON.stringify({mode:reportMode})
     });
-    const result=await response.json() as {error?:string;status?:string};
+    const result=await response.json() as {
+     error?:string;status?:string;total?:number;selected?:number;
+     sent?:number;pending?:number;failed?:number;truncated?:boolean
+    };
     if(!response.ok)throw Error(result.error||"Não foi possível preparar o envio.");
-    setNotice(result.status==="sent"?
-     "Relatório enviado ao provedor WhatsApp. Confira seu telefone vinculado.":
-     "Relatório colocado na fila do WhatsApp. Situação: "+(result.status||"aguardando")+
-      ". Se a Evolution Go não responder, a rotina automática tentará novamente.");
+    setNotice(result.status==="empty"?
+     "Nenhum lançamento disponível no período escolhido. Confira a data bancária ou a data de importação.":
+     "Relatório individual: "+(result.selected||0)+" cartão(ões) preparados, "+
+     (result.sent||0)+" aceito(s) pela Evolution Go, "+
+     (result.pending||0)+" aguardando e "+(result.failed||0)+" com falha."+
+     (result.truncated?" Há mais lançamentos no período; consulte a tela Bancos.":"")+
+     " Cada cartão mostra o valor e os botões para classificação.");
    }catch(e){setNotice(e instanceof Error?e.message:"Falha ao enviar relatório.");}
    finally{setReportBusy(false);}
   }
@@ -282,7 +288,7 @@ export function BankDashboard(){
         </label>
         <button className="button primary bank-button" type="button"
          disabled={reportBusy||loading} onClick={()=>void sendBankReport()}>
-         {reportBusy?"Enviando...":"Enviar relatório agora pelo WhatsApp"}
+         {reportBusy?"Enviando...":"Enviar movimentações com botões"}
         </button>
         <button type="button" className="button bank-button"
          disabled={buttonTestBusy||loading} onClick={()=>void testBankButtons()}>

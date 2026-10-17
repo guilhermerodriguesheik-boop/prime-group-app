@@ -180,14 +180,19 @@ export async function POST(request: Request) {
     let answer=report;
     if(bankIntent.sendWhatsApp){
       try{
-        const queued=await primeRpc<{queued:boolean;id:string;status:string}>(
-          "prime_queue_requested_bank_report",{p_owner_id:user.id,p_mode:bankIntent.period});
-        if(queued.status!=="sent")await runPrimeOutbox();
-        const {data:state}=await client.from("prime_outbox").select("status")
-          .eq("id",queued.id).eq("user_id",user.id).maybeSingle();
-        answer=(state?.status==="sent"?
-          "Relatório enviado ao provedor WhatsApp.\n\n":
-          "Relatório preparado e aguardando envio pelo WhatsApp.\n\n")+report;
+        const cards=await primeRpc<{
+          ok:boolean;total:number;selected:number;queued:number;truncated:boolean
+        }>("prime_queue_requested_bank_cards",{
+          p_owner_id:user.id,p_mode:bankIntent.period
+        });
+        if(cards.selected>0)await runPrimeOutbox(2);
+        answer=cards.total===0?
+          "Nenhuma movimentação para enviar nesse período.\n\n"+report:
+          "Preparei "+cards.selected+" cartões interativos, um por movimentação, "+
+          "com Empresa, Pessoal e outras opções. "+
+          "O WhatsApp enviará os cartões individualmente."+
+          (cards.truncated?" O período tem mais lançamentos do que o limite por solicitação.":"")+
+          "\n\n"+report;
       }catch(err){
         answer="Não foi possível enviar pelo WhatsApp. O extrato consultado está abaixo.\n\n"+report;
         console.error("Assistant bank report delivery",err instanceof Error?err.message:"unknown");

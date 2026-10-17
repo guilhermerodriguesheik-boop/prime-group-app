@@ -8,6 +8,7 @@ import {parseWhatsAppBankNumber} from "@/lib/banks/whatsapp-classification";
 import {readBankButtonId} from "@/lib/banks/interactive-bank-buttons";
 import {bankCarouselPayload} from "@/lib/banks/evolution-go-carousel";
 
+
 type Obj = Record<string, unknown>;
 type Event = {
   id: string; providerId: string; from: string | null; to: string | null;
@@ -411,9 +412,19 @@ export async function processWhatsAppQueue(maxMessages=1) {
       // quota or model interpretation. No bank posting or financial classification.
       const bankRequest=event.type==="text"?detectBankReportIntent(event.body||""):null;
       if(bankRequest){
-        const answer=await rpc<string>("prime_bank_report_for_whatsapp_event",{
-         p_secret:secret,p_event_id:event.id,p_mode:bankRequest.period
+        const batch=await rpc<{
+         ok:boolean;total:number;selected:number;queued:number;
+         alreadyQueued:number;truncated:boolean
+        }>("prime_queue_requested_bank_cards",{
+         p_secret:secret,p_event_id:event.id,p_owner_id:context.userId,
+         p_mode:bankRequest.period
         });
+        const answer=batch.total===0
+         ?"Nenhum lançamento bancário disponível para esse período. "+
+          "Os dados dependem da última importação do banco."
+         :"Preparei "+batch.selected+" movimentação(ões) em cartões separados, "+
+          "cada uma com botões para Empresa, Pessoal e outras áreas."+
+          (batch.truncated?" Existem mais movimentos; consulte o Financeiro para o período completo.":"");
         await sendText(event.from||"",answer);
         await rpc("whatsapp_finish_event",{
          p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:answer
@@ -421,6 +432,16 @@ export async function processWhatsAppQueue(maxMessages=1) {
         await rpc("whatsapp_mark_reply_sent",{
          p_secret:secret,p_event_id:event.id
         });
+        try{
+          if(batch.selected>0){
+            // Load sender after this worker is initialized: the sender itself
+            // imports sendScheduledWhatsAppMessage from this module.
+            const {runPrimeOutbox}=await import("@/lib/whatsapp/prime-automations");
+            await runPrimeOutbox(2);
+          }
+        }
+        catch(error){console.error("WhatsApp bank cards awaiting scheduled sender",
+           error instanceof Error?error.message:"unknown");}
         processed++;continue;
       }
       const limit = Math.min(500,Math.max(5,Number(process.env.WHATSAPP_DAILY_LIMIT||60)||60));

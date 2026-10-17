@@ -29,29 +29,29 @@ export async function POST(req:Request){
  if(pairError||!pair?.enabled||!pair.connected_at)
   return output({error:"Seu WhatsApp precisa estar vinculado e ativo."},409);
  try{
-  const queued=await primeRpc<{queued:boolean;id:string;status:string}>(
-   "prime_queue_requested_bank_report",{p_owner_id:user.id,p_mode:mode});
-  if(!queued.id)return output({error:"Não foi possível preparar o relatório."},503);
-  let sendResult:unknown=null;
-  // Explicit user action; process a bounded number of ready messages immediately.
-  if(queued.status!=="sent"){
-   for(let i=0;i<3;i++){
-    sendResult=await runPrimeOutbox();
-    const {data:current}=await db.from("prime_outbox").select("status,sent_at,last_error")
-     .eq("id",queued.id).eq("user_id",user.id).maybeSingle();
-    if(current?.status==="sent")return output({
-     ok:true,reportId:queued.id,status:"sent",sentAt:current.sent_at
-    });
-    if(current?.status==="failed")return output({
-     ok:false,reportId:queued.id,status:"failed",error:"A entrega falhou. Consulte o histórico do WhatsApp."
-    },503);
-    if(!sendResult||typeof sendResult!=="object"||
-      !("claimed" in sendResult)||Number(sendResult.claimed)===0)break;
-   }
-  }
-  const {data:state}=await db.from("prime_outbox").select("status,sent_at")
-   .eq("id",queued.id).eq("user_id",user.id).maybeSingle();
-  return output({ok:true,reportId:queued.id,status:state?.status||queued.status,sentAt:state?.sent_at||null});
+  const batch=await primeRpc<{
+   ok:boolean;total:number;selected:number;queued:number;
+   alreadyQueued:number;truncated:boolean;limit:number;batchPrefix:string
+  }>("prime_queue_requested_bank_cards",{p_owner_id:user.id,p_mode:mode});
+  if(!batch.ok)return output({error:"Não foi possível preparar os cartões."},503);
+  if(batch.selected===0)return output({ok:true,total:0,queued:0,sent:0,pending:0,
+   status:"empty",message:"Nenhum lançamento bancário disponível nesse período."});
+  // Send a bounded first wave, leaving the remaining cards in the outbox for cron.
+  await runPrimeOutbox(2);
+  const {data:items,error:outboxError}=await db.from("prime_outbox")
+   .select("status").eq("user_id",user.id)
+   .like("dedupe_key",batch.batchPrefix+"%");
+  if(outboxError)return output({error:"Os cartões foram enfileirados, mas o estado não pôde ser consultado."},503);
+  const states=items||[];
+  const sent=states.filter(x=>x.status==="sent").length;
+  const failed=states.filter(x=>x.status==="failed"||x.status==="retry").length;
+  const pending=states.filter(x=>x.status==="pending"||x.status==="processing").length;
+  return output({
+   ok:true,total:batch.total,selected:batch.selected,queued:batch.queued,
+   sent,pending,failed,truncated:batch.truncated,
+   status:failed>0?"retry":pending>0?"pending":sent===batch.selected?"sent":"pending",
+   message:"Uma mensagem interativa por movimentação, cada uma com seus próprios botões."
+  });
  }catch(e){
   console.error("Requested bank report unavailable",e instanceof Error?e.message:"unknown");
   return output({error:"Não foi possível preparar ou enviar o relatório. Tente novamente."},503);
