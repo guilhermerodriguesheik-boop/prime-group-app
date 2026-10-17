@@ -8,7 +8,7 @@ import {CteComplianceFields} from "@/components/fiscal/cte-compliance-fields";
 import {emptyCteCompliance,type CteCompliance} from "@/lib/fiscal/cte-compliance";
 type Config={cfop:string;tomador:string;produto_predominante:string;uf_licenciamento:string;numbering_verified:boolean;compliance:CteCompliance};
 type Preview={
- hash:string;ready:boolean;retryAllowed:boolean;missing:string[];invoiceCount:number;freightValue:number;goodsValue:number;
+ hash:string;ready:boolean;retryAllowed:boolean;missing:string[];autofilled?:string[];advisories?:string[];invoiceCount:number;freightValue:number;goodsValue:number;
  grossWeight:number;cargoReference:string|null;ciot:string|null;rntrc:string|null;config:Config;
 };
 type Data={
@@ -143,6 +143,14 @@ export function CteSendReview({draftId}:{draftId:string}){
              Peso: {data.preview.grossWeight.toLocaleString("pt-BR")} kg · CIOT: {data.preview.ciot||"pendente"}</p>
           <p>Modelo do último CT-e (nº 33, série 003): CFOP, tomador e produto são sugeridos apenas para operações RJ–RJ. Confira cada carga antes de salvar e emitir. Veículo e motorista só são sugeridos automaticamente quando houver um único cadastro ativo.</p>
         </div>
+        {(!!data.preview.autofilled?.length||!!data.preview.advisories?.length)&&
+         <div className="fiscal-review-summary">
+           <strong>Pré-preenchimento automático da carga</strong>
+           {!!data.preview.autofilled?.length&&
+             <p>Recuperado de XML, cadastro fiscal e histórico: {data.preview.autofilled.join(" · ")}.</p>}
+           {!!data.preview.advisories?.length&&
+             <p>Avisos (não são declarações de consulta oficial): {data.preview.advisories.join(" · ")}</p>}
+         </div>}
         {data.submission&&<div className="fiscal-review-summary" role="status">
           <strong>Transmissão registrada: {data.submission.status}</strong>
           <p>Chave: {data.submission.access_key||"Aguardar consulta"} · Protocolo: {data.submission.protocol||"Não confirmado"}</p>
