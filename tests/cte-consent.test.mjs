@@ -124,6 +124,8 @@ test("Missing people ids is an explicit pre-SEFAZ rejection and may be corrected
  assert.equal(definitiveCteRejection(422,provider),true);
  assert.equal(definitiveCteRejection(500,provider),false);
  assert.equal(definitiveCteRejection(422,{message:"Problema desconhecido"}),false);
+ assert.equal(definitiveCteRejection(422,{codigo:"VALIDATION_ERROR",categoria:"validacao",mensagem:"CFOP inválido"}),true);
+ assert.equal(definitiveCteRejection(422,{codigo:"VALIDATION_ERROR",chave_acesso:"1".repeat(44)}),false);
  assert.equal(definitiveCteRejection(422,{...provider,chave_acesso:"1".repeat(44)}),false);
  const description=correctionFromProvider("rejected","HTTP_422",{...provider,definitive_rejection:true});
  assert.equal(description.retryPossible,true);
