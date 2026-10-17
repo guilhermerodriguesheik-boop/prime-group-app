@@ -27,9 +27,9 @@ export async function issuerTaxDefaults():Promise<IssuerTaxDefaults>{
    .filter((row:unknown)=>!!row&&typeof row==="object"&&!Array.isArray(row)&&
      String((row as Record<string,unknown>).modelo)==="57");
   const row=cteRows.length===1?cteRows[0] as Record<string,unknown>:null;
-  const series=String(row?.serie??"").replace(/^0+(?=\\d)/,"");
+  const series=String(row?.serie??"").replace(/^0+(?=\d)/,"");
   const next=Number(row?.proximo_numero);
-  const cteNumbering=row&&/^\\d{1,3}$/.test(series)&&Number.isSafeInteger(next)&&next>=1
+  const cteNumbering=row&&/^\d{1,3}$/.test(series)&&Number.isSafeInteger(next)&&next>=1
     ?{series,nextNumber:next}:undefined;
   return {
    ...(cteNumbering?{cteNumbering}:{}),
