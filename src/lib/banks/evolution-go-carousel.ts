@@ -12,7 +12,7 @@ export function bankCarouselPayload(number:string,description:string,outboxId:st
  return {
   number,body:description.slice(0,280),footer:"Prime Finance · Classificação sem baixa",
   cards:groups.map(g=>({
-   header:{title:g.title,imageUrl},body:g.body,
+   header:{title:g.title,imageUrl},body:{text:g.body},
    footer:"Mesmo lançamento bancário",buttons:g.buttons.map(b=>({...b,type:"REPLY"}))
   }))
  };
