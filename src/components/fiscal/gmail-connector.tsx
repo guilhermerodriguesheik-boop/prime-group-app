@@ -14,13 +14,12 @@ export function GmailConnector({connected,ready,clientStatus,lastSync,lastError}
   async function sync(){
     setBusy(true);setMessage("");
     try{
-      const res=await fetch("/api/fiscal/gmail/sync",{
-        method:"POST",headers:{"x-prime-action":"fiscal-gmail-sync"},
+      const res=await fetch("/api/fiscal/gmail/operational-sync",{
+        method:"POST",headers:{"x-prime-action":"prime-operations-email-sync"},
       });
-      const data=await res.json() as {error?:string;imported?:number;invoices?:number;errors?:number;scanned?:number};
+      const data=await res.json() as {error?:string;cargos?:{imported:number;invoices:number;errors:number;scanned:number};finance?:{imported:number;errors:number};cteEmails?:{imported:number;errors:number};};
       if(!res.ok)throw Error(data.error||"Falha na sincronização.");
-      setMessage("Mensagens verificadas: "+data.scanned+" · cargas importadas: "+data.imported+
-        " · NF-e lidas: "+data.invoices+" · pendências: "+data.errors+".");
+      setMessage("Cargas: "+(data.cargos?.imported??0)+" · NF-e: "+(data.cargos?.invoices??0)+" · adiantamentos/acertos: "+(data.finance?.imported??0)+" · CT-e anexados: "+(data.cteEmails?.imported??0)+" · pendências: "+((data.cargos?.errors??0)+(data.finance?.errors??0)+(data.cteEmails?.errors??0))+".");
       router.refresh();
     }catch(error){setMessage(error instanceof Error?error.message:"Falha na sincronização.");}
     finally{setBusy(false);}
@@ -69,7 +68,7 @@ export function GmailConnector({connected,ready,clientStatus,lastSync,lastError}
         <Inbox size={16}/>{busy?"Consultando...":"Escolher e-mails da caixa de entrada"}
       </button>
       <button className="button" type="button" disabled={!connected||!ready||busy} onClick={sync}>
-        <RefreshCw size={16} className={busy?"fiscal-spin":undefined}/>{"Importar recentes automaticamente"}
+        <RefreshCw size={16} className={busy?"fiscal-spin":undefined}/>{"Sincronizar documentos e financeiro"}
       </button>
     </div>
     {clientStatus==="rejected"&&<p role="alert" className="fiscal-inline-alert"><CircleAlert size={15}/> Diagnóstico do servidor: o Google rejeita o ID ou segredo OAuth atual. É necessário substituir a chave do cliente Google na Vercel; clicar novamente em conectar não resolve.</p>}

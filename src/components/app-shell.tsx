@@ -23,7 +23,7 @@ const nav = [
     {label:"Relatórios",href:"/relatorios",icon:BarChart3},
     {label:"Empréstimos e juros",href:"/juros",icon:Percent},
     {label:"Viagens e fretes",href:"/viagens",icon:Route},
-    {label:"Emissor fiscal",href:"/fiscal",icon:FileCheck2},
+    {label:"Cargas e acertos",href:"/fiscal",icon:FileCheck2},
     {label:"Equipe e pagamentos",href:"/equipes",icon:UsersRound},
     {label:"Frota",href:"/frota",icon:Truck},
   ]},

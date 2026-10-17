@@ -1,290 +1,178 @@
-import { Header } from "@/components/ui";
-import { FiscalImportForm } from "@/components/fiscal/import-form";
-import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
-import { FiscalAiPanel } from "@/components/fiscal/fiscal-ai-panel";
-import { FiscalAiReview } from "@/components/fiscal/ai-review";
-import { CteSendReview } from "@/components/fiscal/cte-send-review";
-import { CteArchive } from "@/components/fiscal/cte-archive";
-import { GmailConnector } from "@/components/fiscal/gmail-connector";
-import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
-import { fiscalReadiness } from "@/lib/fiscal/readiness";
-import { FiscalReadinessPanel } from "@/components/fiscal/readiness-panel";
-import { DotcompanyPanel } from "@/components/fiscal/dotcompany-panel";
-import { AnttMonthlyCheck } from "@/components/fiscal/antt-monthly-check";
-import { FiscalTabs,FiscalTabPanel } from "@/components/fiscal/fiscal-tabs";
-import { OrtobomFinancePanel } from "@/components/fiscal/ortobom-finance-panel";
-import { canonicalCargo } from "@/lib/fiscal/ortobom-finance-parser";
-import { MdfeDraftForm } from "@/components/fiscal/mdfe-draft-form";
-import { mdfeTransmissionBlockers, canPrepareNewCte } from "@/lib/fiscal/preflight";
-import { fiscalIntegrationState } from "@/lib/fiscal/focus";
-import { createClient } from "@/lib/supabase/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { redirect } from "next/navigation";
-
-type Draft = {
-  id:string; document_type:string; cargo_reference:string|null;ciot:string|null;
-  freight_value:number|null;status:string;created_at:string;
-  checklist:{vehicle_plate?:string;origin_uf?:string;destination_uf?:string;source_cte_draft_id?:string;previous_external_cte_number?:string;previous_external_cte_series?:string;previous_external_cte_key?:string;do_not_issue_duplicate?:boolean}|null;
-  fiscal_nfe_inbox:{invoice_number:string;sender_name:string;recipient_name:string;origin_city:string;destination_city:string;origin_uf:string;destination_uf:string;goods_value:number}|null;
-};
-const money = (n:number|null)=>n===null?"Nao informado":n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-export default async function FiscalPage({searchParams}:{searchParams:Promise<{gmail?:string;reason?:string}>}) {
-  const query=await searchParams;
-  const oauthMessages:Record<string,string>={
-    invalid_state:"A sessão de conexão expirou ou o cookie foi bloqueado. Tente novamente a partir deste mesmo navegador.",
-    not_authorized:"O Google não concluiu a autorização de leitura. Verifique o usuário de teste e permita a leitura do Gmail.",
-    invalid_client:"O Google rejeitou a credencial OAuth. O ID e a chave do cliente precisam ser conferidos na Vercel.",
-    invalid_grant:"O código de autorização expirou ou foi usado antes. Inicie uma nova conexão.",
-    token_denied:"O Google recusou a troca do código. Confira o cliente OAuth e a URI de redirecionamento.",
-    missing_refresh:"O Google não forneceu acesso contínuo. Revogue o acesso anterior ao Prime Finance na Conta Google e tente conectar novamente.",
-    wrong_google_account:"Você autorizou outra conta. Escolha lgtransporteelogistica@gmail.com no Google.",
-    supabase_access:"A chave de acesso administrativo do Supabase ainda não está operante no servidor.",
-    database_write:"O Gmail foi autorizado, mas o Supabase rejeitou o armazenamento da conexão. O sistema precisa corrigir o acesso ao banco.",
-    gmail_profile:"O Gmail não confirmou a conta autorizada. Verifique se a API Gmail está habilitada no Google Cloud.",
-    session_or_workspace:"Seu login do Prime Finance não foi reconhecido no retorno do Google. Entre novamente no aplicativo e repita a conexão.",
-    unexpected:"A conexão encontrou um erro inesperado e não foi gravada.",
-  };
-  const client = await createClient();
-  const {data:{user}}=await client.auth.getUser();
-  if(!user)redirect("/login");
-  const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
-  const db=client as unknown as SupabaseClient;
-  const [gmail,googleClient]=await Promise.all([
-    ws?gmailStatus(ws.id).catch(()=>null):Promise.resolve(null),
-    gmailClientStatus(),
-  ]);
-  const gmailReady=Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.GOOGLE_GMAIL_CLIENT_ID&&process.env.GOOGLE_GMAIL_CLIENT_SECRET&&process.env.GMAIL_TOKEN_ENCRYPTION_KEY&&process.env.APP_BASE_URL);
-  const {count:invoiceCount}=ws?await db.from("fiscal_nfe_inbox").select("id",{count:"exact",head:true}).eq("workspace_id",ws.id):{count:0};
-  const [vehiclesResult,driversResult,profileResult]=await Promise.all([
-    ws?db.from("vehicles").select("id,nickname,plate").eq("workspace_id",ws.id).eq("status","active"):Promise.resolve({data:[]}),
-    ws?db.from("drivers").select("id,name,document").eq("workspace_id",ws.id).eq("active",true):Promise.resolve({data:[]}),
-    ws?db.from("fiscal_transport_profiles").select("rntrc").eq("workspace_id",ws.id).maybeSingle():Promise.resolve({data:null}),
-  ]);
-  const {data:historicalRows}=ws?await db.from("cte_documents")
-    .select("access_key,number,series,issued_at,total_value,status,source,sender_name,recipient_name")
-    .eq("workspace_id",ws.id).in("source",["gmail_dacte","video_dacte"])
-    .order("issued_at",{ascending:false}).limit(15):{data:[]};
-  const historicalCtes=historicalRows||[];
-  const {data:rows,error}=ws
-    ? await db.from("fiscal_drafts").select("id,document_type,cargo_reference,ciot,freight_value,status,created_at,checklist,fiscal_nfe_inbox(invoice_number,sender_name,recipient_name,origin_city,destination_city,origin_uf,destination_uf,goods_value)")
-       .eq("workspace_id",ws.id).order("created_at",{ascending:false}).limit(100)
-    : {data:[],error:null};
-  const drafts=(rows??[]) as unknown as Draft[];
-  const {data:transmissions}=ws?await db.from("fiscal_cte_transmissions")
-    .select("draft_id,status,access_key,protocol").eq("workspace_id",ws.id):{data:[]};
-  const transmissionsByDraft=new Map((transmissions||[]).map(x=>[x.draft_id,x]));
-  const ctes=drafts.filter(x=>x.document_type==="cte");
-  const pendingCtes=ctes.filter(x=>!x.checklist?.do_not_issue_duplicate);
-  type FinanceLine={cargo_reference:string;cte_number:string|null;declared_freight:number|string|null;
-   declared_advance:number|string|null;declared_balance:number|string|null};
-  type FinanceEmail={id:string;event_kind:string;payment_date:string|null;period_start:string|null;period_end:string|null;
-   declared_bank_deposit:number|string|null;declared_promissory_discount:number|string|null;
-   ortobom_financial_lines:FinanceLine[]};
-  const {data:financialData}=ws?await db.from("ortobom_financial_emails")
-    .select("id,event_kind,payment_date,period_start,period_end,declared_bank_deposit,declared_promissory_discount,ortobom_financial_lines(cargo_reference,cte_number,declared_freight,declared_advance,declared_balance)")
-    .eq("workspace_id",ws.id).order("email_date",{ascending:false}).limit(300):{data:[]};
-  const financeEmails=(financialData||[]) as unknown as FinanceEmail[];
-  const cargoData=new Map<string,{cargo:string;freight:number|null;claimed:number|null;advance:number;balance:number|null;cte:string|null;status:string}>();
-  for(const e of [...financeEmails].reverse()){
-   for(const l of e.ortobom_financial_lines||[]){
-    const key=canonicalCargo(l.cargo_reference);
-    const known=cargoData.get(key)||{cargo:key.padStart(6,"0"),freight:null,claimed:null,advance:0,balance:null,cte:null,status:"Aguardando cruzamento"};
-    if(e.event_kind==="advance"&&l.declared_advance!==null){
-     known.advance+=Number(l.declared_advance);
-    }
-    if(l.declared_freight!==null)known.claimed=Number(l.declared_freight);
-    if(e.event_kind==="period_payment"&&l.declared_balance!==null)known.balance=Number(l.declared_balance);
-    if(l.cte_number)known.cte=l.cte_number;
-    cargoData.set(key,known);
+import {Header} from "@/components/ui";
+import {GmailConnector} from "@/components/fiscal/gmail-connector";
+import {OrtobomFinancePanel,type Cargo,type Period,type SentDocument} from "@/components/fiscal/ortobom-finance-panel";
+import {gmailStatus,gmailClientStatus} from "@/lib/fiscal/gmail";
+import {canonicalCargo} from "@/lib/fiscal/ortobom-finance-parser";
+import {createClient} from "@/lib/supabase/server";
+import type {SupabaseClient} from "@supabase/supabase-js";
+import {redirect} from "next/navigation";
+type Draft={cargo_reference:string|null;freight_value:number|string|null;ciot:string|null;created_at:string;document_type:string};
+type Nfe={access_key:string;cargo_reference:string|null};
+type FinanceLine={cargo_reference:string;cte_number:string|null;declared_freight:number|string|null;declared_advance:number|string|null;declared_balance:number|string|null};
+type FinanceEmail={id:string;event_kind:string;email_date:string|null;payment_date:string|null;period_start:string|null;period_end:string|null;declared_bank_deposit:number|string|null;declared_promissory_discount:number|string|null;ortobom_financial_lines:FinanceLine[]};
+type DocRow={id:string;message_id:string;cargo_reference:string|null;cte_number:string|null;subject:string;email_date:string|null;attachment_names:string[];has_xml:boolean;evidence_status:string};
+type TripRow={id:string;reference:string|null;freight_revenue:number|string|null;driver_cost:number|string|null};
+type AmountRow={trip_id:string|null;total_amount?:number|string|null;amount?:number|string|null};
+type BankRow={id:string;occurred_on:string;amount:number|string;direction:string;provider_status:string};
+type MutableCargo=Cargo&{advanceEmails:number;periodAdvance:number|null;periodBalance:number|null;paymentEvidence:boolean};
+const amount=(value:number|string|null|undefined):number|null=>value===null||value===undefined?null:Number.isFinite(Number(value))?Number(value):null;
+export default async function FiscalPage({searchParams}:{searchParams:Promise<{gmail?:string;reason?:string}>}){
+ const query=await searchParams;
+ const client=await createClient();
+ const {data:{user}}=await client.auth.getUser();
+ if(!user)redirect("/login");
+ const {data:ws}=await client.from("workspaces").select("id").eq("kind","prime").eq("owner_id",user.id).maybeSingle();
+ const db=client as unknown as SupabaseClient;
+ const [gmail,googleClient]=await Promise.all([
+  ws?gmailStatus(ws.id).catch(()=>null):Promise.resolve(null),
+  gmailClientStatus(),
+ ]);
+ const ready=Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY&&process.env.GOOGLE_GMAIL_CLIENT_ID&&
+  process.env.GOOGLE_GMAIL_CLIENT_SECRET&&process.env.GMAIL_TOKEN_ENCRYPTION_KEY&&process.env.APP_BASE_URL);
+ const [d,n,e,docs,trips,fuel,tolls,workers,banks]=await Promise.all([
+  ws?db.from("fiscal_drafts").select("cargo_reference,freight_value,ciot,created_at,document_type").eq("workspace_id",ws.id).order("created_at",{ascending:true}).limit(1000):Promise.resolve({data:[]}),
+  ws?db.from("fiscal_nfe_inbox").select("access_key,cargo_reference").eq("workspace_id",ws.id).limit(2000):Promise.resolve({data:[]}),
+  ws?db.from("ortobom_financial_emails").select("id,event_kind,email_date,payment_date,period_start,period_end,declared_bank_deposit,declared_promissory_discount,ortobom_financial_lines(cargo_reference,cte_number,declared_freight,declared_advance,declared_balance)").eq("workspace_id",ws.id).order("email_date",{ascending:true}).limit(1000):Promise.resolve({data:[]}),
+  ws?db.from("ortobom_cte_email_documents").select("id,message_id,cargo_reference,cte_number,subject,email_date,attachment_names,has_xml,evidence_status").eq("workspace_id",ws.id).order("email_date",{ascending:false}).limit(300):Promise.resolve({data:[]}),
+  ws?db.from("trips").select("id,reference,freight_revenue,driver_cost").eq("workspace_id",ws.id).limit(500):Promise.resolve({data:[]}),
+  ws?db.from("fuel_logs").select("trip_id,total_amount").eq("workspace_id",ws.id).limit(2000):Promise.resolve({data:[]}),
+  ws?db.from("tolls").select("trip_id,amount").eq("workspace_id",ws.id).limit(2000):Promise.resolve({data:[]}),
+  ws?db.from("prime_trip_workers").select("trip_id,amount").limit(2000):Promise.resolve({data:[]}),
+  ws?db.from("bank_transactions").select("id,occurred_on,amount,direction,provider_status").eq("workspace_id",ws.id).eq("direction","credit").gte("occurred_on","2026-01-01").limit(1500):Promise.resolve({data:[]}),
+ ]);
+ const failed=[d,n,e,docs,trips,fuel,tolls,workers,banks].some(x=>"error" in x&&x.error);
+ const drafts=(d.data||[]) as Draft[];
+ const nfes=(n.data||[]) as Nfe[];
+ const emails=(e.data||[]) as FinanceEmail[];
+ const sent=(docs.data||[]) as DocRow[];
+ const tripRows=(trips.data||[]) as TripRow[];
+ const costsByTrip=new Map<string,number>();
+ const addCost=(id:string|null,value:number|string|null|undefined)=>{
+  if(!id)return;
+  costsByTrip.set(id,(costsByTrip.get(id)||0)+(amount(value)||0));
+ };
+ for(const t of tripRows)addCost(t.id,t.driver_cost);
+ for(const x of (fuel.data||[]) as AmountRow[])addCost(x.trip_id,x.total_amount);
+ for(const x of (tolls.data||[]) as AmountRow[])addCost(x.trip_id,x.amount);
+ for(const x of (workers.data||[]) as AmountRow[])addCost(x.trip_id,x.amount);
+ const map=new Map<string,MutableCargo>();
+ function ensure(reference:string|null|undefined):MutableCargo|null{
+  const id=canonicalCargo(reference||"");if(id.length<4||id.length>12)return null;
+  let value=map.get(id);
+  if(!value){value={cargo:id.padStart(6,"0"),freight:null,claimed:null,advance:0,balance:null,
+   cost:0,profit:null,cte:null,ciot:null,status:"Aguardando informações",invoices:0,documented:false,
+   advanceEmails:0,periodAdvance:null,periodBalance:null,paymentEvidence:false};map.set(id,value);}
+  return value;
+ }
+ for(const x of drafts){
+  if(x.document_type!=="cte")continue;
+  const c=ensure(x.cargo_reference);if(!c)continue;
+  if(amount(x.freight_value)!==null)c.freight=amount(x.freight_value);
+  if(x.ciot)c.ciot=x.ciot;
+ }
+ for(const x of nfes){const c=ensure(x.cargo_reference);if(c)c.invoices++;}
+ const periods:Period[]=[];
+ const credits=(banks.data||[]) as BankRow[];
+ const used=new Set<string>();
+ const sorted=[...emails].sort((a,b)=>(a.email_date||"").localeCompare(b.email_date||""));
+ for(const x of sorted){
+  if(x.event_kind==="period_payment"){
+   const deposit=amount(x.declared_bank_deposit);let bankMatch="Sem crédito bancário confirmado";
+   if(x.payment_date&&deposit!==null){
+    const bankDate=new Date(x.payment_date+"T12:00:00Z").getTime();
+    const candidates=credits.filter(b=>b.provider_status==="POSTED"&&!used.has(b.id)&&
+     Math.abs(Number(b.amount)-deposit)<0.01&&
+     Math.abs(new Date(b.occurred_on+"T12:00:00Z").getTime()-bankDate)<=3*86400000);
+    if(candidates.length===1){used.add(candidates[0].id);bankMatch="Crédito compatível; conferir identificação";}
+    else if(candidates.length>1)bankMatch="Mais de um crédito compatível";
+    else bankMatch="Nenhum crédito compatível encontrado";
    }
+   periods.push({id:x.id,date:x.payment_date,
+    period:[x.period_start,x.period_end].filter(Boolean).join(" a ")||"Não informado",
+    deposit,promissory:amount(x.declared_promissory_discount),
+    loads:x.ortobom_financial_lines?.length||0,bankMatch});
+   if(bankMatch.startsWith("Crédito compatível"))
+    for(const l of x.ortobom_financial_lines||[]){const c=ensure(l.cargo_reference);if(c)c.paymentEvidence=true;}
   }
-  for(const item of ctes){
-   const key=canonicalCargo(item.cargo_reference||"");
-   const target=cargoData.get(key);
-   if(target)target.freight=item.freight_value===null?null:Number(item.freight_value);
+  for(const l of x.ortobom_financial_lines||[]){
+   const c=ensure(l.cargo_reference);if(!c)continue;
+   if(amount(l.declared_freight)!==null)c.claimed=amount(l.declared_freight);
+   if(x.event_kind==="advance"&&amount(l.declared_advance)!==null)
+    c.advanceEmails+=amount(l.declared_advance)||0;
+   if(x.event_kind==="period_payment"){
+    if(amount(l.declared_advance)!==null)c.periodAdvance=amount(l.declared_advance);
+    if(amount(l.declared_balance)!==null)c.periodBalance=amount(l.declared_balance);
+   }
+   if(l.cte_number)c.cte=l.cte_number;
   }
-  for(const item of cargoData.values()){
-   item.status=item.freight===null?"Sem carga no app":item.claimed!==null&&Math.abs(item.freight-item.claimed)>0.01?
-    "Divergência de frete":"Conferir recebimento bancário";
-  }
-  const {data:bankDeposits}=ws?await db.from("bank_transactions")
-   .select("id,occurred_on,amount,direction,provider_status")
-   .eq("workspace_id",ws.id).eq("direction","credit")
-   .gte("occurred_on","2026-01-01").limit(1500):{data:[]};
-  const postedDeposits=(bankDeposits||[]).filter(x=>x.provider_status==="POSTED");
-  const matchedBankIds=new Set<string>();
-  const bankStatus=(paymentDay:string|null,value:number|null)=>{
-   if(!paymentDay||value===null)return "Sem dados suficientes";
-   const date=new Date(paymentDay+"T12:00:00Z").getTime();
-   const possible=postedDeposits.filter(x=>{
-    if(matchedBankIds.has(x.id)||Math.abs(Number(x.amount)-value)>0.009)return false;
-    const delta=Math.abs(new Date(x.occurred_on+"T12:00:00Z").getTime()-date)/86400000;
-    return delta<=3;
-   }).sort((a,b)=>Math.abs(new Date(a.occurred_on).getTime()-date)-Math.abs(new Date(b.occurred_on).getTime()-date));
-   if(!possible.length)return "Sem crédito correspondente";
-   // A single match by same date and exact value is a strong bank match, not a SEFAZ or invoice status.
-   if(possible.length>1)return "Múltiplos créditos possíveis";
-   matchedBankIds.add(possible[0].id);
-   return possible[0].occurred_on===paymentDay?"Crédito compatível no extrato":"Crédito próximo à data — conferir";
-  };
-  const financePeriods=financeEmails.filter(e=>e.event_kind==="period_payment").map(e=>({
-   id:e.id,date:e.payment_date,
-   period:[e.period_start,e.period_end].filter(Boolean).join(" a ")||"Não especificado",
-   deposit:e.declared_bank_deposit===null?null:Number(e.declared_bank_deposit),
-   promissory:e.declared_promissory_discount===null?null:Number(e.declared_promissory_discount),
-   loads:e.ortobom_financial_lines?.length||0,
-   bankMatch:bankStatus(e.payment_date,e.declared_bank_deposit===null?null:Number(e.declared_bank_deposit)),
-  }));
-
-  const manifests=drafts.filter(x=>x.document_type==="mdfe");
-  const choices=pendingCtes.filter(x=>canPrepareNewCte(x.status,x.checklist))
-    .map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem numero")+" — NF-e "+(x.fiscal_nfe_inbox?.invoice_number||"nao informada"),
-      originUf:x.fiscal_nfe_inbox?.origin_uf||"",destinationUf:x.fiscal_nfe_inbox?.destination_uf||""}));
-  const pending=pendingCtes.filter(x=>x.status==="draft").length;
-  return (
-    <>
-      <Header title="Emissor Fiscal" subtitle="Operações de transporte, importação Ortobom e preparação de documentos da Prime Group." />
-      <div className="fiscal-workspace">
-        <section className="fiscal-hero" aria-label="Visão geral fiscal">
-          <div className="fiscal-hero-content">
-            <span className="fiscal-overline"><span className="fiscal-pulse"/> PRIME GROUP / CENTRAL FISCAL</span>
-            <h2>Da carga recebida ao manifesto, em um só lugar.</h2>
-            <p>Organize NF-e da Ortobom, CIOT, fretes e documentos da operação. Os arquivos importados ficam disponíveis para conferência antes de qualquer emissão.</p>
-            <div className="fiscal-hero-cta">
-              <a href="#module-cargas" className="fiscal-hero-button">Conectar cargas <span aria-hidden="true">↗</span></a>
-              <a href="#module-cte" className="fiscal-hero-textlink">Ver fila de CT-e <span aria-hidden="true">→</span></a>
-            </div>
-          </div>
-          <div className="fiscal-hero-metrics">
-            <div><span>CT-e em preparação</span><strong>{pending.toLocaleString("pt-BR")}</strong><small>Rascunhos sem autorização fiscal</small></div>
-            <div><span>NF-e carregadas</span><strong>{(invoiceCount||0).toLocaleString("pt-BR")}</strong><small>XMLs das notas armazenados</small></div>
-            <div><span>MDF-e em preparação</span><strong>{manifests.length.toLocaleString("pt-BR")}</strong><small>Manifestos ainda não transmitidos</small></div>
-          </div>
-        </section>
-        {query.gmail==="connected"&&gmail&&<div className="fiscal-alert fiscal-alert-success" role="status"><strong>Gmail autorizado e vinculado.</strong><span>Você já pode importar os e-mails da Ortobom.</span></div>}
-        {query.gmail==="connection_failed"&&<div className="fiscal-alert fiscal-alert-error" role="alert">
-          <strong>Não foi possível concluir a conexão com o Google.</strong>
-          <span>{oauthMessages[query.reason||"unexpected"]||oauthMessages.unexpected}</span>
-          <small>Código do diagnóstico: {query.reason||"unexpected"}</small>
-        </div>}
-        {query.gmail==="setup_required"&&<div className="fiscal-alert fiscal-alert-error" role="alert">Entre com a conta proprietária do Prime Finance antes de conectar o Gmail.</div>}
-        {query.gmail==="connected"&&!gmail&&<div className="fiscal-alert fiscal-alert-error" role="alert">O Google retornou ao aplicativo, mas não foi localizado o registro da conexão no banco.</div>}
-        <FiscalTabs>
-          <FiscalTabPanel tab="cargas">
-        <section id="gmail-integration">
-          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">01 / CONEXÃO DE DADOS</span><h2>Importação de cargas</h2><p>Receba os XMLs sem digitar novamente os dados da viagem.</p></div><span className={"fiscal-connection-status "+(gmail?"is-live":"is-pending")}>{gmail?"Gmail vinculado":"Conexão pendente"}</span></div>
-          <div className="fiscal-connect-layout">
-            {ws&&<GmailConnector ready={gmailReady} clientStatus={googleClient} connected={Boolean(gmail)} lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/>}
-            <aside className="fiscal-playbook">
-              <span className="fiscal-small-label">FLUXO DA OPERAÇÃO</span>
-              <h3>Uma carga. Um frete. Todas as notas.</h3>
-              <ol className="fiscal-steps">
-                <li><span>01</span><div><strong>Receber da Ortobom</strong><small>XMLs, referência da carga, valor e CIOT.</small></div></li>
-                <li><span>02</span><div><strong>Conferir com IA</strong><small>Revisar divergências antes de preparar o CT-e.</small></div></li>
-                <li><span>03</span><div><strong>Vincular veículo e motorista</strong><small>Preencher o MDF-e com os cadastros da Prime.</small></div></li>
-              </ol>
-              <a href="/cadastros/transporte" className="fiscal-playbook-link">Abrir cadastro de transporte <span>↗</span></a>
-            </aside>
-          </div>
-        </section>
-          </FiscalTabPanel>
-          <FiscalTabPanel tab="integracoes">
-        <section id="fiscal-provider">
-          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">AUTORIZADOR / SANDBOX</span><h2>Integração fiscal DotCompany</h2><p>Valide a chave e confira os documentos sem solicitar uma emissão real.</p></div></div>
-          <DotcompanyPanel drafts={[...ctes].sort((a,b)=>Number(canPrepareNewCte(b.status,b.checklist))-Number(canPrepareNewCte(a.status,a.checklist))).map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem referência")+" · "+(canPrepareNewCte(x.status,x.checklist)?"para preparar":"bloqueada / conferência")}))}/>
-        </section>
-          </FiscalTabPanel>
-          <FiscalTabPanel tab="cte">
-        <section id="cte-queue">
-          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">02 / DOCUMENTOS</span><h2>Fila de CT-e</h2><p>Lista real das cargas cadastradas; rascunhos não equivalem a documentos autorizados.</p></div><span className="fiscal-count">{pendingCtes.length} {pendingCtes.length===1?"carga":"cargas"} em processamento</span></div>
-          {error&&<div className="fiscal-alert fiscal-alert-error">Consulta fiscal indisponível: {error.message}</div>}
-          <div className="table-wrap fiscal-data-table">
-            <table><thead><tr><th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem / destino</th><th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>Revisão</th><th>Envio SEFAZ</th></tr></thead>
-              <tbody>{pendingCtes.map(x=><tr key={x.id}>
-                <td>{new Date(x.created_at).toLocaleDateString("pt-BR")}</td>
-                <td><strong className="fiscal-cargo-id">{x.cargo_reference||"—"}</strong></td>
-                <td>{x.fiscal_nfe_inbox?.invoice_number||"—"}</td>
-                <td>{x.fiscal_nfe_inbox?.origin_city||"—"} → {x.fiscal_nfe_inbox?.destination_city||"—"}</td>
-                <td>{money(x.fiscal_nfe_inbox?.goods_value??null)}</td>
-                <td><strong>{money(x.freight_value)}</strong></td>
-                <td>{x.ciot||"—"}</td>
-                <td>{transmissionsByDraft.get(x.id)?
-                  <span className="fiscal-draft-status">{transmissionsByDraft.get(x.id)?.status==="authorized"?"CT-e autorizado":
-                    transmissionsByDraft.get(x.id)?.status==="indeterminate"?"Verificar na DotCompany":
-                    transmissionsByDraft.get(x.id)?.status==="rejected"?"Rejeitado na SEFAZ":"Transmissão em andamento"}</span>:
-                  x.checklist?.do_not_issue_duplicate?
-                  <span className="fiscal-cte-external" title="Referência de DACTE externo identificada. O protocolo precisa de conferência SEFAZ.">
-                    CT-e externo nº {x.checklist.previous_external_cte_number||"—"} · verificar
-                  </span>:
-                  <span className="fiscal-draft-status">{x.status==="draft"?"Rascunho":x.status==="review_pending"?"Pendente de revisão":x.status}</span>}
-                </td>
-                <td><FiscalAiReview draftId={x.id}/></td><td><CteSendReview draftId={x.id}/></td>
-              </tr>)}
-              {pendingCtes.length===0&&<tr><td colSpan={10} className="fiscal-empty">Nenhuma carga pendente. CT-e emitidos estão no histórico abaixo.</td></tr>}</tbody>
-            </table>
-          </div>
-        </section>
-        {historicalCtes.length>0&&<CteArchive rows={historicalCtes.map(x=>({
-          access_key:x.access_key,number:x.number,series:x.series,issued_at:x.issued_at,
-          total_value:x.total_value===null?null:Number(x.total_value),
-          status:x.status,source:x.source,sender_name:x.sender_name,recipient_name:x.recipient_name
-        }))}/>}
-          </FiscalTabPanel>
-        <div className="fiscal-modular-grid">
-          <FiscalTabPanel tab="ia"><section id="fiscal-assistant">
-            <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">03 / INTELIGÊNCIA OPERACIONAL</span><h2>Conferência por IA</h2><p>Pergunte sobre cargas, notas, CIOT, motoristas e veículos.</p></div></div>
-            <FiscalAiPanel/>
-          </section></FiscalTabPanel>
-          <FiscalTabPanel tab="cargas"><section id="manual-import">
-            <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">ALTERNATIVA / IMPORTAÇÃO MANUAL</span><h2>Enviar documentos</h2><p>Utilize quando uma carga ainda não estiver no Gmail.</p></div></div>
-            <div className="fiscal-manual-panel">
-              <details><summary>Importar carga com múltiplas NF-e <span>+</span></summary><OrtobomCargoForm/></details>
-              <details><summary>Importar uma NF-e individual <span>+</span></summary><FiscalImportForm/></details>
-            </div>
-          </section></FiscalTabPanel>
-        </div>
-        <FiscalTabPanel tab="mdfe">
-        <section id="mdfe-manifest">
-          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">04 / VIAGEM</span><h2>Preparação do MDF-e</h2><p>Vincule a carga ao veículo e motorista. A emissão real depende de integração fiscal homologada.</p></div><a className="fiscal-outline-link" href="/cadastros/transporte">Gerenciar cadastros ↗</a></div>
-          <div className="fiscal-manifest-grid">
-            <MdfeDraftForm cteDrafts={choices}
-              vehicles={(vehiclesResult.data||[]).filter(v=>v.plate).map(v=>({id:v.id,name:v.nickname,plate:v.plate as string}))}
-              drivers={(driversResult.data||[]).filter(d=>d.document).map(d=>({id:d.id,name:d.name,cpf:d.document as string}))}
-              rntrc={(profileResult.data as {rntrc:string|null}|null)?.rntrc||""}/>
-            <aside className="fiscal-manifest-list">
-              <h3>Manifestos preparados</h3>
-              {manifests.length===0?<p>Os manifestos ficarão listados aqui assim que você preparar uma viagem.</p>:
-                <div className="fiscal-manifest-items">{manifests.map(x=><div key={x.id} className="fiscal-manifest-item"><strong>{x.cargo_reference||"Sem referência"}</strong><span>{x.checklist?.vehicle_plate||"Placa pendente"}</span><small>{x.checklist?.origin_uf||"UF"} → {x.checklist?.destination_uf||"UF"} · Rascunho</small></div>)}</div>}
-            </aside>
-          </div>
-        </section>
-        </FiscalTabPanel>
-        <FiscalTabPanel tab="financeiro">
-        <OrtobomFinancePanel cargo={[...cargoData.values()].sort((a,b)=>b.cargo.localeCompare(a.cargo))}
-          periods={financePeriods} emailCount={financeEmails.length} connected={Boolean(gmail)}/>
-        </FiscalTabPanel>
-        <FiscalTabPanel tab="integracoes">
-        <AnttMonthlyCheck/>
-        <section className="fiscal-readiness-section" aria-label="Condições de emissão fiscal">
-          <span className="fiscal-section-kicker">CONTROLES DE EMISSÃO</span>
-          <h2>O que já está pronto e o que ainda depende de homologação</h2>
-          <FiscalReadinessPanel steps={fiscalReadiness({
-             gmailConnected:Boolean(gmail),gmailClientAccepted:googleClient==="accepted",
-             gmailClientRejected:googleClient==="rejected",nfeCount:invoiceCount||0,cteDraftCount:ctes.length,
-             hasDriver:!!driversResult.data?.length,hasVehicle:!!vehiclesResult.data?.length,
-             rntrcProvided:Boolean((profileResult.data as {rntrc:string|null}|null)?.rntrc),
-             focusHomologation:fiscalIntegrationState().homologacao,
-             focusProduction:fiscalIntegrationState().producao,
-             authorizedCteCount:0,fiscalDataReviewed:false,
-          })}/>
-        </section>
-        <footer className="fiscal-compliance">
-          <div><span className="fiscal-section-kicker">EMISSÃO CONTROLADA</span><h3>Conferência fiscal e credenciamento</h3><p>Os CT-e e MDF-e desta tela são rascunhos, sem número, XML assinado ou protocolo SEFAZ. A IA ajuda a revisar, mas não transmite documentos.</p><p>DotCompany: {process.env.DOTCOMPANY_SANDBOX_API_KEY?.startsWith("dc_test_")?"chave Sandbox configurada":"chave Sandbox ausente"} · transmissão de produção desabilitada. Focus NFe (legado): homologação {fiscalIntegrationState().homologacao?"configurada":"não configurada"} · produção {fiscalIntegrationState().producao?"configurada":"não configurada"}.</p></div>
-          <div><ul>{mdfeTransmissionBlockers().map(reason=><li key={reason}>{reason}</li>)}</ul><a href="https://consultapublica.antt.gov.br/Site/ConsultaRNTRC.aspx" target="_blank" rel="noopener noreferrer">Consultar RNTRC na ANTT ↗</a></div>
-        </footer>
-        </FiscalTabPanel>
-        </FiscalTabs>
-      </div>
-    </>
-  );
+ }
+ const documents:SentDocument[]=sent.map(x=>({
+  id:x.id,messageId:x.message_id,cargo:x.cargo_reference,cte:x.cte_number,
+  subject:x.subject,date:x.email_date,files:Array.isArray(x.attachment_names)?x.attachment_names:[],
+  hasXml:x.has_xml,evidence:x.evidence_status,
+ }));
+ for(const item of sent){
+  const c=ensure(item.cargo_reference);if(!c)continue;
+  c.documented=true;if(item.cte_number&&!c.cte)c.cte=item.cte_number;
+ }
+ for(const item of tripRows){
+  const c=ensure(item.reference);if(!c)continue;
+  c.cost+=costsByTrip.get(item.id)||0;
+  if(c.freight===null)c.freight=amount(item.freight_revenue);
+ }
+ for(const c of map.values()){
+  c.advance=c.periodAdvance??c.advanceEmails;
+  c.balance=c.periodBalance??((c.freight??c.claimed)!==null?
+   Math.max(0,(c.freight??c.claimed??0)-c.advance):null);
+  c.profit=(c.freight??c.claimed)!==null?(c.freight??c.claimed??0)-c.cost:null;
+  c.status=c.freight!==null&&c.claimed!==null&&Math.abs(c.freight-c.claimed)>0.01?
+   "Divergência de frete":c.paymentEvidence?
+   "Crédito compatível no período; conferir":c.documented?
+   "CT-e anexado · acerto a conferir":c.advance>0?
+   "Adiantamento declarado":"Aguardando CT-e ou acerto";
+ }
+ const cargo:Cargo[]=[...map.values()].sort((a,b)=>b.cargo.localeCompare(a.cargo));
+ const totalFreight=cargo.reduce((s,c)=>s+(c.freight??c.claimed??0),0);
+ const totalAdvances=cargo.reduce((s,c)=>s+c.advance,0);
+ const totalEstimatedBalance=cargo.reduce((s,c)=>s+(c.balance??0),0);
+ const money=(v:number)=>v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+ return <>
+  <Header title="Cargas e acertos" subtitle="Controle operacional Prime Group · Cargozilla emite CT-e; Gmail alimenta o financeiro."/>
+  <div className="fiscal-workspace">
+   <section className="fiscal-hero">
+    <div className="fiscal-hero-content">
+     <span className="fiscal-overline">PRIME GROUP / GESTÃO DE FRETES</span>
+     <h2>Da Cargozilla para o controle financeiro, sem redigitar as cargas.</h2>
+     <p>A emissão de CT-e e MDF-e permanece exclusivamente na Cargozilla. O Prime Finance lê
+      os e-mails da Ortobom, reúne arquivos, adiantamentos, pagamentos e custos registrados.</p>
+     <div className="fiscal-hero-cta">
+      <a href="#ortobom-finance" className="fiscal-hero-button">Ver planilha <span aria-hidden="true">↗</span></a>
+      <a href="#gmail-integration" className="fiscal-hero-textlink">Atualizar Gmail <span aria-hidden="true">→</span></a>
+     </div>
+    </div>
+    <div className="fiscal-hero-metrics">
+     <div><span>Cargas identificadas</span><strong>{cargo.length}</strong><small>{nfes.length} XML(s) NF-e</small></div>
+     <div><span>Frete declarado/contratado</span><strong>{money(totalFreight)}</strong><small>Sem baixa bancária automática</small></div>
+     <div><span>Adiantamentos declarados</span><strong>{money(totalAdvances)}</strong><small>Saldo estimado {money(totalEstimatedBalance)}</small></div>
+    </div>
+   </section>
+   {query.gmail==="connected"&&gmail&&<div className="fiscal-alert fiscal-alert-success" role="status">Gmail autorizado e conectado.</div>}
+   {query.gmail==="connection_failed"&&<div className="fiscal-alert fiscal-alert-error" role="alert">
+    Erro ao conectar o Gmail ({query.reason||"desconhecido"}). Confirme o acesso à conta logística.</div>}
+   {!ws&&<div className="fiscal-alert fiscal-alert-error">Ambiente Prime Group ainda não localizado.</div>}
+   {failed&&<div className="fiscal-alert fiscal-alert-error">Algumas consultas falharam. O quadro pode estar incompleto; atualize após conferir a conexão.</div>}
+   <section id="gmail-integration">
+    <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">01 / CAIXA DE ENTRADA</span>
+     <h2>Gmail da transportadora</h2><p>Importação de XML da Ortobom, CT-e enviados e informes de acerto financeiro.</p>
+    </div></div>
+    {ws&&<GmailConnector connected={Boolean(gmail)} ready={ready} clientStatus={googleClient}
+     lastSync={gmail?.last_sync_at||null} lastError={gmail?.last_error||null}/>}
+   </section>
+   <OrtobomFinancePanel cargo={cargo} periods={periods.reverse()} documents={documents}
+    emailCount={emails.length} connected={Boolean(gmail)}/>
+   <p className="fiscal-compliance">O aplicativo não emite, cancela ou transmite CT-e/MDF-e à SEFAZ.
+    Os documentos históricos permanecem arquivados para conferência. Valores de e-mail não comprovam quitação.
+   </p>
+  </div>
+ </>;
 }
