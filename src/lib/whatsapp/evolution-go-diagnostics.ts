@@ -9,7 +9,7 @@ export async function evolutionGoCapabilityCheck(){
  try{
   const endpoint=new URL(url);
   if(endpoint.protocol!=="https:"||endpoint.username||endpoint.password)throw Error("endpoint");
-  base=endpoint.href.replace(/\\/+$/,"");
+  base=endpoint.href.replace(/\/+$/,"");
  }catch{return {version:null,healthy:false,carouselAdvertised:false,details:"URL inválida"};}
  const targets=["/health","/version","/swagger/doc.json"];
  const results=await Promise.all(targets.map(async path=>{
