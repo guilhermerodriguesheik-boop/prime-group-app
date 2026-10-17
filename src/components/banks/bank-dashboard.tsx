@@ -72,13 +72,16 @@ export function BankDashboard(){
      providerError?:string|null;capabilities?:{version?:string|null;healthy?:boolean;carouselAdvertised?:boolean;details?:string}
     };
     if(!response.ok)throw Error(result.error||"Falha ao testar os botões");
-    setNotice(result.providerAccepted?
-     "Cartão de teste aceito pela Evolution Go. Confira no WhatsApp se aparecem os três botões e clique em uma área.":
-     "Cartão de teste "+(result.failed?"rejeitado":"aguardando envio")+
+    const main=result.providerAccepted?
+     "Carrossel aceito pela Evolution Go. Confira no WhatsApp se os botões aparecem.":
+     "Cartão "+(result.failed?"rejeitado":"aguardando envio")+
      " ("+(result.status||"pendente")+"). "+
-     (result.providerError||"O servidor tentará novamente."))+
-     " · Evolution Go: "+(result.capabilities?.version||"versão não informada pela instalação")+
-     (result.capabilities?.carouselAdvertised?" · carrossel anunciado":" · suporte ao carrossel ainda não comprovado");
+     (result.providerError||"O servidor tentará novamente.");
+    setNotice(main+" · Evolution Go: "+
+     (result.capabilities?.version||"versão não informada pela instalação")+
+     (result.capabilities?.carouselAdvertised?" · carrossel disponível na API":
+     " · suporte ao carrossel não comprovado na documentação local"));
+
    }catch(error){setNotice(error instanceof Error?error.message:"Falha no envio de teste.");}
    finally{setButtonTestBusy(false);}
   }
