@@ -30,3 +30,23 @@ test("receipt can show possible Ortobom cargo based on same date and amount",()=
 test("different dates/amounts do not match",()=>{
  assert.deepEqual(reviewSuggestions(tx("credit",900),[],[],[{workspace_id:"prime",reference:"030061",date:"2026-09-01",amount:900}]),[]);
 });
+
+test("automatic investments are flagged as transfers, not expenses",()=>{
+ const a=reviewSuggestions({...tx("debit",1608.44),description:"APL APLIC AUT MAIS"},[
+  {...bill,amount:1608.44}],[],[]);
+ assert.deepEqual(a,["Possível aplicação financeira: transferência, não despesa operacional"]);
+});
+test("application redemptions are not income suggestions",()=>{
+ const a=reviewSuggestions({...tx("credit",1608.44),description:"RES APLIC AUT MAIS AP"},[],[],[]);
+ assert.deepEqual(a,["Possível resgate de aplicação: não receita operacional"]);
+});
+test("credit instalments show the split warning",()=>{
+ const a=reviewSuggestions({...tx("debit",306.57),description:"PARCELA GIRO 12/18"},[],[],[]);
+ assert.deepEqual(a,["Possível parcela de crédito: conferir juros e amortização"]);
+});
+test("bank fees and insurance are identified as suggestions only",()=>{
+ assert.deepEqual(reviewSuggestions({...tx("debit",9.14),description:"TAR/CUSTAS COBRANCA"},[],[],[]),
+ ["Possível tarifa bancária"]);
+ assert.deepEqual(reviewSuggestions({...tx("debit",4.67),description:"DEBITO SEGURO 13/18"},[],[],[]),
+ ["Possível despesa de seguro"]);
+});
