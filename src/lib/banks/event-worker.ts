@@ -1,5 +1,7 @@
 import {pluggyAccounts,pluggyApiKey,pluggyItem,pluggyTransactions} from "@/lib/banks/pluggy";
 import {primeRpc,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
+import {createClient} from "@supabase/supabase-js";
+import {allowPersonalItem} from "@/lib/banks/sync";
 type BankEvent={id:string;itemId:string;event:string};
 async function ingest(itemId:string){
  const key=await pluggyApiKey();
@@ -7,6 +9,18 @@ async function ingest(itemId:string){
  if(item.id!==itemId)throw new Error("Pluggy item mismatch");
  if(item.status!=="UPDATED")throw new Error("Bank data not ready: "+(item.status||"unknown"));
  const accounts=await pluggyAccounts(key,itemId);
+ // The event bridge handles alert deduplication; a separate owner-verified
+ // status update refreshes displayed balances and the source freshness marker.
+ const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
+ const secret=process.env.SUPABASE_SERVICE_ROLE_KEY;
+ if(!url||!secret)throw new Error("Bank metadata sync not configured");
+ const db=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}});
+ const {data:connection,error:lookupError}=await db.from("bank_connections")
+  .select("id,owner_id,workspace_id").eq("provider","pluggy").eq("provider_item_id",itemId)
+  .is("archived_at",null).neq("status","disconnected").maybeSingle();
+ if(lookupError||!connection)throw new Error("Bank webhook without active connection");
+ if(!allowPersonalItem(connection.owner_id,item.clientUserId))
+  throw new Error("Bank webhook owner mismatch");
  for(const account of accounts.slice(0,15)){
   if(!account.id||account.type!=="BANK")continue;
   const dateFrom=new Date(Date.now()-7*86400_000).toISOString().slice(0,10);
@@ -23,6 +37,24 @@ async function ingest(itemId:string){
    });
   }
  }
+ const at=new Date().toISOString();
+ for(const account of accounts){
+  if(!account.id||!["BANK","CREDIT"].includes(account.type||""))continue;
+  const value=typeof account.balance==="number"&&Number.isFinite(account.balance)
+   &&Math.abs(account.balance)<=1000000000?account.balance:null;
+  const {error:balanceError}=await db.from("bank_accounts").update({
+   balance:value,balance_updated_at:at,updated_at:at
+  }).eq("connection_id",connection.id).eq("owner_id",connection.owner_id)
+    .eq("provider_account_id",account.id);
+  if(balanceError)throw new Error("Unable to refresh bank balance metadata");
+ }
+ const origin=item.lastUpdatedAt?new Date(item.lastUpdatedAt):null;
+ const providerDate=origin&&!Number.isNaN(origin.getTime())?origin.toISOString():null;
+ const {error:statusError}=await db.from("bank_connections").update({
+  status:"connected",last_synced_at:at,last_error:null,updated_at:at,
+  ...(providerDate?{provider_last_updated_at:providerDate}:{}),
+ }).eq("id",connection.id).eq("owner_id",connection.owner_id);
+ if(statusError)throw new Error("Unable to refresh bank connection metadata");
 }
 export async function drainPluggyEventInbox(limit=2){
  const items=await primeRpc<BankEvent[]>("prime_claim_pluggy_events",{p_limit:limit});
