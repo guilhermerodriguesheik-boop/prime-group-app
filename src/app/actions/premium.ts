@@ -114,5 +114,5 @@ export async function classifyBankMovement(f:FormData){
   category:txt(f,"category").slice(0,80)||null,classified_at:new Date().toISOString(),
  },{onConflict:"bank_transaction_id"});
  if(error)throw Error(error.message);
- revalidatePath("/bancos");revalidatePath("/prime");revalidatePath("/pessoal");
+ revalidatePath("/bancos");revalidatePath("/financeiro");revalidatePath("/juros");revalidatePath("/prime");revalidatePath("/pessoal");
 }
