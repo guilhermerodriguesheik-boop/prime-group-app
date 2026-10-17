@@ -21,6 +21,6 @@ test("NativeFlow carousel holds precisely one bank movement and two image-backed
 });
 test("more options refer to the same message, never a separate movement",()=>{
  const p=bankCarouselPayload("5521999999999","ENTRADA · R$ 900,00",id,true);
- assert.equal(p.cards[0].header.title,"Outras categorias");
+ assert.equal(p.cards[0].header.title,"Outras áreas");
  assert.ok(p.cards[0].buttons.some(b=>b.displayText==="Transferência"));
 });
