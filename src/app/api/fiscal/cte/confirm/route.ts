@@ -88,7 +88,7 @@ export async function POST(req:Request){
    method:"POST",
    headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json",
     "Accept":"application/json","Idempotency-Key":idem},
-   body:JSON.stringify({...preview.payload,idempotency_key:idem}),
+   body:JSON.stringify({...validatedPayload,idempotency_key:idem}),
    cache:"no-store",signal:AbortSignal.timeout(24000),
   });
   const received=await response.json().catch(()=>null) as
