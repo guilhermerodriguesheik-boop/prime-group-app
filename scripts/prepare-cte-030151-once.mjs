@@ -48,7 +48,7 @@ async function main(){
      last.access_key||last.protocol)throw Error("PRIOR_ATTEMPT_CHANGED");
   const sender=d.checklist?.cte_party_registry?.sender?.id,
    receiver=d.checklist?.cte_party_registry?.recipient?.id;
-  if(!sender||!receiver)throw Error("PARTY_IDS_MISSING");
+  if(!Number.isSafeInteger(Number(sender))||Number(sender)<=0||!Number.isSafeInteger(Number(receiver))||Number(receiver)<=0)throw Error("PARTY_IDS_MISSING");
   const cfg=d.checklist?.cte_provider_config||{};
   const notes=await db("fiscal_nfe_inbox","workspace_id=eq."+workspace+"&cargo_reference=eq."+cargo+
     "&select="+enc("access_key,origin_uf,destination_uf,goods_value,gross_weight_kg")+"&limit=41");
@@ -65,11 +65,16 @@ async function main(){
   const value=Number(d.freight_value),goods=notes.reduce((s,n)=>s+Number(n.goods_value||0),0),
    weight=notes.reduce((s,n)=>s+Number(n.gross_weight_kg||0),0);
   if(![value,goods,weight].every(v=>Number.isFinite(v)&&v>0))throw Error("FREIGHT_VALUES_INVALID");
+  const startCode=String(cfg.compliance?.municipio_inicio_ibge||"");
+  const endCode=String(cfg.compliance?.municipio_fim_ibge||"");
   const payload={
    uf_inicio:start,uf_fim:dest,cfop:cfg.cfop,modal:"01",
+   ...(startCode.length===7?{cod_municipio_inicio:startCode}:{}),
+   ...(endCode.length===7?{cod_municipio_fim:endCode}:{}),
+   emitter_id:646,
    tomador:cfg.tomador,produto_predominante:cfg.produto_predominante,
    peso_bruto:weight,valor_carga:goods,valor_frete:value,
-   remetente_id:String(sender),destinatario_id:String(receiver),
+   remetente_id:Number(sender),destinatario_id:Number(receiver),
    documentos:notes.map(n=>({chave_acesso:n.access_key})),
    veiculos:[{placa:String(vehicle.plate).toUpperCase().replace(/[^A-Z0-9]/g,""),
     uf_licenciamento:cfg.uf_licenciamento}],
