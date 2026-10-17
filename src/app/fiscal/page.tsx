@@ -4,6 +4,7 @@ import { OrtobomCargoForm } from "@/components/fiscal/ortobom-cargo-form";
 import { FiscalAiPanel } from "@/components/fiscal/fiscal-ai-panel";
 import { FiscalAiReview } from "@/components/fiscal/ai-review";
 import { CteSendReview } from "@/components/fiscal/cte-send-review";
+import { CteArchive } from "@/components/fiscal/cte-archive";
 import { GmailConnector } from "@/components/fiscal/gmail-connector";
 import { gmailStatus, gmailClientStatus } from "@/lib/fiscal/gmail";
 import { fiscalReadiness } from "@/lib/fiscal/readiness";
@@ -60,8 +61,8 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
     ws?db.from("fiscal_transport_profiles").select("rntrc").eq("workspace_id",ws.id).maybeSingle():Promise.resolve({data:null}),
   ]);
   const {data:historicalRows}=ws?await db.from("cte_documents")
-    .select("access_key,number,series,issued_at,total_value,status")
-    .eq("workspace_id",ws.id).eq("source","gmail_dacte")
+    .select("access_key,number,series,issued_at,total_value,status,source,sender_name,recipient_name")
+    .eq("workspace_id",ws.id).in("source",["gmail_dacte","video_dacte"])
     .order("issued_at",{ascending:false}).limit(15):{data:[]};
   const historicalCtes=historicalRows||[];
   const {data:rows,error}=ws
@@ -73,6 +74,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
     .select("draft_id,status,access_key,protocol").eq("workspace_id",ws.id):{data:[]};
   const transmissionsByDraft=new Map((transmissions||[]).map(x=>[x.draft_id,x]));
   const ctes=drafts.filter(x=>x.document_type==="cte");
+  const pendingCtes=ctes.filter(x=>!x.checklist?.do_not_issue_duplicate);
   type FinanceLine={cargo_reference:string;cte_number:string|null;declared_freight:number|string|null;
    declared_advance:number|string|null;declared_balance:number|string|null};
   type FinanceEmail={id:string;event_kind:string;payment_date:string|null;period_start:string|null;period_end:string|null;
@@ -135,10 +137,10 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
   }));
 
   const manifests=drafts.filter(x=>x.document_type==="mdfe");
-  const choices=ctes.filter(x=>canPrepareNewCte(x.status,x.checklist))
+  const choices=pendingCtes.filter(x=>canPrepareNewCte(x.status,x.checklist))
     .map(x=>({id:x.id,label:"Carga "+(x.cargo_reference||"sem numero")+" — NF-e "+(x.fiscal_nfe_inbox?.invoice_number||"nao informada"),
       originUf:x.fiscal_nfe_inbox?.origin_uf||"",destinationUf:x.fiscal_nfe_inbox?.destination_uf||""}));
-  const pending=ctes.filter(x=>x.status==="draft").length;
+  const pending=pendingCtes.filter(x=>x.status==="draft").length;
   return (
     <>
       <Header title="Emissor Fiscal" subtitle="Operações de transporte, importação Ortobom e preparação de documentos da Prime Group." />
@@ -194,11 +196,11 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
           </FiscalTabPanel>
           <FiscalTabPanel tab="cte">
         <section id="cte-queue">
-          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">02 / DOCUMENTOS</span><h2>Fila de CT-e</h2><p>Lista real das cargas cadastradas; rascunhos não equivalem a documentos autorizados.</p></div><span className="fiscal-count">{ctes.length} {ctes.length===1?"registro":"registros"}</span></div>
+          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">02 / DOCUMENTOS</span><h2>Fila de CT-e</h2><p>Lista real das cargas cadastradas; rascunhos não equivalem a documentos autorizados.</p></div><span className="fiscal-count">{pendingCtes.length} {pendingCtes.length===1?"carga":"cargas"} em processamento</span></div>
           {error&&<div className="fiscal-alert fiscal-alert-error">Consulta fiscal indisponível: {error.message}</div>}
           <div className="table-wrap fiscal-data-table">
             <table><thead><tr><th>Criado em</th><th>Carga</th><th>NF-e</th><th>Origem / destino</th><th>Mercadoria</th><th>Frete</th><th>CIOT</th><th>Situação</th><th>Revisão</th><th>Envio SEFAZ</th></tr></thead>
-              <tbody>{ctes.map(x=><tr key={x.id}>
+              <tbody>{pendingCtes.map(x=><tr key={x.id}>
                 <td>{new Date(x.created_at).toLocaleDateString("pt-BR")}</td>
                 <td><strong className="fiscal-cargo-id">{x.cargo_reference||"—"}</strong></td>
                 <td>{x.fiscal_nfe_inbox?.invoice_number||"—"}</td>
@@ -218,24 +220,15 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
                 </td>
                 <td><FiscalAiReview draftId={x.id}/></td><td><CteSendReview draftId={x.id}/></td>
               </tr>)}
-              {ctes.length===0&&<tr><td colSpan={10} className="fiscal-empty">Nenhuma carga importada. Comece conectando o Gmail ou enviando os XMLs.</td></tr>}</tbody>
+              {pendingCtes.length===0&&<tr><td colSpan={10} className="fiscal-empty">Nenhuma carga pendente. CT-e emitidos estão no histórico abaixo.</td></tr>}</tbody>
             </table>
           </div>
         </section>
-        {historicalCtes.length>0&&<section aria-label="CT-es emitidos fora do Prime Finance">
-          <div className="fiscal-section-intro"><div><span className="fiscal-section-kicker">REGISTROS RECUPERADOS DO GMAIL</span>
-            <h2>CT-e já enviados pelo Cargozilla</h2>
-            <p>Documentos existentes identificados nos DACTEs enviados à Ortobom. O protocolo impresso ainda precisa de consulta oficial na SEFAZ.</p>
-          </div><span className="fiscal-count">{historicalCtes.length} identificados</span></div>
-          <div className="table-wrap fiscal-data-table"><table><thead><tr><th>Número</th><th>Série</th><th>Data</th><th>Frete</th><th>Chave CT-e</th><th>Situação</th></tr></thead>
-          <tbody>{historicalCtes.map(x=><tr key={x.access_key}>
-            <td><strong>{x.number||"—"}</strong></td><td>{x.series||"—"}</td>
-            <td>{x.issued_at?new Date(x.issued_at).toLocaleDateString("pt-BR"):"—"}</td>
-            <td>{money(x.total_value===null?null:Number(x.total_value))}</td>
-            <td><span className="fiscal-key-truncate" title={x.access_key||""}>{x.access_key||"—"}</span></td>
-            <td><span className="fiscal-cte-external">DACTE recebido · consultar SEFAZ</span></td>
-          </tr>)}</tbody></table></div>
-        </section>}
+        {historicalCtes.length>0&&<CteArchive rows={historicalCtes.map(x=>({
+          access_key:x.access_key,number:x.number,series:x.series,issued_at:x.issued_at,
+          total_value:x.total_value===null?null:Number(x.total_value),
+          status:x.status,source:x.source,sender_name:x.sender_name,recipient_name:x.recipient_name
+        }))}/>}
           </FiscalTabPanel>
         <div className="fiscal-modular-grid">
           <FiscalTabPanel tab="ia"><section id="fiscal-assistant">
