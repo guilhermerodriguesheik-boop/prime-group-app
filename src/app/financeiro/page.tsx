@@ -49,6 +49,13 @@ export default async function FinanceiroPage(){
  const errors=[bankConnections.error,bankAccounts.error,bankMoves.error,bankMatches.error,
   cargoOps.error,cargoDrafts.error,cargoEmails.error].filter(Boolean);
  const bankNames=Object.fromEntries((bankAccounts.data||[]).map(a=>[a.id,a.display_name]));
+ const bankAccountIds=(bankAccounts.data||[]).filter(a=>a.kind==="BANK"&&a.currency==="BRL").map(a=>a.id);
+ const unreviewedCount=bankAccountIds.length?await db.from("bank_transactions")
+  .select("id",{count:"exact",head:true}).eq("owner_id",data.user.id)
+  .in("bank_account_id",bankAccountIds).eq("provider_status","POSTED")
+  .eq("review_status","pending"): {count:0,error:null};
+ const bankBalances=(bankAccounts.data||[]).filter(a=>a.kind==="BANK"&&a.currency==="BRL"
+  &&a.balance!==null);
  const eligibleAccounts=new Set((bankAccounts.data||[])
    .filter(a=>a.kind==="BANK"&&a.currency==="BRL").map(a=>a.id));
  const unmatched=(bankMoves.data||[]).filter(m=>eligibleAccounts.has(m.bank_account_id)
@@ -114,7 +121,7 @@ export default async function FinanceiroPage(){
    <Metric label="Motoristas a pagar · cargas" value={brl(crewTotals.drivers)}/>
    <Metric label="Ajudantes a pagar · cargas" value={brl(crewTotals.helpers)}/>
    <Metric label="Empréstimos · capital a receber" value={brl(data.interest.openIn)}/>
-   <Metric label="Extratos bancários aguardando conciliação" value={String(unmatched.length)}
+   <Metric label="Extratos bancários a conciliar" value={String(unreviewedCount.count??unmatched.length)}
     tone={unmatched.length>0?"warning":undefined}/>
   </div>
   <p className="metric-foot">Fretes, equipe, empréstimos e contas possuem origens diferentes.
@@ -131,6 +138,11 @@ export default async function FinanceiroPage(){
    </tr>)}
    {!bankConnections.data?.length&&<tr><td colSpan={3}>Nenhuma conexão bancária ativa.</td></tr>}
   </tbody></table></div>
+  {bankBalances.length>0&&<p className="metric-foot">
+   Saldo informado no último extrato: {bankBalances.map(a=>a.display_name+" — "+brl(a.balance)).join(" | ")}.
+   Os saldos reais informados pelos bancos não são somados ao caixa gerencial para evitar duplicidade.
+  </p>}
+  {unreviewedCount.error&&<p className="notice">Não foi possível contar os movimentos pendentes.</p>}
   {staleBank&&<p className="notice attention">Extratos podem estar desatualizados.
    Abra <Link href="/bancos">Bancos</Link> e solicite atualização quando a instituição permitir.</p>}
   <p className="metric-foot">O resumo é recarregado periodicamente enquanto esta página estiver aberta,
