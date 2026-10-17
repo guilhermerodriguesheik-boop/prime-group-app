@@ -19,3 +19,12 @@ test("WhatsApp report can be requested without service name",()=>{
  assert.deepEqual(parse("extrato"),{period:"imported_today",sendWhatsApp:false});
  assert.deepEqual(parse("relatório bancário de hoje"),{period:"today",sendWhatsApp:false});
 });
+
+test("Daily WhatsApp statement commands without word bancário do not trigger AI clarification",()=>{
+ assert.deepEqual(parse("Me envia o relatório de ontem e hoje"),
+  {period:"yesterday_today",sendWhatsApp:false});
+ assert.deepEqual(parse("Me manda o relatorio de hoje"),
+  {period:"today",sendWhatsApp:false});
+ assert.equal(parse("Quero relatório de vendas de hoje"),null);
+ assert.equal(parse("Me envia o relatório das cargas de ontem"),null);
+});
