@@ -102,3 +102,28 @@ test("Reviewed CT-e template is reusable by route, but never reuses sending cons
  assert.equal(other.config.cfop,"");
  assert.equal(other.ready,false);
 });
+
+const {definitiveCteRejection,correctionFromProvider}=loadTS("src/lib/fiscal/cte-recovery.ts");
+test("Missing people ids is an explicit pre-SEFAZ rejection and may be corrected",()=>{
+ const provider={message:"Faltam campos obrigatórios: remetente_id e destinatario_id"};
+ assert.equal(definitiveCteRejection(422,provider),true);
+ assert.equal(definitiveCteRejection(500,provider),false);
+ assert.equal(definitiveCteRejection(422,{message:"Problema desconhecido"}),false);
+ assert.equal(definitiveCteRejection(422,{...provider,chave_acesso:"1".repeat(44)}),false);
+ const description=correctionFromProvider("rejected","HTTP_422",{...provider,definitive_rejection:true});
+ assert.equal(description.retryPossible,true);
+ assert.equal(description.action,"cadastros");
+});
+test("Definitive rejection can be corrected but an indeterminate operation stays blocked",()=>{
+ const mayRetry=ctePreview({...valid,existingSubmission:true,retryAllowed:true});
+ assert.equal(mayRetry.ready,true);
+ assert.equal(mayRetry.retryAllowed,true);
+ const unknown=ctePreview({...valid,existingSubmission:true,retryAllowed:false});
+ assert.equal(unknown.ready,false);
+ assert.ok(unknown.missing.some(x=>x.includes("Já existe uma tentativa")));
+});
+test("Server rejection without SEFAZ response must not permit a fiscal retry",()=>{
+ assert.equal(definitiveCteRejection(422,{message:"Autorizador não respondeu"}),false);
+ assert.equal(definitiveCteRejection(200,{autorizado:false,codigo_status_sefaz:"539"}),true);
+ assert.equal(definitiveCteRejection(200,{autorizado:false}),false);
+});

@@ -3,13 +3,14 @@ import {useState} from "react";
 import {useRouter} from "next/navigation";
 import {ClipboardCheck,Send,Save,X,ShieldAlert,Plus} from "lucide-react";
 import {registerDriver,registerTransportVehicle} from "@/app/cadastros/transporte/actions";
+import {correctionFromProvider} from "@/lib/fiscal/cte-recovery";
 type Config={cfop:string;tomador:string;produto_predominante:string;uf_licenciamento:string;numbering_verified:boolean};
 type Preview={
- hash:string;ready:boolean;missing:string[];invoiceCount:number;freightValue:number;goodsValue:number;
+ hash:string;ready:boolean;retryAllowed:boolean;missing:string[];invoiceCount:number;freightValue:number;goodsValue:number;
  grossWeight:number;cargoReference:string|null;ciot:string|null;config:Config;
 };
 type Data={
- preview:Preview;submission:{status:string;access_key?:string|null;protocol?:string|null;error_code?:string|null;provider_response?:{reconciliation?:{checked_at?:string;cte_list_http_status?:number|null;total_rows_inspected?:number;possible_matches?:Array<Record<string,string>>;note?:string;emitter_profile_http_status?:number|null}}|null}|null;
+ preview:Preview;retryHistory?:Array<{archived_at:string;previous_status:string;previous_error_code:string|null}>;submission:{status:string;access_key?:string|null;protocol?:string|null;error_code?:string|null;provider_response?:{message?:string;reason?:string;definitive_rejection?:boolean;reconciliation?:{checked_at?:string;cte_list_http_status?:number|null;total_rows_inspected?:number;possible_matches?:Array<Record<string,string>>;note?:string;emitter_profile_http_status?:number|null}}|null}|null;
  draft:{vehicle_id:string|null;driver_id:string|null;status:string};
  vehicles:Array<{id:string;nickname:string;plate:string}>;
  drivers:Array<{id:string;name:string}>;
@@ -27,6 +28,7 @@ export function CteSendReview({draftId}:{draftId:string}){
  const [vehicle,setVehicle]=useState("");
  const [driver,setDriver]=useState("");
  const [consent,setConsent]=useState(false);
+ const [consultText,setConsultText]=useState("");
  const [emailStatus,setEmailStatus]=useState<{authorized:boolean;sourceLinked:boolean;existing:{status:string;recipient_email?:string}|null}|null>(null);
  const [emailBusy,setEmailBusy]=useState(false);
  const [creating,setCreating]=useState<"driver"|"vehicle"|null>(null);
@@ -42,6 +44,20 @@ export function CteSendReview({draftId}:{draftId:string}){
    setEmailStatus(status.ok?await status.json():null);
   }catch(e){setError(e instanceof Error?e.message:"Falha ao revisar.");}
   finally{setLoading(false)}
+ }
+ async function consultProvider(){
+  if(!data?.preview.cargoReference)return;
+  setLoading(true);setError("");
+  try{
+   const params=new URLSearchParams({kind:"cte",cargo:data.preview.cargoReference});
+   const r=await fetch("/api/fiscal/dotcompany/insights?"+params.toString(),{cache:"no-store"});
+   const answer=await r.json() as {error?:string;provider?:{ok:boolean;error?:string|null;items?:unknown[]}};
+   if(!r.ok)throw Error(answer.error||"Consulta indisponível.");
+   setConsultText(answer.provider?.ok?
+     "Consulta recebida: "+(answer.provider?.items?.length||0)+" documento(s) na listagem. Uma lista vazia não comprova rejeição nem libera novo envio.":
+     "A DotCompany não confirmou a situação: "+(answer.provider?.error||"consulta indisponível")+".");
+  }catch(e){setError(e instanceof Error?e.message:"Consulta indisponível.");}
+  finally{setLoading(false);}
  }
  async function createTransport(kind:"driver"|"vehicle",form:FormData){
   setLoading(true);setError("");setMessage("");
@@ -92,11 +108,16 @@ export function CteSendReview({draftId}:{draftId:string}){
     body:JSON.stringify({draftId,hash:data.preview.hash,confirmation:"CONFIRMO O ENVIO À SEFAZ"}),
    });
    const j=await r.json() as {error?:string;reason?:string;message?:string;authorized?:boolean;key?:string;protocol?:string};
-   if(!r.ok)throw Error([j.error,j.reason].filter(Boolean).join(" — ")||"Falha ao transmitir. Não tente novamente sem consultar o emissor.");
+   if(!r.ok){await refresh();throw Error([j.error,j.reason].filter(Boolean).join(" — ")||"Falha ao transmitir. Consulte o resultado antes de tentar novamente.");}
    setMessage(j.message||"Resultado recebido da API.");
    await refresh();router.refresh();
   }catch(e){setError(e instanceof Error?e.message:"Erro ao enviar.");setLoading(false);}
  }
+ const editable=!data?.submission||
+  (["rejected","indeterminate"].includes(data.submission.status)&&
+   !data.submission.access_key&&!data.submission.protocol);
+ const correction=data?.submission?correctionFromProvider(data.submission.status,
+  data.submission.error_code,data.submission.provider_response):null;
  return <>
   <button className="button" type="button" onClick={()=>{setOpen(true);setMessage("");setError("");void refresh()}}>
     <ClipboardCheck size={14}/> Revisar / enviar
@@ -129,6 +150,34 @@ export function CteSendReview({draftId}:{draftId:string}){
             <p>{data.submission.provider_response.reconciliation.note||"Aguardando conferência de resultado."}</p>
           </div>}
         </div>}
+        {data.submission&&correction&&data.submission.status!=="authorized"&&
+          <div className="fiscal-review-summary" role="alert" style={{borderLeft:"3px solid #d97706"}}>
+            <strong>Corrigir causa do problema: {correction.title}</strong>
+            {data.submission.provider_response?.message&&
+             <p>Resposta da DotCompany: {data.submission.provider_response.message}</p>}
+            <p>{correction.description}</p>
+            {data.preview.retryAllowed?
+             <p>Rejeição definitiva confirmada: você pode corrigir os dados, salvar e solicitar nova emissão. A tentativa anterior ficará arquivada.</p>:
+             <p>Nova emissão bloqueada até confirmação do resultado anterior. É permitido revisar os dados sem reenviar.</p>}
+            <div className="fiscal-review-actions">
+             <button className="button" type="button" disabled={loading} onClick={()=>void consultProvider()}>
+              Consultar situação na DotCompany
+             </button>
+             {editable&&<button className="button" type="button"
+               onClick={()=>document.getElementById("cte-review-edit-"+draftId)?.scrollIntoView({behavior:"smooth"})}>
+               Corrigir campos neste aplicativo
+             </button>}
+             {correction.action==="emissor"&&<a href="https://erp.dotcompany.com.br/api-dev/emissores"
+               target="_blank" rel="noopener noreferrer">Abrir emissor fiscal ↗</a>}
+            </div>
+            {consultText&&<p role="status">{consultText}</p>}
+          </div>}
+        {!!data.retryHistory?.length&&<div className="fiscal-review-summary">
+          <strong>Histórico de tentativas anteriores</strong>
+          <ul>{data.retryHistory.map((attempt,i)=>
+            <li key={i}>{new Date(attempt.archived_at).toLocaleString("pt-BR")} ·
+               {attempt.previous_status} · {attempt.previous_error_code||"sem código"}</li>)}</ul>
+        </div>}
         {emailStatus?.authorized&&<div className="fiscal-review-summary">
           <strong>Responder à Ortobom com o CT-e autorizado</strong>
           <p>{emailStatus.existing?
@@ -145,9 +194,9 @@ export function CteSendReview({draftId}:{draftId:string}){
             </button>
           </div>
         </div>}
-        <div className="fiscal-review-form">
+        <div className="fiscal-review-form" id={"cte-review-edit-"+draftId}>
           <label>Veículo
-            <select value={vehicle} onChange={e=>setVehicle(e.target.value)} disabled={!!data.submission}>
+            <select value={vehicle} onChange={e=>setVehicle(e.target.value)} disabled={!editable}>
               <option value="">Selecione</option>{data.vehicles.map(x=><option key={x.id} value={x.id}>{x.nickname||x.plate} · {x.plate}</option>)}
             </select>
           </label>
@@ -181,7 +230,7 @@ export function CteSendReview({draftId}:{draftId:string}){
           </label>
         </div>
         <div className="fiscal-review-actions" style={{justifyContent:"flex-start"}}>
-          <button className="button" type="button" onClick={()=>setCreating(creating==="driver"?null:"driver")} disabled={loading||!!data.submission}><Plus size={14}/> Novo motorista</button>
+          <button className="button" type="button" onClick={()=>setCreating(creating==="driver"?null:"driver")} disabled={loading||!editable}><Plus size={14}/> Novo motorista</button>
           <button className="button" type="button" onClick={()=>setCreating(creating==="vehicle"?null:"vehicle")} disabled={loading||!!data.submission}><Plus size={14}/> Novo veículo</button>
           <a href="/cadastros/transporte" target="_blank" rel="noopener noreferrer" style={{fontSize:12}}>Ver todos os cadastros ↗</a>
         </div>
@@ -207,7 +256,7 @@ export function CteSendReview({draftId}:{draftId:string}){
          </div>
         </form>}
         <div className="fiscal-review-actions">
-          <button className="button" onClick={()=>void save()} disabled={loading||!!data.submission||data.draft.status!=="draft"}><Save size={15}/> Salvar conferência</button>
+          <button className="button" onClick={()=>void save()} disabled={loading||!editable||data.draft.status!=="draft"}><Save size={15}/> Salvar conferência</button>
         </div>
         <div className="fiscal-review-summary" role="status">
           <strong>{data.preview.ready?"Pré-validação completa — pronto para confirmação.":"Pendências que impedem transmissão:"}</strong>
@@ -215,12 +264,12 @@ export function CteSendReview({draftId}:{draftId:string}){
           <p>O envio à SEFAZ somente acontece depois de sua confirmação expressa e do processamento pela DotCompany.</p>
         </div>
         <label className="fiscal-check-field"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}
-          disabled={!data.preview.ready||!!data.submission}/>
+          disabled={!data.preview.ready||!!data.submission&&!data.preview.retryAllowed}/>
           Conferi todos os dados, sei que o envio é real e autorizo a transmissão deste CT-e.
         </label>
         <div className="fiscal-review-actions">
           <button className="button primary" type="button" onClick={()=>void submit()}
-            disabled={loading||!data.preview.ready||!consent||!!data.submission}><Send size={16}/> Confirmar e enviar à SEFAZ</button>
+            disabled={loading||!data.preview.ready||!consent||!!data.submission&&!data.preview.retryAllowed}><Send size={16}/> {data.preview.retryAllowed?"Confirmar nova tentativa à SEFAZ":"Confirmar e enviar à SEFAZ"}</button>
         </div>
       </>}
       {error&&<p className="fiscal-inline-alert" role="alert"><ShieldAlert size={16}/>{error}</p>}
