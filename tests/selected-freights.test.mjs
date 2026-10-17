@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {selectedFreightTotals,selectedDriverId,driverWhatsAppSummary,whatsappDraftLink} from "../src/lib/fiscal/selected-freights.ts";
+import {selectedFreightTotals,selectedDriverId,driverWhatsAppSummary,whatsappDraftLink,selectedLoadsWhatsAppSummary} from "../src/lib/fiscal/selected-freights.ts";
 const row=(cargo,driver="driver-a",pay=250,paid=false)=>({
  cargo,freight:1800,advance:900,received:0,pending:900,emailDate:"2026-10-17",
  operation:{service_date:"2026-10-16",route_description:"Rio - Niterói",driver_id:driver,
@@ -32,4 +32,22 @@ test("WhatsApp phone normalizes Brazil numbers or opens recipient chooser",()=>{
  assert.ok(whatsappDraftLink("Teste","21988887777")?.startsWith("https://wa.me/5521988887777?text="));
  assert.ok(whatsappDraftLink("Teste","")?.startsWith("https://api.whatsapp.com/send?text="));
  assert.equal(whatsappDraftLink("Teste","123"),null);
+});
+
+test("a driver-less selection can always create a WhatsApp message",()=>{
+ const a=row("030151");a.operation=null;
+ const b=row("030061");b.operation=null;
+ const message=selectedLoadsWhatsAppSummary([a,b]);
+ assert.ok(message.includes("Carga 030151"));
+ assert.ok(message.includes("Carga 030061"));
+ assert.ok(!message.includes("R$"));
+ assert.ok(whatsappDraftLink(message,"")?.includes("text="));
+});
+test("freight prices only appear in shared message after explicit opt-in",()=>{
+ const a=row("030151");a.operation=null;
+ const plain=selectedLoadsWhatsAppSummary([a],false);
+ const disclosed=selectedLoadsWhatsAppSummary([a],true);
+ assert.ok(!plain.includes("Fretes somados"));
+ assert.ok(disclosed.includes("Fretes somados"));
+ assert.ok(disclosed.includes("Saldo pendente"));
 });
