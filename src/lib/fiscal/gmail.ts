@@ -257,14 +257,10 @@ export async function syncAllGmailWorkspaces(){
   const result=[];for(const item of data||[]){
     try{
       const cargos=await syncGmailWorkspace(item.workspace_id,item.owner_id);
-      const [finance,cteEmails]=await Promise.allSettled([
-        syncOrtobomFinancialReports(item.workspace_id,item.owner_id),
-        syncOutboundCteEmails(item.workspace_id,item.owner_id),
-      ]);
-      result.push({workspace_id:item.workspace_id,...cargos,
-        finance:finance.status==="fulfilled"?finance.value:{error:"finance_sync_failed"},
-        cteEmails:cteEmails.status==="fulfilled"?cteEmails.value:{error:"cte_mail_sync_failed"},
-      });
+      let finance:FinancialGmailSync|{error:string};
+      try{finance=await syncOrtobomFinancialReports(item.workspace_id,item.owner_id);}
+      catch{finance={error:"finance_sync_failed"};}
+      result.push({workspace_id:item.workspace_id,...cargos,finance});
     }catch{result.push({workspace_id:item.workspace_id,error:"sync_failed"});}
   }return result;
 }
