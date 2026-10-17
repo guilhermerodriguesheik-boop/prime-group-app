@@ -1,7 +1,7 @@
 import "server-only";
 import {NextResponse} from "next/server";
 import {createClient} from "@/lib/supabase/server";
-import {checkDotCompanyProduction} from "@/lib/fiscal/dotcompany-production";
+import {checkDotCompanyProduction,checkPrimeEmitterReadiness} from "@/lib/fiscal/dotcompany-production";
 export const runtime="nodejs";
 export const maxDuration=30;
 export async function GET(){
@@ -15,5 +15,7 @@ export async function GET(){
   process.env.DOTCOMPANY_PRODUCTION_API_KEY,
   process.env.DOTCOMPANY_CTE_LIVE_ENABLED==="true",
  );
- return NextResponse.json(result,{headers:{"Cache-Control":"no-store"}});
+ const issuer=result.authenticated?
+  await checkPrimeEmitterReadiness(process.env.DOTCOMPANY_PRODUCTION_API_KEY):null;
+ return NextResponse.json({...result,issuer},{headers:{"Cache-Control":"no-store"}});
 }
