@@ -19,6 +19,12 @@ export function definitiveCteRejection(httpStatus:number,body:Record<string,unkn
  const msg=fiscalErrorText(body);
  const code=String(body.code??body.error_code??"").toUpperCase();
  // Explicit DotCompany payload/schema rejection before the fiscal authorizer.
+ // A structured DotCompany validation rejection happens before fiscal authorization.
+ // Do not infer this from HTTP 422 alone: it must carry a provider validation code.
+ const validationCode=String(body.codigo??body.code??body.error_code??"").toUpperCase();
+ const category=String(body.categoria??"").toLowerCase();
+ if(validationCode==="VALIDATION_ERROR"&&
+   (!category||category==="validacao"||category==="validação"))return true;
  const field=/(remetente_id|destinatario_id)/i.test(msg);
  const missing=/(obrigat[oó]ri|ausent|faltan|faltam|missing|required|necess[aá]ri)/i.test(msg);
  return field&&missing || /^(?:MISSING_PERSON_IDS|PESSOAS_OBRIGATORIAS)$/.test(code);

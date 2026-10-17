@@ -104,11 +104,11 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
    <div className="fiscal-dotcompany-heading">
     <div><span className="fiscal-section-kicker">SEFAZ / PRODUÇÃO</span>
       <h3>DotCompany — ambiente de PRODUÇÃO</h3>
-      <p>Esta seção utiliza a chave dc_live_. Autenticação não significa emissão liberada: o perfil fiscal de CT-e deve estar pronto.</p>
+      <p>Esta seção utiliza a chave dc_live_. Autenticação não comprova autorização fiscal. A DotCompany ou a SEFAZ podem recusar dados ao receber a solicitação.</p>
     </div>
     <span className={"fiscal-gmail-state "+(production?.authenticated&&production.issuer?.cteReady?"connected":"waiting")}>
       {checkingProduction?"Consultando produção":production?.authenticated?
-       production.issuer?.cteReady?"Produção: CT-e pronto":"Produção autenticada · CT-e bloqueado":
+       production.issuer?.cteReady?"Produção: CT-e pronto":"Produção autenticada · verificar dados do emissor":
        production?"Produção não autenticada":"Produção: verificando"}
     </span>
    </div>
@@ -132,7 +132,7 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
       <li>Numeração CT-e: {production.issuer?.numberingCteConfigured?"série encontrada na API":"a API não apresentou sequência modelo 57; confira o contador próprio do CT-e no cadastro, que pode não aparecer em numeracao[]"}</li>
     </ul>
     {production.issuer&&!production.issuer.cteReady&&<p role="alert">
-      <strong>Bloqueio da DotCompany:</strong> {production.issuer.reason} Não tente emitir CT-e aqui antes da regularização.
+      <strong>Aviso do cadastro DotCompany:</strong> {production.issuer.reason} O aviso não impede solicitar emissão; o provedor decidirá se aceita a operação.
       <a href="https://dotcompany.com.br/suporte.html" target="_blank" rel="noopener noreferrer"> Suporte oficial ↗</a>
     </p>}
     <small>{production.message||"A confirmação de conexão não equivale a credenciamento SEFAZ nem a CT-e autorizado."}</small>
@@ -187,7 +187,7 @@ export function DotcompanyPanel({drafts}:{drafts:{id:string;label:string}[]}){
   {preview&&<div className="fiscal-dotcompany-result" role="status">
     <strong>{preview.invoiceCount} NF-e vinculada(s) — frete {preview.freightValue===null?"não informado":preview.freightValue.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</strong>
     <p>Mercadorias: {preview.goodsValue.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})} (não confundir com o frete).</p>
-    <strong>{preview.ready?"Conferência concluída — confirme no painel Revisar / enviar.":"Pendências para emissão real:"}</strong>
+    <strong>{preview.ready?"Conferência concluída — confirme no painel Revisar / enviar.":"Impedimentos técnicos ou avisos fiscais:"}</strong>
     <ul>{preview.missing.map((m,i)=><li key={i}>{m}</li>)}</ul>
     <small>{preview.notice}</small>
    </div>}

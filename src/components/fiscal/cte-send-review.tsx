@@ -10,7 +10,7 @@ type Config={cfop:string;tomador:string;produto_predominante:string;uf_licenciam
 type Preview={
  hash:string;ready:boolean;retryAllowed:boolean;missing:string[];autofilled?:string[];advisories?:string[];invoiceCount:number;freightValue:number;goodsValue:number;
  grossWeight:number;cargoReference:string|null;ciot:string|null;rntrc:string|null;config:Config;
- numberingEvidence?:{series:string;nextNumber:number;lastExternalNumber:number|null;matched:boolean}|null;
+ numberingEvidence?:{series:string;nextNumber:number;lastExternalNumber:number|null;matched:boolean}|null;previousExternalCteNumber?:string|null;
 };
 type Data={
  preview:Preview;retryHistory?:Array<{archived_at:string;previous_status:string;previous_error_code:string|null}>;submission:{status:string;access_key?:string|null;protocol?:string|null;error_code?:string|null;provider_response?:{message?:string;reason?:string;definitive_rejection?:boolean;reconciliation?:{checked_at?:string;cte_list_http_status?:number|null;total_rows_inspected?:number;possible_matches?:Array<Record<string,string>>;note?:string;emitter_profile_http_status?:number|null}}|null}|null;
@@ -31,7 +31,6 @@ export function CteSendReview({draftId}:{draftId:string}){
  const [ciotValue,setCiotValue]=useState("");
  const [vehicle,setVehicle]=useState("");
  const [driver,setDriver]=useState("");
- const [consent,setConsent]=useState(false);
  const [consultText,setConsultText]=useState("");
  const [emailStatus,setEmailStatus]=useState<{authorized:boolean;sourceLinked:boolean;existing:{status:string;recipient_email?:string}|null}|null>(null);
  const [emailBusy,setEmailBusy]=useState(false);
@@ -43,7 +42,6 @@ export function CteSendReview({draftId}:{draftId:string}){
    const json=await r.json() as Data;
    if(!r.ok)throw Error(json.error||"Não foi possível carregar a revisão.");
    setData(json);setConfig(json.preview.config);setCiotValue(json.preview.ciot||"");setVehicle(json.draft.vehicle_id||(json.vehicles.length===1?json.vehicles[0].id:""));setDriver(json.draft.driver_id||(json.drivers.length===1?json.drivers[0].id:""));
-   setConsent(false);
    const status=await fetch("/api/fiscal/cte/email-reply?draftId="+encodeURIComponent(draftId),{cache:"no-store"});
    setEmailStatus(status.ok?await status.json():null);
   }catch(e){setError(e instanceof Error?e.message:"Falha ao revisar.");}
@@ -74,7 +72,6 @@ export function CteSendReview({draftId}:{draftId:string}){
   }catch(e){setError(e instanceof Error?e.message:"Falha ao cadastrar. Confira os dados.");setLoading(false);}
  }
  async function save(){
-  if(!vehicle||!driver){setError("Selecione veículo e motorista.");return}
   setLoading(true);setError("");setMessage("");
   try{
    const r=await fetch("/api/fiscal/cte/review",{
@@ -103,8 +100,11 @@ export function CteSendReview({draftId}:{draftId:string}){
   finally{setEmailBusy(false)}
  }
  async function submit(){
-  if(!data?.preview.ready||!consent)return;
-  if(!window.confirm("CONFIRMA o envio real deste CT-e à SEFAZ? Esta ação pode gerar um documento fiscal e cobrança da DotCompany."))return;
+  if(!data?.preview.ready)return;
+  if(!window.confirm("CONFIRMA o envio real deste CT-e à SEFAZ? A DotCompany poderá cobrar e validar/rejeitar os dados fiscais."))return;
+  if(data.preview.previousExternalCteNumber &&
+   !window.confirm("Esta carga já possui CT-e nº "+data.preview.previousExternalCteNumber+
+   " no histórico do Cargozilla. Você confirma pedir OUTRA emissão, ciente do risco de duplicidade?"))return;
   setLoading(true);setError("");setMessage("");
   try{
    const r=await fetch("/api/fiscal/cte/confirm",{
@@ -213,7 +213,7 @@ export function CteSendReview({draftId}:{draftId:string}){
             série 003, último número {data.preview.numberingEvidence.lastExternalNumber??"não identificado"}.</p>
           <p>{data.preview.numberingEvidence.matched
             ?"Sequência confrontada com o histórico local e o perfil do emissor. Não equivale a consulta atual à SEFAZ."
-            :"Sequência não conciliada. Marcar a caixa de conferência não corrige a série no emissor."}</p>
+            :"Divergência informativa: o aplicativo não impede seu envio. A DotCompany pode emitir na série configurada ou recusar."}</p>
         </div>}
         <div className="fiscal-review-form" id={"cte-review-edit-"+draftId}>
           <label>Veículo
@@ -227,7 +227,7 @@ export function CteSendReview({draftId}:{draftId:string}){
             </select>
           </label>
           <label>CFOP (conferir com contabilidade)
-            <input value={config.cfop} onChange={e=>setConfig(c=>({...c,cfop:e.target.value}))} maxLength={4} placeholder="Ex.: 5352" disabled={!!data.submission}/>
+            <input value={config.cfop} onChange={e=>setConfig(c=>({...c,cfop:e.target.value}))} maxLength={4} placeholder="Ex.: 5352" disabled={!editable}/>
           </label>
           <label>Tomador do frete
             <select value={config.tomador} onChange={e=>setConfig(c=>({...c,tomador:e.target.value}))} disabled={!!data.submission}>
@@ -239,19 +239,11 @@ export function CteSendReview({draftId}:{draftId:string}){
           </label>
           <label>Produto predominante
             <input value={config.produto_predominante} onChange={e=>setConfig(c=>({...c,produto_predominante:e.target.value}))}
-              maxLength={120} placeholder="Ex.: COLCHÕES" disabled={!!data.submission}/>
+              maxLength={120} placeholder="Ex.: COLCHÕES" disabled={!editable}/>
           </label>
           <label>UF de licenciamento da placa
             <input value={config.uf_licenciamento} onChange={e=>setConfig(c=>({...c,uf_licenciamento:e.target.value.toUpperCase()}))}
-              maxLength={2} placeholder="RJ" disabled={!!data.submission}/>
-          </label>
-          <label className="span-two fiscal-check-field">
-            <input type="checkbox" checked={config.numbering_verified||!!data.preview.numberingEvidence?.matched}
-              onChange={e=>setConfig(c=>({...c,numbering_verified:e.target.checked}))}
-              disabled={!!data.submission||!!data.preview.numberingEvidence?.matched}/>
-            {data.preview.numberingEvidence?.matched
-              ?"Sequência conferida automaticamente com histórico local e numeração da DotCompany; confira a carga antes do envio."
-              :"Confirmei com o emissor anterior a sequência de CT-e e verifiquei que esta carga ainda não possui CT-e autorizado."}
+              maxLength={2} placeholder="RJ" disabled={!editable}/>
           </label>
         </div>
         <CteComplianceFields value={config.compliance}
@@ -288,17 +280,15 @@ export function CteSendReview({draftId}:{draftId:string}){
           <button className="button" onClick={()=>void save()} disabled={loading||!editable||data.draft.status!=="draft"}><Save size={15}/> Salvar conferência</button>
         </div>
         <div className="fiscal-review-summary" role="status">
-          <strong>{data.preview.ready?"Conferência preenchida — sujeita ao autorizador fiscal.":"Pendências que impedem transmissão:"}</strong>
+          <strong>{data.preview.ready?"Solicitação liberada para a DotCompany/SEFAZ.":"Impedimentos técnicos de envio:"}</strong>
           {data.preview.missing.length>0&&<ul>{data.preview.missing.map((m,i)=><li key={i}>{m}</li>)}</ul>}
-          <p>O envio à SEFAZ somente acontece depois de sua confirmação expressa e do processamento pela DotCompany.</p>
+          {!!data.preview.advisories?.length&&<div><p><strong>Avisos fiscais (não impedem solicitação):</strong></p>
+           <ul>{data.preview.advisories.map((m,i)=><li key={i}>{m}</li>)}</ul></div>}
+           <p>Depois de sua confirmação, a DotCompany processa a solicitação. Apenas chave e protocolo autorizados comprovam emissão.</p>
         </div>
-        <label className="fiscal-check-field"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}
-          disabled={!data.preview.ready||!!data.submission&&!data.preview.retryAllowed}/>
-          Conferi todos os dados, sei que o envio é real e autorizo a transmissão deste CT-e.
-        </label>
         <div className="fiscal-review-actions">
           <button className="button primary" type="button" onClick={()=>void submit()}
-            disabled={loading||!data.preview.ready||!consent||!!data.submission&&!data.preview.retryAllowed}><Send size={16}/> {data.preview.retryAllowed?"Confirmar nova tentativa à SEFAZ":"Confirmar e enviar à SEFAZ"}</button>
+            disabled={loading||!data.preview.ready||!!data.submission&&!data.preview.retryAllowed}><Send size={16}/> {data.preview.retryAllowed?"Confirmar nova tentativa à SEFAZ":"Confirmar e enviar à SEFAZ"}</button>
         </div>
       </>}
       {error&&<p className="fiscal-inline-alert" role="alert"><ShieldAlert size={16}/>{error}</p>}

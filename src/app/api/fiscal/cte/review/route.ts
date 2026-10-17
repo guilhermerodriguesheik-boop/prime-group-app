@@ -50,22 +50,26 @@ export async function POST(req:Request){
  const mayEditPrevious= !r.submission ||
   (["indeterminate","rejected"].includes(r.submission.status) &&
    !r.submission.access_key&&!r.submission.protocol);
- if(r.draft.status!=="draft"||!mayEditPrevious||r.draft.checklist?.do_not_issue_duplicate===true||
-    r.draft.checklist?.previous_external_cte_number)
+ if(r.draft.status!=="draft"||!mayEditPrevious)
   return NextResponse.json({error:"Esta carga está bloqueada para evitar reemissão de CT-e."},{status:409});
- if(typeof body.vehicleId!=="string"||!uuid.test(body.vehicleId)||
-    typeof body.driverId!=="string"||!uuid.test(body.driverId))
-  return NextResponse.json({error:"Selecione um veículo e um motorista cadastrados."},{status:400});
- const [vehicle,driver]=await Promise.all([
-  s.db.from("vehicles").select("id").eq("workspace_id",s.workspaceId).eq("id",body.vehicleId).eq("status","active").maybeSingle(),
-  s.db.from("drivers").select("id").eq("workspace_id",s.workspaceId).eq("id",body.driverId).eq("active",true).maybeSingle(),
- ]);
- if(!vehicle.data||!driver.data)return NextResponse.json({error:"Veículo ou motorista não está ativo."},{status:400});
+ // Missing transport selections must not prevent saving other fiscal fields.
+ const vehicleId=typeof body.vehicleId==="string"&&uuid.test(body.vehicleId)?body.vehicleId:null;
+ const driverId=typeof body.driverId==="string"&&uuid.test(body.driverId)?body.driverId:null;
+ if(vehicleId){
+  const {data:vehicle}=await s.db.from("vehicles").select("id").eq("workspace_id",s.workspaceId)
+   .eq("id",vehicleId).maybeSingle();
+  if(!vehicle)return NextResponse.json({error:"Veículo selecionado não encontrado."},{status:404});
+ }
+ if(driverId){
+  const {data:driver}=await s.db.from("drivers").select("id").eq("workspace_id",s.workspaceId)
+   .eq("id",driverId).maybeSingle();
+  if(!driver)return NextResponse.json({error:"Motorista selecionado não encontrado."},{status:404});
+ }
  const config=safeConfig(body.config);
  const ciot=typeof body.ciot==="string"?body.ciot.replace(/\D/g,"").slice(0,12):r.draft.ciot;
  const existing=r.draft.checklist&&typeof r.draft.checklist==="object"?r.draft.checklist:{};
  const {data:updated,error}=await s.db.from("fiscal_drafts").update({
-  vehicle_id:body.vehicleId,driver_id:body.driverId,ciot,
+  vehicle_id:vehicleId,driver_id:driverId,ciot,
   checklist:{...existing,cte_provider_config:config,fiscal_approval:false},
  }).eq("id",body.draftId).eq("workspace_id",s.workspaceId).eq("status","draft")
  .eq("updated_at",r.draft.updated_at).select("id").maybeSingle();
