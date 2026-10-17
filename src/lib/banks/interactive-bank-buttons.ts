@@ -33,3 +33,21 @@ export function parseEvolutionBankButtonClick(data:unknown){
  if(number!==jid.split("@")[0]||!/^[a-zA-Z0-9_-]{8,150}$/.test(messageId))return null;
  return {sender:number,messageId,buttonId:d.buttonId as string,reference:ref};
 }
+
+/**
+ * Evolution Go v1 also delivers carousel quick replies as ordinary "message"
+ * webhooks (templateButtonReplyMessage), not only "ButtonClick" events.
+ * Never interpret a manually typed button ID as a verified button click.
+ */
+export function readEvolutionGoBankReply(message:unknown):string|null {
+ if(!message||typeof message!=="object"||Array.isArray(message))return null;
+ const m=message as Record<string,unknown>;
+ const template=m.templateButtonReplyMessage;
+ const buttons=m.buttonsResponseMessage;
+ const toObject=(value:unknown):Record<string,unknown> =>
+  value&&typeof value==="object"&&!Array.isArray(value) ? value as Record<string,unknown> : {};
+ const first=toObject(template).selectedID;
+ const second=toObject(buttons).selectedButtonId;
+ const candidate=typeof first==="string"?first:typeof second==="string"?second:null;
+ return readBankButtonId(candidate)?candidate:null;
+}
