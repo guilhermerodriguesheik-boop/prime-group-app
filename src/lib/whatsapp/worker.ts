@@ -5,6 +5,7 @@ import { summarizeFiscalXml } from "@/lib/assistant/fiscal-xml";
 import { chooseAiProfile } from "@/lib/ai/cost-routing";
 import {detectBankReportIntent} from "@/lib/banks/report-intent";
 import {parseWhatsAppBankNumber} from "@/lib/banks/whatsapp-classification";
+import {firstBankButtons,extraBankButtons,readBankButtonId} from "@/lib/banks/interactive-bank-buttons";
 
 type Obj = Record<string, unknown>;
 type Event = {
@@ -91,10 +92,30 @@ async function sendText(to: string, body: string) {
 }
 
 
+/** Send genuine quick-reply buttons, not fake text links or automatic bookkeeping. */
+async function sendEvolutionGoBankButtons(to:string,body:string,outboxId:string,more=false){
+ if(!isEvolutionGoProvider())throw new Error("Botões exigem Evolution Go");
+ const {base,token}=evolutionGoConfig();
+ const number=to.replace(/\D/g,"");
+ if(!/^[0-9]{10,15}$/.test(number))throw new Error("Recipient invalid");
+ const buttons=more?extraBankButtons(outboxId):firstBankButtons(outboxId);
+ const response=await fetch(base+"/send/button",{
+  method:"POST",cache:"no-store",signal:AbortSignal.timeout(15000),
+  headers:{apikey:token,"Content-Type":"application/json"},
+  body:JSON.stringify({
+   number,title:more?"Mais opções":"Prime Finance",
+   description:body.slice(0,450),
+   footer:"Classificar apenas · sem lançar pagamento",buttons
+  })
+ });
+ if(!response.ok)throw new Error("Evolution Go /send/button HTTP "+response.status);
+}
+
 // Automatic reminders may use only the already-configured Evolution Go provider.
 // Do not route scheduled financial notifications through legacy Meta configuration.
-export async function sendScheduledWhatsAppMessage(to:string,body:string) {
+export async function sendScheduledWhatsAppMessage(to:string,body:string,bankCardOutboxId?:string|null) {
   if(!isEvolutionGoProvider())throw new Error("Canal Evolution Go não está ativo.");
+  if(bankCardOutboxId)return sendEvolutionGoBankButtons(to,body,bankCardOutboxId);
   return sendText(to,body);
 }
 
@@ -345,6 +366,39 @@ export async function processWhatsAppQueue(maxMessages=1) {
       if (!context.linked) {
         await rpc("whatsapp_finish_event",{p_secret:secret,p_event_id:event.id,p_state:"ignored"});
         continue;
+      }
+      // Verified Evolution Go ButtonClick: outbox UUID ties action to one movement.
+      // The database verifies inbound event payload, linked phone, outbox ownership,
+      // successful send and freshness. Never infer the movement from a number/amount.
+      const button=event.type==="interactive"?readBankButtonId(event.body):null;
+      if(button){
+       const action=await rpc<{ok:boolean;type?:"more"|"classified";reason?:string;
+         outboxId?:string;amount?:string|number;destination?:string}>(
+        "prime_bank_card_button_action",{
+         p_secret:secret,p_event_id:event.id,p_button_id:event.body
+        });
+       let answer:string;
+       if(!action.ok){
+        answer="Este botão não está mais disponível. Solicite um novo relatório pelo WhatsApp ou use a tela Bancos.";
+       }else if(action.type==="more"){
+        await sendEvolutionGoBankButtons(event.from||"",
+         "Escolha a área para esta mesma movimentação:",button.outboxId,true);
+        answer="Opções adicionais exibidas.";
+       }else{
+        const area=action.destination==="prime"?"Empresa":
+         action.destination==="personal"?"Pessoal":
+         action.destination==="interest"?"Empréstimos":
+         action.destination==="transfer"?"Transferência":"Pendente";
+        answer="Classificação salva: "+area+" · "+
+         Number(action.amount||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+
+         ". A tela Bancos foi atualizada. Nenhuma baixa ou lançamento financeiro foi criado.";
+        await sendText(event.from||"",answer);
+       }
+       await rpc("whatsapp_finish_event",{
+        p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:answer
+       });
+       await rpc("whatsapp_mark_reply_sent",{p_secret:secret,p_event_id:event.id});
+       processed++;continue;
       }
       // A verified linked phone may ask for its own read-only bank report without AI
       // quota or model interpretation. No bank posting or financial classification.
