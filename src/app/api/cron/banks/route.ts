@@ -4,7 +4,7 @@ import {createClient} from "@supabase/supabase-js";
 import {syncBankConnection} from "@/lib/banks/sync";
 import {pluggyReady} from "@/lib/banks/pluggy";
 import {ensurePluggyWebhooks} from "@/lib/banks/webhook-setup";
-import {primeRpc,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
+import {queueBankReviewDigests,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -67,7 +67,7 @@ export async function GET(req:Request){
  const failed=results.filter(r=>!r.ok).length;
  let digest:unknown={queued:0};
  try{
-  const queued=await primeRpc<number>("prime_queue_bank_review_digest",{});
+  const queued=await queueBankReviewDigests();
   // Same outgoing WhatsApp queue used by existing daily reminders.
   const messages=queued>0?await runPrimeOutbox():{sent:0};
   digest={queued,messages};
