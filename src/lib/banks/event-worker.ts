@@ -1,5 +1,5 @@
 import {pluggyAccounts,pluggyApiKey,pluggyItem,pluggyTransactions} from "@/lib/banks/pluggy";
-import {primeRpc,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
+import {primeRpc,queueBankReviewDigests,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
 import {createClient} from "@supabase/supabase-js";
 import {allowPersonalItem} from "@/lib/banks/sync";
 type BankEvent={id:string;itemId:string;event:string};
@@ -75,6 +75,12 @@ export async function drainPluggyEventInbox(limit=2){
    failed++;
   }
  }
- if(completed)await runPrimeOutbox();
+ if(completed){
+  // Consolidates only newly imported POSTED movements, including all active accounts.
+  const queued=await queueBankReviewDigests().catch(error=>{
+   console.error("Bank digest queue failed",error instanceof Error?error.message:"unknown");return 0;
+  });
+  if(queued>0)await runPrimeOutbox();
+ }
  return {claimed:items.length,completed,failed};
 }

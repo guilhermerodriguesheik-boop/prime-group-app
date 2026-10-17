@@ -10,6 +10,7 @@ import {FinanceRefresh} from "@/components/finance/finance-refresh";
 import {cargoCosts} from "@/lib/fiscal/cargo-costs";
 import {buildCargoLedger,type LedgerDraft,type LedgerEmail} from "@/lib/fiscal/simple-cargo-ledger";
 import {applyManualBalanceReceipt} from "@/lib/fiscal/manual-balance";
+import type {ReviewCargo,ReviewRecurring} from "@/lib/finance/bank-review-suggestions";
 
 export const dynamic="force-dynamic";
 
@@ -66,10 +67,10 @@ export default async function FinanceiroPage(){
  const billData=[
   ...data.payables.filter(p=>financeIds.includes(p.workspace_id)).map(p=>({
    id:p.id,workspace_id:p.workspace_id,description:p.description,amount:p.amount,
-   settled:p.paid_amount,status:p.status,kind:"payable" as const})),
+   settled:p.paid_amount,status:p.status,due_date:p.due_date,kind:"payable" as const})),
   ...data.receivables.filter(p=>financeIds.includes(p.workspace_id)).map(p=>({
    id:p.id,workspace_id:p.workspace_id,description:p.description,amount:p.amount,
-   settled:p.received_amount,status:p.status,kind:"receivable" as const})),
+   settled:p.received_amount,status:p.status,due_date:p.due_date,kind:"receivable" as const})),
  ];
  const ops=(cargoOps.data||[]) as Array<{cargo_reference:string;driver_pay:number|string;driver_paid:boolean;
   helper_count:number;helper_rate:number|string;helpers_paid:boolean;diesel:number|string;tolls:number|string;
@@ -96,6 +97,37 @@ export default async function FinanceiroPage(){
  }).format(new Date());
  const past=pending.filter(p=>p.due_date<today);
  const recurring=data.recurringEntries.filter(e=>ids.has(e.workspace_id)&&e.active&&e.type==="expense");
+ const recurringHints:ReviewRecurring[]=[
+  ...fixed.filter(x=>x.frequency==="monthly").map(x=>({
+   workspace_id:x.workspace_id,description:x.description,amount:x.amount,
+   due_day:x.due_day,frequency:x.frequency})),
+  ...recurring.filter(x=>x.frequency==="monthly"&&typeof x.due_day==="number").map(x=>({
+   workspace_id:x.workspace_id,description:x.name,amount:x.amount,
+   due_day:Number(x.due_day),frequency:x.frequency})),
+ ];
+ const cargoHints=new Map<string,ReviewCargo>();
+ for(const email of (cargoEmails.data||[]) as LedgerEmail[]){
+  if(email.event_kind!=="period_payment"||!email.email_date)continue;
+  for(const line of email.ortobom_financial_lines||[]){
+   const reference=String(line.cargo_reference||"").replace(/\D/g,"").replace(/^0+(?=\d)/,"");
+   if(!reference)continue;
+   const value=Number(line.declared_balance??NaN);
+   if(!Number.isFinite(value)||value<=0)continue;
+   const workspaceId=primeIds[0];if(!workspaceId)continue;
+   cargoHints.set(workspaceId+":"+reference,{
+    workspace_id:workspaceId,reference:reference.padStart(6,"0"),
+    amount:value,date:email.email_date.slice(0,10)});
+  }
+ }
+ for(const op of ops){
+  if(!op.manual_settled_on||!op.manual_settled_amount)continue;
+  const workspaceId=primeIds[0];if(!workspaceId)continue;
+  const key=workspaceId+":"+op.cargo_reference;
+  if(!cargoHints.has(key))cargoHints.set(key,{
+   workspace_id:workspaceId,reference:op.cargo_reference.padStart(6,"0"),
+   amount:Number(op.manual_settled_amount),date:op.manual_settled_on});
+ }
+
  const frequencyLabel=(v:string)=>v==="weekly"?"semanal":v==="quarterly"?"trimestral":v==="yearly"?"anual":"mensal";
  return <>
   <Header title="Financeiro" subtitle="Pagamentos pendentes, despesas recorrentes e contas em um lugar"/>
@@ -185,7 +217,7 @@ export default async function FinanceiroPage(){
    {!fixed.length&&!recurring.length&&<tr><td colSpan={4}>Nenhuma despesa recorrente cadastrada.</td></tr>}
   </tbody></table></div>
   <SectionTitle title="Conciliação bancária" hint="A baixa só ocorre após você vincular o extrato à conta correta"/>
-  <BankBillMatcher movements={unmatched} bills={billData}
+  <BankBillMatcher movements={unmatched} bills={billData} recurring={recurringHints} cargos={[...cargoHints.values()]}
    matches={(bankMatches.data||[]) as Array<{bank_transaction_id:string;workspace_id:string;bill_kind:string;bill_id:string;amount:number|string;created_at:string}>}
    accountNames={bankNames}/>
   <p className="metric-foot" style={{marginTop:12}}>Baixas por e-mail da Ortobom e baixas manuais

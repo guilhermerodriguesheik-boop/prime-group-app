@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { pluggyAccounts, pluggyApiKey, pluggyItem, pluggyReady } from "@/lib/banks/pluggy";
 import { allowPersonalItem, syncBankConnection } from "@/lib/banks/sync";
+import {queueBankReviewDigests,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -165,7 +166,16 @@ export async function POST(request:Request){
     if(!pluggyReady())return json({error:"Pluggy não configurada."},503);
     if(c.last_synced_at && Date.now()-Date.parse(c.last_synced_at)<10*60_000 && body.force!==true)
       return json({ok:true,cached:true});
-    try{const result=await syncBankConnection(db,c,120);return json({ok:true,...result});}
+    try{
+      const result=await syncBankConnection(db,c,120);
+      if(result.newTransactions>0){
+        try{
+          const queued=await queueBankReviewDigests();
+          if(queued>0)await runPrimeOutbox();
+        }catch(error){console.error("Bank review delivery deferred",error instanceof Error?error.message:"unknown");}
+      }
+      return json({ok:true,...result});
+    }
     catch(e){return json({error:e instanceof Error?e.message:"Falha de sincronização."},502);}
   }
   if(action==="review"){

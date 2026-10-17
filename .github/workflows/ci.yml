@@ -41,6 +41,9 @@ jobs:
       - name: Ortobom financial reconciliation parser tests
         run: npm run test:ortobom-finance
 
+      - name: Bank review reconciliation suggestion tests
+        run: node --experimental-strip-types --test tests/bank-review-suggestions.test.mjs
+
       - name: Selected cargo totals and WhatsApp draft tests
         run: node --experimental-strip-types --test tests/selected-freights.test.mjs
 

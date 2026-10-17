@@ -1,15 +1,18 @@
 "use client";
 import {useState} from "react";
 import {useRouter} from "next/navigation";
+import Link from "next/link";
+import {reviewSuggestions,type ReviewCargo,type ReviewRecurring} from "@/lib/finance/bank-review-suggestions";
 type BankMovement={id:string;workspace_id:string;bank_account_id:string;occurred_on:string;
  description:string;amount:number|string;direction:"credit"|"debit";review_status:string};
 type Bill={id:string;workspace_id:string;description:string;amount:number|string;
- settled:number|string;status:string;kind:"payable"|"receivable"};
+ settled:number|string;status:string;due_date:string;kind:"payable"|"receivable"};
 type Matched={bank_transaction_id:string;workspace_id:string;bill_kind:string;
  bill_id:string;amount:number|string;created_at:string};
 const brl=(n:number|string)=>Number(n).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-export function BankBillMatcher({movements,bills,matches,accountNames}:{
- movements:BankMovement[];bills:Bill[];matches:Matched[];accountNames:Record<string,string>}){
+export function BankBillMatcher({movements,bills,matches,accountNames,recurring,cargos}:{
+ movements:BankMovement[];bills:Bill[];matches:Matched[];accountNames:Record<string,string>;
+ recurring:ReviewRecurring[];cargos:ReviewCargo[]}){
  const router=useRouter();
  const [chosen,setChosen]=useState<Record<string,string>>({});
  const [busy,setBusy]=useState(""),[error,setError]=useState("");
@@ -34,6 +37,10 @@ export function BankBillMatcher({movements,bills,matches,accountNames}:{
  return <section style={{marginTop:18}}>
   <h3 style={{marginBottom:6}}>Conciliar extrato e contas cadastradas</h3>
   <p className="metric-foot">
+   Os possíveis cruzamentos são apenas avisos para conferência: nenhuma conta é quitada
+   ou classificada sem você confirmar. <Link href="/bancos">Classifique outras movimentações em Bancos</Link>.
+  </p>
+  <p className="metric-foot">
    Escolha uma movimentação e a obrigação correspondente. Somente lançamentos confirmados pelo banco,
    no mesmo ambiente e com valor até o saldo pendente, podem dar baixa. Uma movimentação só pode ser usada uma vez.
   </p>
@@ -48,10 +55,14 @@ export function BankBillMatcher({movements,bills,matches,accountNames}:{
      &&Number(b.amount)-Number(b.settled)>=Number(t.amount)-.005
      &&!["paid","received","cancelled"].includes(b.status));
    const selected=eligible.find(b=>b.id===chosen[t.id]);
+   const hints=reviewSuggestions(t,bills,recurring,cargos);
    return <tr key={t.id}>
     <td>{t.occurred_on}</td>
     <td>{accountNames[t.bank_account_id]||"Banco"}</td>
-    <td style={{maxWidth:210,overflowWrap:"anywhere"}}>{t.description}</td>
+    <td style={{maxWidth:250,overflowWrap:"anywhere"}}>{t.description}
+     {hints.map((hint,i)=><small key={i} style={{display:"block",marginTop:4,
+      color:"var(--warning-text,#92400e)"}}>{hint} · conferir antes de baixar</small>)}
+    </td>
     <td><strong>{t.direction==="debit"?"− ":"+ "}{brl(t.amount)}</strong></td>
     <td><select value={chosen[t.id]||""} onChange={e=>setChosen(old=>({...old,[t.id]:e.target.value}))}>
      <option value="">{eligible.length?"Selecionar conta...":"Cadastre a conta antes"}</option>

@@ -4,6 +4,7 @@ import {createClient} from "@supabase/supabase-js";
 import {syncBankConnection} from "@/lib/banks/sync";
 import {pluggyReady} from "@/lib/banks/pluggy";
 import {ensurePluggyWebhooks} from "@/lib/banks/webhook-setup";
+import {queueBankReviewDigests,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -64,5 +65,15 @@ export async function GET(req:Request){
   }
  }));
  const failed=results.filter(r=>!r.ok).length;
- return respond({processed:results.length,failed,webhooks,results},failed?503:200);
+ let digest:unknown={queued:0};
+ try{
+  const queued=await queueBankReviewDigests();
+  // Same outgoing WhatsApp queue used by existing daily reminders.
+  const messages=queued>0?await runPrimeOutbox():{sent:0};
+  digest={queued,messages};
+ }catch(error){
+  console.error("Bank review summary pending",error instanceof Error?error.message:"unknown");
+  digest={error:"digest_queued_for_retry"};
+ }
+ return respond({processed:results.length,failed,webhooks,results,digest},failed?503:200);
 }
