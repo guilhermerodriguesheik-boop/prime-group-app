@@ -7,7 +7,7 @@ import {detectBankReportIntent} from "@/lib/banks/report-intent";
 import {parseWhatsAppBankNumber} from "@/lib/banks/whatsapp-classification";
 import {readBankButtonId} from "@/lib/banks/interactive-bank-buttons";
 import {bankCarouselPayload} from "@/lib/banks/evolution-go-carousel";
-import {runPrimeOutbox as runPrimeOutboxFromWhatsApp} from "@/lib/whatsapp/prime-automations";
+
 
 type Obj = Record<string, unknown>;
 type Event = {
@@ -432,7 +432,14 @@ export async function processWhatsAppQueue(maxMessages=1) {
         await rpc("whatsapp_mark_reply_sent",{
          p_secret:secret,p_event_id:event.id
         });
-        try{if(batch.selected>0)await runPrimeOutboxFromWhatsApp();}
+        try{
+          if(batch.selected>0){
+            // Load sender after this worker is initialized: the sender itself
+            // imports sendScheduledWhatsAppMessage from this module.
+            const {runPrimeOutbox}=await import("@/lib/whatsapp/prime-automations");
+            await runPrimeOutbox(2);
+          }
+        }
         catch(error){console.error("WhatsApp bank cards awaiting scheduled sender",
            error instanceof Error?error.message:"unknown");}
         processed++;continue;
