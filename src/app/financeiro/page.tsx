@@ -5,6 +5,13 @@ import {getFinanceSnapshot} from "@/lib/finance/data";
 import {brl,shortDate,workspaceLabel} from "@/lib/finance/format";
 import {createClient} from "@/lib/supabase/server";
 import type {SupabaseClient} from "@supabase/supabase-js";
+import {BankBillMatcher} from "@/components/finance/bank-bill-matcher";
+import {FinanceRefresh} from "@/components/finance/finance-refresh";
+import {cargoCosts} from "@/lib/fiscal/cargo-costs";
+import {buildCargoLedger,type LedgerDraft,type LedgerEmail} from "@/lib/fiscal/simple-cargo-ledger";
+import {applyManualBalanceReceipt} from "@/lib/fiscal/manual-balance";
+
+export const dynamic="force-dynamic";
 
 type Fixed={id:string;workspace_id:string;description:string;amount:number|string;
  frequency:"weekly"|"monthly"|"quarterly"|"yearly";due_day:number;active:boolean};
@@ -17,6 +24,61 @@ export default async function FinanceiroPage(){
   .in("workspace_id",[...ids]).eq("active",true).order("due_day").limit(100):
   {data:[] as Fixed[],error:null};
  const fixed=(response.data||[]) as Fixed[];
+ const primeIds=data.workspaces.filter(w=>w.kind==="prime").map(w=>w.id);
+ const financeIds=[...ids];
+ const [bankConnections,bankAccounts,bankMoves,bankMatches,cargoOps,cargoDrafts,cargoEmails]=await Promise.all([
+  db.from("bank_connections").select("id,workspace_id,display_name,provider,status,last_synced_at,last_error,archived_at")
+   .eq("owner_id",data.user.id).is("archived_at",null).order("created_at",{ascending:false}).limit(15),
+  db.from("bank_accounts").select("id,workspace_id,display_name,kind,currency,balance,balance_updated_at")
+   .eq("owner_id",data.user.id).limit(100),
+  db.from("bank_transactions")
+   .select("id,workspace_id,bank_account_id,occurred_on,description,amount,direction,review_status")
+   .eq("owner_id",data.user.id).eq("provider_status","POSTED")
+   .eq("review_status","pending").order("occurred_on",{ascending:false}).limit(50),
+  db.from("prime_bank_bill_matches").select("bank_transaction_id,workspace_id,bill_kind,bill_id,amount,created_at")
+   .eq("owner_id",data.user.id).order("created_at",{ascending:false}).limit(40),
+  primeIds.length?db.from("prime_cargo_operations")
+   .select("cargo_reference,workspace_id,driver_pay,driver_paid,helper_count,helper_rate,helpers_paid,diesel,tolls,other_expenses,manual_settled_on,manual_settled_amount")
+   .in("workspace_id",primeIds).limit(2000):Promise.resolve({data:[],error:null}),
+  primeIds.length?db.from("fiscal_drafts").select("cargo_reference,freight_value")
+   .in("workspace_id",primeIds).eq("document_type","cte").limit(2000):Promise.resolve({data:[],error:null}),
+  primeIds.length?db.from("ortobom_financial_emails")
+   .select("event_kind,email_date,ortobom_financial_lines(cargo_reference,declared_freight,declared_advance,declared_balance)")
+   .in("workspace_id",primeIds).order("email_date").limit(2000):Promise.resolve({data:[],error:null}),
+ ]);
+ const errors=[bankConnections.error,bankAccounts.error,bankMoves.error,bankMatches.error,
+  cargoOps.error,cargoDrafts.error,cargoEmails.error].filter(Boolean);
+ const bankNames=Object.fromEntries((bankAccounts.data||[]).map(a=>[a.id,a.display_name]));
+ const eligibleAccounts=new Set((bankAccounts.data||[])
+   .filter(a=>a.kind==="BANK"&&a.currency==="BRL").map(a=>a.id));
+ const unmatched=(bankMoves.data||[]).filter(m=>eligibleAccounts.has(m.bank_account_id)
+   &&financeIds.includes(m.workspace_id)) as {
+   id:string;workspace_id:string;bank_account_id:string;occurred_on:string;
+   description:string;amount:number|string;direction:"credit"|"debit";review_status:string;
+  }[];
+ const billData=[
+  ...data.payables.filter(p=>financeIds.includes(p.workspace_id)).map(p=>({
+   id:p.id,workspace_id:p.workspace_id,description:p.description,amount:p.amount,
+   settled:p.paid_amount,status:p.status,kind:"payable" as const})),
+  ...data.receivables.filter(p=>financeIds.includes(p.workspace_id)).map(p=>({
+   id:p.id,workspace_id:p.workspace_id,description:p.description,amount:p.amount,
+   settled:p.received_amount,status:p.status,kind:"receivable" as const})),
+ ];
+ const ops=(cargoOps.data||[]) as Array<{cargo_reference:string;driver_pay:number|string;driver_paid:boolean;
+  helper_count:number;helper_rate:number|string;helpers_paid:boolean;diesel:number|string;tolls:number|string;
+  other_expenses:number|string;manual_settled_on:string|null;manual_settled_amount:number|string|null}>;
+ const cargoById=new Map(ops.map(o=>[o.cargo_reference,o]));
+ const cargoList=buildCargoLedger((cargoDrafts.data||[]) as LedgerDraft[],(cargoEmails.data||[]) as LedgerEmail[]);
+ const cargoOutstanding=cargoList.reduce((sum,c)=>sum+Number(
+  applyManualBalanceReceipt(c,cargoById.get(c.cargo.replace(/^0+(?=\\d)/,""))||null).pending||0),0);
+ const crewTotals=ops.reduce((sum,o)=>{
+  const item=cargoCosts(o,null);
+  return {drivers:sum.drivers+item.driverDue,helpers:sum.helpers+item.helperDue};
+ },{drivers:0,helpers:0});
+ const bankLast=(bankConnections.data||[]).map(c=>c.last_synced_at?Date.parse(c.last_synced_at):0);
+ const lastBankSync=Math.max(0,...bankLast);
+ const staleBank=lastBankSync?Date.now()-lastBankSync>24*60*60*1000:true;
+
  const pending=data.payables.filter(p=>ids.has(p.workspace_id)&&["open","overdue","partial"].includes(p.status))
   .map(p=>({...p,remaining:Math.max(0,Number(p.amount)-Number(p.paid_amount))}))
   .filter(p=>p.remaining>0)
@@ -31,6 +93,10 @@ export default async function FinanceiroPage(){
  return <>
   <Header title="Financeiro" subtitle="Pagamentos pendentes, despesas recorrentes e contas em um lugar"/>
   <div className="quick">
+   <FinanceRefresh/>
+   <Link href="/fiscal">Conferir cargas e equipe</Link>
+   <Link href="/juros">Empréstimos</Link>
+   <Link href="/bancos">Conectar / atualizar bancos</Link>
    <Link href="/planejamento">Ver todos os vencimentos e lembretes</Link>
    <Link href="/recorrentes">Gerenciar contas recorrentes</Link>
    <Link href="/contas">Contas e cartões</Link>
@@ -41,6 +107,34 @@ export default async function FinanceiroPage(){
    <Metric label="Contas vencidas" value={brl(past.reduce((s,p)=>s+p.remaining,0))} tone={past.length?"warning":undefined}/>
    <Metric label="Compromissos recorrentes ativos" value={String(recurring.length+fixed.length)}/>
   </div>
+  <SectionTitle title="Visão entre os sistemas" hint="Valores separados para evitar somar duas vezes a mesma obrigação"/>
+  <div className="grid grid-3">
+   <Metric label="Saldos de fretes pendentes · Ortobom" value={brl(cargoOutstanding)}
+    tone={cargoOutstanding>0?"warning":undefined}/>
+   <Metric label="Motoristas a pagar · cargas" value={brl(crewTotals.drivers)}/>
+   <Metric label="Ajudantes a pagar · cargas" value={brl(crewTotals.helpers)}/>
+   <Metric label="Empréstimos · capital a receber" value={brl(data.interest.openIn)}/>
+   <Metric label="Extratos bancários aguardando conciliação" value={String(unmatched.length)}
+    tone={unmatched.length>0?"warning":undefined}/>
+  </div>
+  <p className="metric-foot">Fretes, equipe, empréstimos e contas possuem origens diferentes.
+   Os totais acima são informativos e não são somados automaticamente ao caixa.
+   Registrar uma baixa operacional não cria uma movimentação bancária.</p>
+  <SectionTitle title="Integrações bancárias" hint="Conexões disponíveis e data do último dado importado"/>
+  {errors.length>0&&<div className="notice attention">
+   Algumas fontes estão indisponíveis. Confira as integrações antes de usar o resumo.</div>}
+  <div className="table-wrap"><table><thead><tr><th>Banco</th><th>Status</th><th>Última importação</th></tr></thead><tbody>
+   {(bankConnections.data||[]).map(c=><tr key={c.id}>
+    <td>{c.display_name}</td><td>{c.status}</td>
+    <td>{c.last_synced_at?new Date(c.last_synced_at).toLocaleString("pt-BR",{timeZone:"America/Sao_Paulo"}):"Sem sincronização"}
+     {c.last_error&&<small style={{display:"block"}}>Atenção: {c.last_error}</small>}</td>
+   </tr>)}
+   {!bankConnections.data?.length&&<tr><td colSpan={3}>Nenhuma conexão bancária ativa.</td></tr>}
+  </tbody></table></div>
+  {staleBank&&<p className="notice attention">Extratos podem estar desatualizados.
+   Abra <Link href="/bancos">Bancos</Link> e solicite atualização quando a instituição permitir.</p>}
+  <p className="metric-foot">O resumo é recarregado periodicamente enquanto esta página estiver aberta,
+   mas o Open Finance não fornece garantia de atualização instantânea. A integração bancária é somente leitura.</p>
   <SectionTitle title="Pagamentos pendentes" hint="Contas registradas na Prime e no Pessoal"/>
   <div className="record-toolbar">
    <RecordControl category="payable" workspace="prime" label="+ Conta a pagar Prime"/>
@@ -78,6 +172,13 @@ export default async function FinanceiroPage(){
    </tr>)}
    {!fixed.length&&!recurring.length&&<tr><td colSpan={4}>Nenhuma despesa recorrente cadastrada.</td></tr>}
   </tbody></table></div>
+  <SectionTitle title="Conciliação bancária" hint="A baixa só ocorre após você vincular o extrato à conta correta"/>
+  <BankBillMatcher movements={unmatched} bills={billData}
+   matches={(bankMatches.data||[]) as Array<{bank_transaction_id:string;workspace_id:string;bill_kind:string;bill_id:string;amount:number|string;created_at:string}>}
+   accountNames={bankNames}/>
+  <p className="metric-foot" style={{marginTop:12}}>Baixas por e-mail da Ortobom e baixas manuais
+   de cargas permanecem identificadas no Transporte. O extrato é mantido separado até
+   a conciliação de cada obrigação, impedindo pagamentos duplicados.</p>
   <p className="metric-foot" style={{marginTop:12}}>
    Estes valores representam obrigações cadastradas, não pagamentos bancários comprovados.
    Para editar uma recorrência, acesse <Link href="/recorrentes">Despesas recorrentes</Link>.
