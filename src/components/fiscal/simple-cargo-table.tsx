@@ -67,13 +67,22 @@ export function SimpleCargoTable({cargo,connected}:{cargo:LedgerCargo[];connecte
    <table>
     <thead><tr><th>Carga</th><th>Frete</th><th>Adiantamento</th>
      <th>Saldo recebido</th><th>Saldo pendente</th><th>Situação</th></tr></thead>
-    <tbody>{cargo.map(c=><tr key={c.cargo}>
-     <td><strong>{c.cargo}</strong></td>
-     <td>{brl(c.freight)}</td><td>{brl(c.advance)}</td>
-     <td>{brl(c.received)}</td><td><strong>{brl(c.pending)}</strong></td>
-     <td><span className={"badge "+(c.status==="Pago"?"green":c.status==="Sem valor"?"orange":"")}>
-      {c.status}</span></td>
-    </tr>)}
+    <tbody>{cargo.map(c=>{
+     const settled=c.status==="Pago"||c.status==="Adiantado";
+     const owing=c.status==="Pendente";
+     const color=settled?"#166534":owing?"#b91c1c":"#475569";
+     return <tr key={c.cargo} style={{backgroundColor:settled?"#ebf8ee":owing?"#fff0f0":undefined}}>
+      <td><strong style={{color}}>{c.cargo}</strong></td>
+      <td>{brl(c.freight)}</td><td>{brl(c.advance)}</td>
+      <td style={{color:settled?"#166534":undefined,fontWeight:settled?700:undefined}}>{brl(c.received)}</td>
+      <td><strong style={{color:owing?"#b91c1c":settled?"#166534":undefined}}>{brl(c.pending)}</strong></td>
+      <td><span style={{display:"inline-block",borderRadius:999,padding:"4px 10px",
+       fontWeight:700,fontSize:12,color,
+       backgroundColor:settled?"#d1fae5":owing?"#fee2e2":"#e2e8f0",
+       border:"1px solid "+(settled?"#86efac":owing?"#fca5a5":"#cbd5e1")}}>
+       {c.status}</span></td>
+     </tr>;
+    })}
     {!cargo.length&&<tr><td colSpan={6}>Ainda não há cargas importadas.</td></tr>}
     </tbody>
    </table>
