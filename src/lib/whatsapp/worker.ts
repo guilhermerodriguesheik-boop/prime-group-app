@@ -5,7 +5,8 @@ import { summarizeFiscalXml } from "@/lib/assistant/fiscal-xml";
 import { chooseAiProfile } from "@/lib/ai/cost-routing";
 import {detectBankReportIntent} from "@/lib/banks/report-intent";
 import {parseWhatsAppBankNumber} from "@/lib/banks/whatsapp-classification";
-import {firstBankButtons,extraBankButtons,readBankButtonId} from "@/lib/banks/interactive-bank-buttons";
+import {readBankButtonId} from "@/lib/banks/interactive-bank-buttons";
+import {bankCarouselPayload} from "@/lib/banks/evolution-go-carousel";
 
 type Obj = Record<string, unknown>;
 type Event = {
@@ -98,30 +99,8 @@ async function sendEvolutionGoBankButtons(to:string,body:string,outboxId:string,
  const {base,token}=evolutionGoConfig();
  const number=to.replace(/\D/g,"");
  if(!/^[0-9]{10,15}$/.test(number))throw new Error("Recipient invalid");
- const buttons=more?extraBankButtons(outboxId):firstBankButtons(outboxId);
  const headers={apikey:token,"Content-Type":"application/json"};
- // Legacy ButtonsMessage receives HTTP 500 (often underlying WhatsApp 405) on
- // Evolution GO 0.7.x consumer accounts. The InteractiveMessage carousel uses
- // NativeFlow and accepts clickable REPLY identifiers across WhatsApp clients.
- const art="https://prime-finance-ochre.vercel.app/api/banks/card-image";
- const payload={
-  number,body:body.slice(0,280),
-  footer:"Prime Finance · Classificação sem baixa",
-  cards:[
-   {
-    header:{title:"Classificação bancária",imageUrl:art},
-    body:"Escolha Empresa, Pessoal ou Mais opções.",
-    footer:"Movimentação individual",
-    buttons:buttons.map(button=>({...button,type:"REPLY"}))
-   },
-   {
-    header:{title:"Outras categorias",imageUrl:art},
-    body:"Também é possível classificar como Empréstimos, Transferência ou Pendente.",
-    footer:"Mesmo movimento, escolha apenas uma área",
-    buttons:extraBankButtons(outboxId).map(button=>({...button,type:"REPLY"}))
-   }
-  ]
- };
+ const payload=bankCarouselPayload(number,body,outboxId,more);
  // Send a single carousel containing the options for ONE bank movement.
  // Do not re-try /send/button once its compatibility failure is established.
  const response=await fetch(base+"/send/carousel",{
