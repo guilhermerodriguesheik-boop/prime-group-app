@@ -116,6 +116,7 @@ async function sendEvolutionGoBankButtons(to:string,body:string,outboxId:string,
  const data=await response.json().catch(()=>null) as
   {message?:string;data?:{Info?:{ID?:string;Type?:string}}}|null;
  if(!data?.data?.Info?.ID)throw new Error("Evolution Go carousel não confirmou ID de mensagem");
+ return data.data.Info.ID;
 }
 
 
@@ -419,12 +420,28 @@ export async function processWhatsAppQueue(maxMessages=1) {
          p_secret:secret,p_event_id:event.id,p_owner_id:context.userId,
          p_mode:bankRequest.period
         });
+        // Never claim delivery before running the actual provider sends.
+        // Retries/duplicate requests reuse cards already accepted in the last day.
+        let dispatched={sent:0,failed:0};
+        if(batch.queued>0){
+         try{
+          const {runPrimeOutbox}=await import("@/lib/whatsapp/prime-automations");
+          dispatched=await runPrimeOutbox(2);
+         }catch(error){console.error("WhatsApp bank cards awaiting scheduled sender",
+           error instanceof Error?error.message:"unknown");}
+        }
         const answer=batch.total===0
          ?"Nenhum lançamento bancário disponível para esse período. "+
           "Os dados dependem da última importação do banco."
-         :"Preparei "+batch.selected+" movimentação(ões) em cartões separados, "+
-          "cada uma com botões para Empresa, Pessoal e outras áreas."+
-          (batch.truncated?" Existem mais movimentos; consulte o Financeiro para o período completo.":"");
+         :batch.queued===0
+          ?"As "+batch.alreadyQueued+" movimentações desse período já foram encaminhadas anteriormente. "+
+           "Não reenviei para evitar mensagens duplicadas."
+          :"Encontrei "+batch.selected+" movimentações bancárias. "+
+           dispatched.sent+" cartão(ões) aceitos pela Evolution Go; "+
+           (Math.max(0,batch.queued-dispatched.sent))+" ainda sem confirmação de envio. "+
+           "Cada movimentação tem seus próprios botões. "+
+           "Aceitação da API não confirma entrega no aparelho."+
+           (batch.truncated?" Há mais movimentações no Financeiro.":"");
         await sendText(event.from||"",answer);
         await rpc("whatsapp_finish_event",{
          p_secret:secret,p_event_id:event.id,p_state:"processed",p_reply:answer
@@ -432,16 +449,6 @@ export async function processWhatsAppQueue(maxMessages=1) {
         await rpc("whatsapp_mark_reply_sent",{
          p_secret:secret,p_event_id:event.id
         });
-        try{
-          if(batch.selected>0){
-            // Load sender after this worker is initialized: the sender itself
-            // imports sendScheduledWhatsAppMessage from this module.
-            const {runPrimeOutbox}=await import("@/lib/whatsapp/prime-automations");
-            await runPrimeOutbox(2);
-          }
-        }
-        catch(error){console.error("WhatsApp bank cards awaiting scheduled sender",
-           error instanceof Error?error.message:"unknown");}
         processed++;continue;
       }
       const limit = Math.min(500,Math.max(5,Number(process.env.WHATSAPP_DAILY_LIMIT||60)||60));
