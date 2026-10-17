@@ -31,7 +31,6 @@ export function CteSendReview({draftId}:{draftId:string}){
  const [ciotValue,setCiotValue]=useState("");
  const [vehicle,setVehicle]=useState("");
  const [driver,setDriver]=useState("");
- const [consent,setConsent]=useState(false);
  const [consultText,setConsultText]=useState("");
  const [emailStatus,setEmailStatus]=useState<{authorized:boolean;sourceLinked:boolean;existing:{status:string;recipient_email?:string}|null}|null>(null);
  const [emailBusy,setEmailBusy]=useState(false);
@@ -43,7 +42,6 @@ export function CteSendReview({draftId}:{draftId:string}){
    const json=await r.json() as Data;
    if(!r.ok)throw Error(json.error||"Não foi possível carregar a revisão.");
    setData(json);setConfig(json.preview.config);setCiotValue(json.preview.ciot||"");setVehicle(json.draft.vehicle_id||(json.vehicles.length===1?json.vehicles[0].id:""));setDriver(json.draft.driver_id||(json.drivers.length===1?json.drivers[0].id:""));
-   setConsent(false);
    const status=await fetch("/api/fiscal/cte/email-reply?draftId="+encodeURIComponent(draftId),{cache:"no-store"});
    setEmailStatus(status.ok?await status.json():null);
   }catch(e){setError(e instanceof Error?e.message:"Falha ao revisar.");}
@@ -102,7 +100,7 @@ export function CteSendReview({draftId}:{draftId:string}){
   finally{setEmailBusy(false)}
  }
  async function submit(){
-  if(!data?.preview.ready||!consent)return;
+  if(!data?.preview.ready)return;
   if(!window.confirm("CONFIRMA o envio real deste CT-e à SEFAZ? A DotCompany poderá cobrar e validar/rejeitar os dados fiscais."))return;
   if(data.preview.previousExternalCteNumber &&
    !window.confirm("Esta carga já possui CT-e nº "+data.preview.previousExternalCteNumber+
@@ -288,13 +286,9 @@ export function CteSendReview({draftId}:{draftId:string}){
            <ul>{data.preview.advisories.map((m,i)=><li key={i}>{m}</li>)}</ul></div>}
            <p>Depois de sua confirmação, a DotCompany processa a solicitação. Apenas chave e protocolo autorizados comprovam emissão.</p>
         </div>
-        <label className="fiscal-check-field"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}
-          disabled={!data.preview.ready||!!data.submission&&!data.preview.retryAllowed}/>
-          Conferi todos os dados, sei que o envio é real e autorizo a transmissão deste CT-e.
-        </label>
         <div className="fiscal-review-actions">
           <button className="button primary" type="button" onClick={()=>void submit()}
-            disabled={loading||!data.preview.ready||!consent||!!data.submission&&!data.preview.retryAllowed}><Send size={16}/> {data.preview.retryAllowed?"Confirmar nova tentativa à SEFAZ":"Confirmar e enviar à SEFAZ"}</button>
+            disabled={loading||!data.preview.ready||!!data.submission&&!data.preview.retryAllowed}><Send size={16}/> {data.preview.retryAllowed?"Confirmar nova tentativa à SEFAZ":"Confirmar e enviar à SEFAZ"}</button>
         </div>
       </>}
       {error&&<p className="fiscal-inline-alert" role="alert"><ShieldAlert size={16}/>{error}</p>}
