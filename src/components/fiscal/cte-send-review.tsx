@@ -4,10 +4,12 @@ import {useRouter} from "next/navigation";
 import {ClipboardCheck,Send,Save,X,ShieldAlert,Plus} from "lucide-react";
 import {registerDriver,registerTransportVehicle} from "@/app/cadastros/transporte/actions";
 import {correctionFromProvider} from "@/lib/fiscal/cte-recovery";
-type Config={cfop:string;tomador:string;produto_predominante:string;uf_licenciamento:string;numbering_verified:boolean};
+import {CteComplianceFields} from "@/components/fiscal/cte-compliance-fields";
+import {emptyCteCompliance,type CteCompliance} from "@/lib/fiscal/cte-compliance";
+type Config={cfop:string;tomador:string;produto_predominante:string;uf_licenciamento:string;numbering_verified:boolean;compliance:CteCompliance};
 type Preview={
  hash:string;ready:boolean;retryAllowed:boolean;missing:string[];invoiceCount:number;freightValue:number;goodsValue:number;
- grossWeight:number;cargoReference:string|null;ciot:string|null;config:Config;
+ grossWeight:number;cargoReference:string|null;ciot:string|null;rntrc:string|null;config:Config;
 };
 type Data={
  preview:Preview;retryHistory?:Array<{archived_at:string;previous_status:string;previous_error_code:string|null}>;submission:{status:string;access_key?:string|null;protocol?:string|null;error_code?:string|null;provider_response?:{message?:string;reason?:string;definitive_rejection?:boolean;reconciliation?:{checked_at?:string;cte_list_http_status?:number|null;total_rows_inspected?:number;possible_matches?:Array<Record<string,string>>;note?:string;emitter_profile_http_status?:number|null}}|null}|null;
@@ -16,7 +18,7 @@ type Data={
  drivers:Array<{id:string;name:string}>;
  error?:string;
 };
-const blank:Config={cfop:"",tomador:"",produto_predominante:"",uf_licenciamento:"",numbering_verified:false};
+const blank:Config={cfop:"",tomador:"",produto_predominante:"",uf_licenciamento:"",numbering_verified:false,compliance:emptyCteCompliance};
 export function CteSendReview({draftId}:{draftId:string}){
  const router=useRouter();
  const [open,setOpen]=useState(false);
@@ -25,6 +27,7 @@ export function CteSendReview({draftId}:{draftId:string}){
  const [error,setError]=useState("");
  const [message,setMessage]=useState("");
  const [config,setConfig]=useState<Config>(blank);
+ const [ciotValue,setCiotValue]=useState("");
  const [vehicle,setVehicle]=useState("");
  const [driver,setDriver]=useState("");
  const [consent,setConsent]=useState(false);
@@ -38,7 +41,7 @@ export function CteSendReview({draftId}:{draftId:string}){
    const r=await fetch("/api/fiscal/cte/review?draftId="+encodeURIComponent(draftId),{cache:"no-store"});
    const json=await r.json() as Data;
    if(!r.ok)throw Error(json.error||"Não foi possível carregar a revisão.");
-   setData(json);setConfig(json.preview.config);setVehicle(json.draft.vehicle_id||(json.vehicles.length===1?json.vehicles[0].id:""));setDriver(json.draft.driver_id||(json.drivers.length===1?json.drivers[0].id:""));
+   setData(json);setConfig(json.preview.config);setCiotValue(json.preview.ciot||"");setVehicle(json.draft.vehicle_id||(json.vehicles.length===1?json.vehicles[0].id:""));setDriver(json.draft.driver_id||(json.drivers.length===1?json.drivers[0].id:""));
    setConsent(false);
    const status=await fetch("/api/fiscal/cte/email-reply?draftId="+encodeURIComponent(draftId),{cache:"no-store"});
    setEmailStatus(status.ok?await status.json():null);
@@ -75,7 +78,7 @@ export function CteSendReview({draftId}:{draftId:string}){
   try{
    const r=await fetch("/api/fiscal/cte/review",{
     method:"POST",headers:{"Content-Type":"application/json","x-prime-action":"fiscal-cte-configure"},
-    body:JSON.stringify({draftId,vehicleId:vehicle,driverId:driver,config}),
+    body:JSON.stringify({draftId,vehicleId:vehicle,driverId:driver,config,ciot:ciotValue}),
    });
    const j=await r.json() as {error?:string;message?:string};
    if(!r.ok)throw Error(j.error||"Falha ao salvar a conferência.");
@@ -201,7 +204,7 @@ export function CteSendReview({draftId}:{draftId:string}){
             </select>
           </label>
           <label>Motorista
-            <select value={driver} onChange={e=>setDriver(e.target.value)} disabled={!!data.submission}>
+            <select value={driver} onChange={e=>setDriver(e.target.value)} disabled={!editable}>
               <option value="">Selecione</option>{data.drivers.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           </label>
@@ -229,9 +232,13 @@ export function CteSendReview({draftId}:{draftId:string}){
             Confirmei com o emissor anterior a sequência de CT-e e verifiquei que esta carga ainda não possui CT-e autorizado.
           </label>
         </div>
+        <CteComplianceFields value={config.compliance}
+          onChange={compliance=>setConfig(prev=>({...prev,compliance}))}
+          disabled={!editable} ciot={ciotValue} onCiotChange={setCiotValue}
+          rntrc={data.preview.rntrc}/>
         <div className="fiscal-review-actions" style={{justifyContent:"flex-start"}}>
           <button className="button" type="button" onClick={()=>setCreating(creating==="driver"?null:"driver")} disabled={loading||!editable}><Plus size={14}/> Novo motorista</button>
-          <button className="button" type="button" onClick={()=>setCreating(creating==="vehicle"?null:"vehicle")} disabled={loading||!!data.submission}><Plus size={14}/> Novo veículo</button>
+          <button className="button" type="button" onClick={()=>setCreating(creating==="vehicle"?null:"vehicle")} disabled={loading||!editable}><Plus size={14}/> Novo veículo</button>
           <a href="/cadastros/transporte" target="_blank" rel="noopener noreferrer" style={{fontSize:12}}>Ver todos os cadastros ↗</a>
         </div>
         {creating&&<form className="fiscal-review-form" onSubmit={e=>{
