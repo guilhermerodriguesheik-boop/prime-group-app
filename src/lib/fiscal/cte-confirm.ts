@@ -21,7 +21,7 @@ export type CteVehicle={id:string;plate:string;nickname:string;status:string};
 export type CteProfile={rntrc:string|null;rntrc_checked_at:string|null;cte_defaults?:unknown};
 export type CteReviewInput={
  draft:CteDraft;notes:CteInvoice[];driver:CteDriver|null;vehicle:CteVehicle|null;
- profile:CteProfile|null;configured:boolean;liveEnabled:boolean;existingSubmission:boolean;
+ profile:CteProfile|null;configured:boolean;liveEnabled:boolean;existingSubmission:boolean;retryAllowed?:boolean;
 };
 const normalize=(value:unknown)=>String(value??"").replace(/\D/g,"");
 const plate=(value:unknown)=>String(value??"").toUpperCase().replace(/[^A-Z0-9]/g,"");
@@ -51,7 +51,7 @@ export function ctePreview(input:CteReviewInput){
     draft.checklist?.previous_external_cte_key||
     draft.checklist?.previous_external_cte_number)
   missing.push("Esta carga possui indício de CT-e emitido fora do Prime Finance. Não transmitir novamente.");
- if(input.existingSubmission)missing.push("Já existe uma tentativa de transmissão para este rascunho. Consulte o resultado antes de tentar novamente.");
+ if(input.existingSubmission&&!input.retryAllowed)missing.push("Já existe uma tentativa de transmissão para este rascunho. Consulte o resultado antes de tentar novamente.");
  if(!notes.length)missing.push("NF-e da carga não localizada.");
  if(notes.length>40)missing.push("Quantidade de NF-e excede o limite de revisão de 40.");
  const ufInicio=String(notes[0]?.origin_uf||"").toUpperCase();
@@ -93,7 +93,7 @@ export function ctePreview(input:CteReviewInput){
   id:draft.id,changed:draft.updated_at,checklist:draft.checklist,
   payload,ciot:draft.ciot,goods,weight,rntrc:profile?.rntrc,checked:profile?.rntrc_checked_at
  })).digest("hex");
- return {payload,missing:unique,ready:unique.length===0,hash,invoiceCount:notes.length,
+ return {payload,missing:unique,ready:unique.length===0,retryAllowed:input.retryAllowed===true,hash,invoiceCount:notes.length,
   freightValue:value,goodsValue:goods,grossWeight:weight,ciot:draft.ciot,
   cargoReference:draft.cargo_reference,config:c};
 }
