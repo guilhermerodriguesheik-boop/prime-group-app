@@ -17,7 +17,7 @@
     "test:dotcompany-production": "node --experimental-strip-types --test tests/dotcompany-production.test.mjs",
     "test:antt-snapshot": "node --experimental-strip-types --test tests/antt-snapshot.test.mjs",
     "test:pluggy": "node --experimental-strip-types --test tests/pluggy-webhook.test.mjs",
-    "prebuild": "node scripts/ensure-cte-pessoas.mjs && node scripts/probe-cte-api-contract.mjs && node scripts/align-dotcompany-cte-serie.mjs && node scripts/sync-dotcompany-verified-rntrc.mjs && node scripts/check-dotcompany-production-readonly.mjs && node scripts/reconcile-dotcompany-indeterminate.mjs && node scripts/prepare-cte-030151-once.mjs && node scripts/attempt-cte-030151-fiscal-api-once.mjs"
+    "prebuild": "node scripts/ensure-cte-pessoas.mjs && node scripts/probe-cte-api-contract.mjs && node scripts/align-dotcompany-cte-serie.mjs && node scripts/sync-dotcompany-verified-rntrc.mjs && node scripts/check-dotcompany-production-readonly.mjs && node scripts/reconcile-dotcompany-indeterminate.mjs && node scripts/prepare-cte-030151-once.mjs && node scripts/new-cte-030151-once.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.125",
