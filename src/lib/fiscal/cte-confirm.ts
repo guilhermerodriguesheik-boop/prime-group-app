@@ -95,7 +95,7 @@ export function ctePreview(input:CteReviewInput){
    " (próximo número "+numbering.nextNumber+"). A Prime utiliza série 003. Ajuste no emissor antes de transmitir.");
  else if(numbering&&historical!==undefined&&numbering.nextNumber<=historical)
   missing.push("Numeração DotCompany não avança o último CT-e registrado na série 003 ("+historical+").");
- if(!c.numbering_verified&&!matched)
+ if(!c.numbering_verified&&!matched&&(!numbering||numbering.series==="3"))
   missing.push("Confirme a sequência fiscal com o emissor anterior antes de transmitir.");
  missing.push(...cteComplianceIssues(c.compliance,draft.ciot));
  const value=Number(draft.freight_value);
