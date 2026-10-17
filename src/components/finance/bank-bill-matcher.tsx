@@ -51,7 +51,7 @@ export function BankBillMatcher({movements,bills,matches,accountNames,recurring,
   </tr></thead><tbody>
   {movements.map(t=>{
    const kind=t.direction==="debit"?"payable":"receivable";
-   const eligible=bills.filter(b=>b.kind===kind&&b.workspace_id===t.workspace_id
+   const eligible=bankMovementNature(t).transfer?[]:bills.filter(b=>b.kind===kind&&b.workspace_id===t.workspace_id
      &&Number(b.amount)-Number(b.settled)>=Number(t.amount)-.005
      &&!["paid","received","cancelled"].includes(b.status));
    const selected=eligible.find(b=>b.id===chosen[t.id]);
