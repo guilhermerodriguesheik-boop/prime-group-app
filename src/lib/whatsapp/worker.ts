@@ -96,7 +96,7 @@ async function sendText(to: string, body: string) {
 async function sendEvolutionGoBankButtons(to:string,body:string,outboxId:string,more=false){
  if(!isEvolutionGoProvider())throw new Error("Botões exigem Evolution Go");
  const {base,token}=evolutionGoConfig();
- const number=to.replace(/\\D/g,"");
+ const number=to.replace(/\D/g,"");
  if(!/^[0-9]{10,15}$/.test(number))throw new Error("Recipient invalid");
  const buttons=more?extraBankButtons(outboxId):firstBankButtons(outboxId);
  const headers={apikey:token,"Content-Type":"application/json"};
@@ -131,7 +131,7 @@ async function sendEvolutionGoBankButtons(to:string,body:string,outboxId:string,
  if(!response.ok){
   const info=(await response.text().catch(()=>"")).slice(0,240);
   throw new Error("Evolution Go /send/carousel HTTP "+response.status+
-   (info?" "+info.replace(/[\\r\\n]/g," "):""));
+   (info?" "+info.replace(/[\r\n]/g," "):""));
  }
  const data=await response.json().catch(()=>null) as
   {message?:string;data?:{Info?:{ID?:string;Type?:string}}}|null;
