@@ -46,7 +46,7 @@ export async function POST(req:Request){
   .select(kind==="payable"?"id,workspace_id,amount,paid_amount,status":"id,workspace_id,amount,received_amount,status")
   .eq("id",targetId).eq("workspace_id",ws.id).maybeSingle();
  if(billError||!bill)return bad("Conta não encontrada no mesmo ambiente.",404);
- const settled=Number(kind==="payable"?bill.paid_amount:bill.received_amount);
+ const settled=Number("paid_amount" in bill?bill.paid_amount:bill.received_amount);
  const pending=Number(bill.amount)-settled;
  if(pending<=0||Number(bank.amount)>pending+.005)return bad("O movimento excede o saldo pendente da conta.",409);
  // O trigger no banco aplica a mesma validação com trava e atualiza ambas as tabelas
