@@ -40,7 +40,7 @@ async function checkDelivery(receipt:OutboxReceipt){
   const address=new URL(url);
   if(address.protocol!=="https:"||address.username||address.password)
    throw Error("Invalid Evolution Go host");
-  const base=address.href.replace(/\\/+$/,"");
+  const base=address.href.replace(/\/+$/,"");
   const response=await fetch(base+"/message/status",{
    method:"POST",cache:"no-store",signal:AbortSignal.timeout(3500),
    headers:{apikey:key,"Content-Type":"application/json"},
