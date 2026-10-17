@@ -2,14 +2,15 @@
 import {Fragment,useState,type FormEvent} from "react";
 import {useRouter} from "next/navigation";
 import {Download,RefreshCw} from "lucide-react";
-import type {LedgerCargo} from "@/lib/fiscal/simple-cargo-ledger";
+import type {CargoWithReceipt} from "@/lib/fiscal/manual-balance";
 import {cargoCosts,num} from "@/lib/fiscal/cargo-costs";
 import {CargoEditor} from "./cargo-editor";
 export type CargoOperation={cargo_reference:string;service_date:string|null;route_description:string;driver_id:string|null;
  driver_pay:number|string;driver_paid:boolean;helper_count:number;helper_rate:number|string;helpers_paid:boolean;
- diesel:number|string;tolls:number|string;other_expenses:number|string;notes:string};
+ diesel:number|string;tolls:number|string;other_expenses:number|string;notes:string;
+ manual_settled_on:string|null;manual_settled_amount:number|string|null;manual_settlement_note:string};
 export type CargoDriver={id:string;name:string;active:boolean};
-export type CargoDisplay=LedgerCargo&{emailDate:string|null;operation:CargoOperation|null};
+export type CargoDisplay=CargoWithReceipt&{emailDate:string|null;operation:CargoOperation|null};
 const brl=(n:number|null)=>n===null?"—":n.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 function download(name:string,headers:string[],rows:unknown[][]){
  const cell=(v:unknown)=>{const t=String(v??"").replace(/[\r\n]/g," ").trim();
@@ -58,12 +59,13 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
   download("prime-cargas-despesas.csv",
    ["Data","Fonte data","Carga","Rota","Frete","Adiantamento","Saldo recebido","Saldo pendente","Motorista",
    "Pagamento motorista","Ajudantes","Custo ajudantes","Diesel","Pedágio","Outras despesas","Resultado",
-   "Motorista pago","Ajudantes pagos","Situação"],
+   "Motorista pago","Ajudantes pagos","Baixa do saldo","Data baixa manual","Valor manual","Observação manual","Situação"],
    filtered.map(c=>{const o=c.operation,x=cargoCosts(o,c.freight);
     return [o?.service_date||c.emailDate||"",o?.service_date?"Data carga":"Data e-mail",c.cargo,o?.route_description||"",
      c.freight,c.advance,c.received,c.pending,names.get(o?.driver_id||"")||"",x.driver,o?.helper_count||0,
      x.helpers,num(o?.diesel),num(o?.tolls),num(o?.other_expenses),x.result,
-     o?.driver_paid?"Sim":"Não",o?.helpers_paid?"Sim":"Não",c.status];}));
+     o?.driver_paid?"Sim":"Não",o?.helpers_paid?"Sim":"Não",c.paymentSource||"não informado",
+     o?.manual_settled_on||"",num(o?.manual_settled_amount),o?.manual_settlement_note||"",c.status];}));
  }
  function crewCSV(){
   const rows:unknown[][]=[];
@@ -127,7 +129,9 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
        <td><strong style={{color}}>{brl(c.pending)}</strong></td><td>{names.get(o?.driver_id||"")||"—"}</td>
        <td>{brl(x.driverDue)}</td><td>{brl(x.helperDue)}</td><td>{brl(x.other)}</td><td>{brl(x.result)}</td>
        <td><span style={{color,fontWeight:700,padding:"5px 9px",borderRadius:18,
-        backgroundColor:paid?"#d1fae5":open?"#fee2e2":"#e2e8f0"}}>{c.status}</span></td>
+        backgroundColor:paid?"#d1fae5":open?"#fee2e2":"#e2e8f0"}}>
+        {c.paymentSource==="manual"?(paid?"Pago manual":"Parcial manual"):c.paymentSource==="email"?"Pago por e-mail":c.status}
+       </span></td>
        <td><button type="button" className="button" aria-expanded={expanded===c.cargo}
         onClick={()=>setExpanded(expanded===c.cargo?null:c.cargo)}>{expanded===c.cargo?"Fechar":"Editar"}</button></td>
       </tr>
@@ -140,7 +144,7 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
     {!filtered.length&&<tr><td colSpan={13}>Nenhuma carga encontrada para esses filtros.</td></tr>}
     </tbody></table>
   </div>
-  <p style={{fontSize:12,opacity:.75,marginTop:10}}>Verde: saldo quitado. Vermelho: saldo pendente.
+  <p style={{fontSize:12,opacity:.75,marginTop:10}}>Verde: saldo quitado (por e-mail ou baixa manual). Vermelho: saldo pendente. A baixa manual é reversível e não movimenta a conta bancária.
    O fechamento gera valores a pagar, sem movimentação bancária.
    Resultado estimado: frete menos despesas lançadas, antes dos impostos.</p>
  </section>;
