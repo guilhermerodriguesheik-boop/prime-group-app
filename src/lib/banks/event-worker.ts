@@ -1,5 +1,5 @@
 import {pluggyAccounts,pluggyApiKey,pluggyItem,pluggyTransactions} from "@/lib/banks/pluggy";
-import {queueBankReviewDigests,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
+import {primeRpc,queueBankReviewDigests,runPrimeOutbox} from "@/lib/whatsapp/prime-automations";
 import {createClient} from "@supabase/supabase-js";
 import {allowPersonalItem} from "@/lib/banks/sync";
 type BankEvent={id:string;itemId:string;event:string};
