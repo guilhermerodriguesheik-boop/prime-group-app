@@ -52,6 +52,7 @@ export async function POST(req:Request){
    noFiscalTransmission:true,
   },{status:409,headers:{"Cache-Control":"no-store"}});
  }
+ if(!issuer.numberingCteConfigured)return NextResponse.json({error:"Série CT-e 003 ainda não confirmada no perfil DotCompany; envio suspenso."},{status:409});
  const currentData=await gather(current.workspaceId,current.db,data.draftId);
  if(!currentData)return NextResponse.json({error:"CT-e não encontrado."},{status:404});
  const {preview}=currentData;
