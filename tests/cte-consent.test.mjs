@@ -75,18 +75,19 @@ test("Review is ready only after valid fiscal and human data",()=>{
  assert.equal(r.payload.documentos.length,2);
  assert.equal(r.hash.length,64);
 });
-test("No duplicate transmission where external CT-e exists",()=>{
- const r=ctePreview({...valid,draft:{...draft,checklist:{...draft.checklist,do_not_issue_duplicate:true}}});
- assert.equal(r.ready,false);
- assert.ok(r.missing.some(x=>x.includes("CT-e emitido fora")));
+test("CT-e externo gera alerta e requer confirmação deliberada, sem veto do app",()=>{
+ const r=ctePreview({...valid,draft:{...draft,checklist:{...draft.checklist,
+  do_not_issue_duplicate:true,previous_external_cte_number:"34"}}});
+ assert.equal(r.ready,true);
+ assert.equal(r.previousExternalCteNumber,"34");
+ assert.ok(r.advisories.some(x=>x.includes("duplicidade")));
 });
-test("Unverified RNTRC, missing driver and missing numbering block",()=>{
+test("RNTRC e motorista faltantes geram avisos sem veto do aplicativo",()=>{
  const bad=ctePreview({...valid,driver:null,profile:{rntrc:"00000000",rntrc_checked_at:null},
   draft:{...draft,checklist:{cte_provider_config:{...draft.checklist.cte_provider_config,numbering_verified:false}}}});
- assert.equal(bad.ready,false);
- assert.ok(bad.missing.some(x=>x.includes("motorista")));
- assert.ok(bad.missing.some(x=>x.includes("RNTRC")));
- assert.ok(bad.missing.some(x=>x.includes("sequência fiscal")));
+ assert.equal(bad.ready,true);
+ assert.ok(bad.advisories.some(x=>x.includes("Motorista")));
+ assert.ok(bad.advisories.some(x=>x.includes("RNTRC")));
 });
 test("Stale hash invalidated by a change to freight or tax settings",()=>{
  const p=ctePreview(valid);
@@ -110,11 +111,11 @@ test("Reviewed CT-e template is reusable by route, but never reuses sending cons
  assert.equal(res.config.cfop,"5352");
  assert.equal(res.config.produto_predominante,"COLCHOES E CAMAS");
  assert.equal(res.config.numbering_verified,false);
- assert.equal(res.ready,false);
- assert.ok(res.missing.some(x=>x.includes("sequência fiscal")));
+ assert.equal(res.ready,true);
+ assert.ok(!res.missing.some(x=>x.includes("sequência fiscal")));
  const other=ctePreview({...row,notes:[{...notes[0],destination_uf:"SP"}]});
  assert.equal(other.config.cfop,"");
- assert.equal(other.ready,false);
+ assert.equal(other.ready,true);
 });
 
 const {definitiveCteRejection,correctionFromProvider}=loadTS("src/lib/fiscal/cte-recovery.ts");
@@ -161,8 +162,8 @@ test("Without XML city the app warns but does not invent a municipality code",()
   draft:{...draft,checklist:{cte_provider_config:{
    ...draft.checklist.cte_provider_config,compliance:emptyCteCompliance
   }}}});
- assert.equal(lacking.ready,false);
- assert.ok(lacking.missing.some(t=>t.includes("Código IBGE")));
+ assert.equal(lacking.ready,true);
+ assert.ok(lacking.advisories.some(t=>t.includes("Código IBGE")));
  assert.equal(lacking.config.compliance.nfe_status,"pendente");
 });
 test("CIOT exemption needs explicit justification and does not silently assume validity",()=>{
@@ -187,10 +188,10 @@ test("An imported CIOT is not mislabeled as verified in official source",()=>{
  assert.equal(result.compliance.tributacao_conferida,false);
 });
 
-test("Serie CT-e 001 no emissor bloqueia mesmo com caixa manual marcada",()=>{
+test("Série 001 no emissor não impede pedido do usuário",()=>{
  const r=ctePreview({...valid,issuerTax:{cteNumbering:{series:"1",nextNumber:35}},lastExternalCteNumber:34});
- assert.equal(r.ready,false);
- assert.ok(r.missing.some(x=>x.includes("DotCompany configurada na série CT-e 001")));
+ assert.equal(r.ready,true);
+ assert.ok(r.advisories.some(x=>x.includes("DotCompany usa CT-e série 001")));
  assert.equal(r.numberingEvidence?.matched,false);
 });
 test("Série 003 e contador posterior ao histórico dispensam atestado manual repetido",()=>{
@@ -199,8 +200,19 @@ test("Série 003 e contador posterior ao histórico dispensam atestado manual re
  assert.equal(r.ready,true,r.missing.join("\\n"));
  assert.equal(r.numberingEvidence?.matched,true);
 });
-test("Número DotCompany igual ou abaixo do arquivo histórico impede o próximo CT-e",()=>{
+test("Número DotCompany igual ou abaixo do arquivo histórico só avisa",()=>{
  const r=ctePreview({...valid,issuerTax:{cteNumbering:{series:"3",nextNumber:34}},lastExternalCteNumber:34});
- assert.equal(r.ready,false);
- assert.ok(r.missing.some(x=>x.includes("não avança")));
+ assert.equal(r.ready,true);
+ assert.ok(r.advisories.some(x=>x.includes("não avança")));
+});
+
+test("Avisos fiscais acumulados não desabilitam transmissão de rascunho com sessão ativa",()=>{
+ const input={...valid,notes:[{...notes[0],access_key:"12",xml_content:null}],
+  profile:{rntrc:null,rntrc_checked_at:null},driver:null,vehicle:null,
+  issuerTax:{cteNumbering:{series:"1",nextNumber:35}},lastExternalCteNumber:34,
+  draft:{...draft,ciot:null,freight_value:0,checklist:{cte_provider_config:{
+   cfop:"",tomador:"",produto_predominante:"",uf_licenciamento:"",numbering_verified:false}}}};
+ const result=ctePreview(input);
+ assert.equal(result.ready,true,result.missing.join("\n"));
+ assert.ok(result.advisories.length>6);
 });
