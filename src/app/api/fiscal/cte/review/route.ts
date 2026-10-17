@@ -1,5 +1,6 @@
 import "server-only";
 import {NextResponse} from "next/server";
+import {createClient as adminClient} from "@supabase/supabase-js";
 import {safeConfig} from "@/lib/fiscal/cte-confirm";
 import {gather,session} from "@/lib/fiscal/cte-data";
 export const runtime="nodejs";
@@ -17,8 +18,19 @@ export async function GET(req:Request){
    .eq("workspace_id",s.workspaceId).eq("active",true).limit(50),
  ]);
  if(!r)return NextResponse.json({error:"Rascunho não localizado."},{status:404});
+ let retryHistory:Array<{archived_at:string;previous_status:string;previous_error_code:string|null}>=[];
+ const adminUrl=process.env.NEXT_PUBLIC_SUPABASE_URL;
+ const adminKey=process.env.SUPABASE_SERVICE_ROLE_KEY;
+ if(adminUrl&&adminKey){
+  const admin=adminClient(adminUrl,adminKey,{auth:{autoRefreshToken:false,persistSession:false}});
+  const {data:history}=await admin.from("fiscal_cte_retry_history")
+   .select("archived_at,previous_status,previous_error_code")
+   .eq("workspace_id",s.workspaceId).eq("draft_id",id)
+   .order("archived_at",{ascending:false}).limit(20);
+  retryHistory=history||[];
+ }
  return NextResponse.json({
-  preview:r.preview,submission:r.submission,
+  preview:r.preview,submission:r.submission,retryHistory,
   draft:{vehicle_id:r.draft.vehicle_id,driver_id:r.draft.driver_id,status:r.draft.status},
   vehicles:vehicles.data||[],drivers:drivers.data||[],
  },{headers:{"Cache-Control":"no-store"}});
