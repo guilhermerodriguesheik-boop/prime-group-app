@@ -79,7 +79,7 @@ async function main(){
   log("requesting cte.criar only; no SEFAZ transmission");
   let response,body;
   try{
-   response=await fetch("https://erp.dotcompany.com.br/api/v1/cte/criar",{
+   response=await fetch("https://erp.dotcompany.com.br/api/v1/cte",{
     method:"POST",headers:{Authorization:"Bearer "+key,"Content-Type":"application/json",
       Accept:"application/json","Idempotency-Key":queued.idempotency_key},
     body:JSON.stringify(payload),signal:AbortSignal.timeout(24000),cache:"no-store"
