@@ -11,7 +11,9 @@ import {
 
 type Workspace={id:string;kind:string;name:string};
 type Connection={id:string;provider:string;workspace_id:string;display_name:string;institution_name:string|null;
-  account_kind:string;status:string;last_synced_at:string|null;last_error:string|null;archived_at:string|null};
+  account_kind:string;status:string;last_synced_at:string|null;provider_last_updated_at:string|null;
+  last_new_transaction_count:number;last_scanned_transaction_count:number;
+  last_error:string|null;archived_at:string|null};
 type BankAccount={id:string;connection_id:string;display_name:string;account_last4:string|null;
   kind:string;currency:string;balance:number|null;balance_updated_at:string|null};
 type Statement={id:string;bank_account_id:string;occurred_on:string;description:string;
@@ -73,7 +75,11 @@ export function BankDashboard(){
     }catch(e){setNotice(e instanceof Error?e.message:"Não foi possível carregar.");}
     finally{setLoading(false);}
   },[showArchived]);
-  useEffect(()=>{const timer=window.setTimeout(()=>{void load();},0);return ()=>window.clearTimeout(timer);},[load]);
+  useEffect(()=>{
+    const timer=window.setTimeout(()=>{void load();},0);
+    const interval=window.setInterval(()=>{if(document.visibilityState==="visible")void load();},120000);
+    return ()=>{window.clearTimeout(timer);window.clearInterval(interval);};
+  },[load]);
   async function post(payload:Record<string,unknown>){
     const r=await fetch("/api/banks",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     const body=await r.json();
@@ -163,8 +169,10 @@ export function BankDashboard(){
     try{
       const result=await post({action:"sync",id,force});
       setNotice(result.cached
-        ?"Os dados já disponíveis na Pluggy foram consultados recentemente. Isso não significa que o Itaú já enviou novos Pix."
-        :"Consulta concluída: os dados disponíveis na Pluggy foram importados. Um Pix recente só aparece após o banco fornecê-lo à Pluggy.");
+        ?"Consulta recente em cache: nenhum pedido de atualização foi enviado ao banco."
+        :Number(result.newTransactions)>0
+          ?Number(result.newTransactions)+" novo(s) lançamento(s) disponível(is) na Pluggy foram importados."
+          :"Consulta concluída, mas não havia novos lançamentos disponíveis na Pluggy. O horário da consulta não é o da atualização do banco.");
       await load();
     }catch(e){setNotice(e instanceof Error?e.message:"Falha ao atualizar extratos.");await load();}
     finally{setBusy("");}
@@ -234,9 +242,11 @@ export function BankDashboard(){
       catch(e){setNotice("Algumas conexões não atualizaram: "+(e instanceof Error?e.message:"Erro desconhecido"));}
     }
     await load();setBusy("");
-    if(ok===toSync.length)setNotice("Dados disponíveis na Pluggy consultados em "+ok+" conexão(ões). Esta ação não força uma nova sincronização bancária.");
+    if(ok===toSync.length)setNotice("Consulta de "+ok+" conexão(ões) concluída. O Meu Pluggy atualiza os bancos em seu próprio ciclo; consulte a data de origem abaixo.");
   }
   const latest=activeConnections.map(c=>c.last_synced_at).filter((v):v is string=>!!v).sort().at(-1)||null;
+  const providerLatest=activeConnections.map(c=>c.provider_last_updated_at)
+    .filter((v):v is string=>!!v).sort().at(-1)||null;
   return <div className="bank-page">
     <Script src="https://cdn.pluggy.ai/pluggy-connect/v2.8.2/pluggy-connect.js" strategy="afterInteractive"
       onReady={()=>setSdkReady(true)}
@@ -265,7 +275,11 @@ export function BankDashboard(){
         <div className="metric-foot">Saldo bancário, separado do caixa contábil</div></div>
       <div className="card"><div className="bank-metric-top"><span className="metric-label">Última sincronização</span><span className="bank-metric-icon"><Clock3 size={17}/></span></div>
         <div className="bank-metric-val" style={{fontSize:latest?17:22}}>{latest?date(latest):"—"}</div>
-        <div className="metric-foot">{pendingVisible} movimentações pendentes entre as últimas 150 exibidas</div></div>
+        <div className="metric-foot">Consulta feita pelo app, não necessariamente pelo banco</div></div>
+      <div className="card"><div className="bank-metric-top"><span className="metric-label">Dados atualizados na origem</span>
+        <span className="bank-metric-icon"><Clock3 size={17}/></span></div>
+        <div className="bank-metric-val" style={{fontSize:providerLatest?17:22}}>{providerLatest?date(providerLatest):"—"}</div>
+        <div className="metric-foot">Data informada pela Pluggy; {pendingVisible} movimentos pendentes entre os 150 recentes</div></div>
     </div>
     <section className="card" id="bank-connect">
       <div className="bank-section-head"><div><h3>Conectar instituição</h3><p>Escolha a instituição correta antes de autorizar ou vincular um item existente.</p></div><ShieldCheck size={20} color="var(--pos)"/></div>
@@ -337,6 +351,12 @@ export function BankDashboard(){
             <div className="bank-connection-data"><span>Tipo de conexão</span><b>{c.provider==="manual"?"Importação OFX":"Pluggy"}</b></div>
             <div className="bank-connection-data"><span>Conta / final</span><b>{accounts.map(a=>a.display_name).join(", ")||"—"} {last?" • "+last:""}</b></div>
             <div className="bank-connection-data"><span>Saldo consultado</span><b>{money(accounts.filter(a=>a.kind==="BANK"&&a.currency==="BRL").reduce((s,a)=>s+Number(a.balance||0),0))}</b></div>
+            <div className="bank-connection-data"><span>Banco/Pluggy atualizou</span>
+              <b>{c.provider_last_updated_at?date(c.provider_last_updated_at):"Sem data de origem disponível"}</b></div>
+            <div className="bank-connection-data"><span>App consultou</span>
+              <b>{date(c.last_synced_at)}</b></div>
+            <div className="bank-connection-data"><span>Última importação</span>
+              <b>{c.last_new_transaction_count} novos / {c.last_scanned_transaction_count} conferidos</b></div>
             <div className="bank-connection-data"><span>Última sincronização</span><b>{date(c.last_synced_at)}</b></div>
             {c.last_error&&<div className="bank-risk" style={{marginTop:10}}>{c.last_error}</div>}
             <div className="bank-connection-actions">
