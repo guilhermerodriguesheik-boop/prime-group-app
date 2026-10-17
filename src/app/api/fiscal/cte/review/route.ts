@@ -35,7 +35,10 @@ export async function POST(req:Request){
  if(!s)return NextResponse.json({error:"Entre no Prime Finance."},{status:401});
  const r=await gather(s.workspaceId,s.db,body.draftId);
  if(!r)return NextResponse.json({error:"Rascunho não encontrado."},{status:404});
- if(r.draft.status!=="draft"||r.submission||r.draft.checklist?.do_not_issue_duplicate===true||
+ const mayEditPrevious= !r.submission ||
+  (["indeterminate","rejected"].includes(r.submission.status) &&
+   !r.submission.access_key&&!r.submission.protocol);
+ if(r.draft.status!=="draft"||!mayEditPrevious||r.draft.checklist?.do_not_issue_duplicate===true||
     r.draft.checklist?.previous_external_cte_number)
   return NextResponse.json({error:"Esta carga está bloqueada para evitar reemissão de CT-e."},{status:409});
  if(typeof body.vehicleId!=="string"||!uuid.test(body.vehicleId)||
