@@ -3,6 +3,7 @@ import { after, NextResponse } from "next/server";
 import { processWhatsAppQueue } from "@/lib/whatsapp/worker";
 import {parseEvolutionBankButtonClick,readEvolutionGoBankReply} from "@/lib/banks/interactive-bank-buttons";
 import {pollVoteDestination} from "@/lib/banks/evolution-go-poll-votes";
+import {getEvolutionGoPollIdentity} from "@/lib/banks/evolution-go-poll-identity";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -113,22 +114,19 @@ export async function POST(request: Request) {
   if (isFromMe || isGroup || /@(g\.us|broadcast|newsletter)$/.test(chatJid)) {
     return NextResponse.json({received:true,messages:0});
   }
-  // LID is a valid WhatsApp identity and common in poll vote events.
-  // Never guess a phone number from the LID. Only use a genuine phone JID
-  // from the authenticated private-chat envelope, then check pairing in SQL.
-  const phoneJid=(value:string)=>/^[0-9]{10,15}@s\.whatsapp\.net$/.test(value);
-  const trustedPhoneJids=isPoll
-    ? [chatJid,senderJid,string(info.ChatAlt||info.chatAlt),
-       string(info.SenderAlt||info.senderAlt),string(legacyKey.remoteJid)]
-    : [senderJid,chatJid];
-  const actualPhoneJid=isPoll
-    ? trustedPhoneJids.find(phoneJid)
-    : (phoneJid(senderJid)&&phoneJid(chatJid)?senderJid:undefined);
-  if(!actualPhoneJid){
+  // Preserve LID as the crypto voter identity; phone comes from the
+  // authenticated private-chat envelope and is checked against pairing in SQL.
+  const identity=getEvolutionGoPollIdentity({
+    senderJid,chatJid,isPoll,
+    senderAlt:string(info.SenderAlt||info.senderAlt),
+    chatAlt:string(info.ChatAlt||info.chatAlt),
+    legacyJid:string(legacyKey.remoteJid)
+  });
+  if(!identity){
     if(isPoll)await notePoll("no_phone_identity");
     return NextResponse.json({received:true,messages:0});
   }
-  const sender=actualPhoneJid.split("@")[0];
+  const sender=identity.phone;
   const messageId = string(info.ID || legacyKey.id);
   if (!/^[a-zA-Z0-9_-]{8,150}$/.test(messageId)) {
     return NextResponse.json({received:true,messages:0});
@@ -160,7 +158,7 @@ export async function POST(request: Request) {
        return NextResponse.json({received:true,poll:"unknown"});
      }
      const selected=pollVoteDestination(pollId,meta.secret,pollUpdate,
-       senderJid,meta.senderJid);
+       identity.voterJid,meta.senderJid);
      if(!selected){
        console.error("Native bank poll vote could not be decrypted; no classification saved");
        await notePoll("decrypt_failed");
