@@ -7,7 +7,8 @@ test("NativeFlow carousel holds precisely one bank movement and two image-backed
  const payload=bankCarouselPayload("5521999999999","SAÍDA · R$ 60,00",id);
  assert.equal(payload.cards.length,2);
  assert.ok(payload.body.includes("R$ 60,00"));
- assert.ok(payload.cards.every(c=>c.header.imageUrl.startsWith("https://")));
+ assert.ok(payload.cards.every(c=>c.header.imageUrl.startsWith("https://raw.githubusercontent.com/"))); 
+ assert.ok(payload.cards.every(c=>c.header.imageUrl.endsWith("/public/prime-interactive-card.png")));
  // Regression: Go v1.0 CarouselCardStruct.Body is a struct with json:"text".
  // A JSON string here causes HTTP 400 "cannot unmarshal string into Go struct field".
  assert.ok(payload.cards.every(c=>typeof c.body==="object" && typeof c.body.text==="string"));
