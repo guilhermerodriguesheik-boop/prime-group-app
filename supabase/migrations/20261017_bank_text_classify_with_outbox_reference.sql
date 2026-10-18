@@ -33,7 +33,7 @@ begin
  values(bank_tx,owner,p_destination,nullif(left(btrim(p_category),80),''))
  on conflict(bank_transaction_id) do update set destination=excluded.destination,category=excluded.category,classified_at=now();
  return true;
-end $function$
+end $function$;
 
 revoke all on function public.prime_whatsapp_classify_bank(text,uuid,text,text,text) from public,authenticated;
 grant execute on function public.prime_whatsapp_classify_bank(text,uuid,text,text,text) to anon;
