@@ -91,7 +91,7 @@ export async function runPrimeOutbox(maxBatches=1){
       try{
        const poll=await sendEvolutionGoBankPoll(item.phone,
         pilot?item.message.slice("[ENQUETE PRIME] ".length):item.message);
-       const own=String(process.env.EVOLUTION_GO_PHONE_NUMBER||"").replace(/\\D/g,"");
+       const own=String(process.env.EVOLUTION_GO_PHONE_NUMBER||"").replace(/\D/g,"");
        if(poll&&/^[0-9]{10,15}$/.test(own)){
         handledByPoll=await primeRpc<boolean>("prime_register_bank_poll",{
          p_outbox_id:item.id,p_poll_id:poll.id,p_message_secret:poll.secret,
