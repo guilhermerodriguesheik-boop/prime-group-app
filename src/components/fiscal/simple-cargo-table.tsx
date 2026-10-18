@@ -144,18 +144,17 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
     <th>Diesel/pedágio/outros</th><th>Resultado previsto</th><th>Situação</th><th>Ação</th></tr></thead>
     <tbody>{filtered.map(c=>{
      const o=c.operation,x=cargoCosts(o,c.freight),paid=c.status==="Pago"||c.status==="Adiantado";
-     const open=c.status==="Pendente",color=paid?"#166534":open?"#b91c1c":"#64748b";
+     const open=c.status==="Pendente";
      return <Fragment key={c.cargo}>
-      <tr style={{backgroundColor:paid?"#ebf8ee":open?"#fff0f0":undefined}}>
+      <tr className={`fiscal-cargo-row ${paid?"is-paid":open?"is-pending":""}`}>
        <td><input type="checkbox" aria-label={"Selecionar carga "+c.cargo}
         checked={selectedSet.has(c.cargo)} onChange={e=>toggleSelected(c.cargo,e.target.checked)}/></td>
        <td>{o?.service_date||c.emailDate||"—"}{!o?.service_date&&c.emailDate&&<small style={{display:"block"}}>e-mail</small>}</td>
-       <td><strong style={{color}}>{c.cargo}</strong>{o?.route_description&&<small style={{display:"block"}}>{o.route_description}</small>}</td>
+       <td><strong className="fiscal-cargo-reference">{c.cargo}</strong>{o?.route_description&&<small style={{display:"block"}}>{o.route_description}</small>}</td>
        <td>{brl(c.freight)}</td><td>{brl(c.advance)}</td><td>{brl(c.received)}</td>
-       <td><strong style={{color}}>{brl(c.pending)}</strong></td><td>{names.get(o?.driver_id||"")||"—"}</td>
+       <td><strong className="fiscal-cargo-balance">{brl(c.pending)}</strong></td><td>{names.get(o?.driver_id||"")||"—"}</td>
        <td>{brl(x.driverDue)}</td><td>{brl(x.helperDue)}</td><td>{brl(x.other)}</td><td>{brl(x.result)}</td>
-       <td><span style={{color,fontWeight:700,padding:"5px 9px",borderRadius:18,
-        backgroundColor:paid?"#d1fae5":open?"#fee2e2":"#e2e8f0"}}>
+       <td><span className={`fiscal-cargo-payment ${paid?"is-paid":open?"is-pending":""}`}>
         {c.paymentSource==="manual"?(paid?"Pago manual":"Parcial manual"):c.paymentSource==="email"?"Pago por e-mail":c.status}
        </span></td>
        <td><button type="button" className="button" aria-expanded={expanded===c.cargo}
@@ -169,6 +168,64 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
     })}
     {!filtered.length&&<tr><td colSpan={14}>Nenhuma carga encontrada para esses filtros.</td></tr>}
     </tbody></table>
+  </div>
+  {/* No celular, mostramos apenas o essencial; o restante permanece disponível sem rolagem lateral. */}
+  <div className="fiscal-mobile-cards" aria-label="Cargas em formato compacto">
+   <label className="fiscal-mobile-select-all">
+    <input type="checkbox" aria-label="Selecionar todos os fretes visíveis"
+     checked={allVisibleSelected} onChange={e=>toggleVisible(e.target.checked)}/>
+    Selecionar todas as cargas visíveis ({filtered.length})
+   </label>
+   {filtered.map(c=>{
+    const o=c.operation,x=cargoCosts(o,c.freight);
+    const paid=c.status==="Pago"||c.status==="Adiantado",open=c.status==="Pendente";
+    const paymentStatus=c.paymentSource==="manual"?(paid?"Pago manual":"Parcial manual"):
+     c.paymentSource==="email"?"Pago por e-mail":c.status;
+    const displayDate=o?.service_date||c.emailDate;
+    return <article className={`fiscal-mobile-cargo ${paid?"is-paid":open?"is-pending":""}`} key={c.cargo}>
+     <div className="fiscal-mobile-cargo-header">
+      <input type="checkbox" aria-label={"Selecionar carga "+c.cargo}
+       checked={selectedSet.has(c.cargo)} onChange={e=>toggleSelected(c.cargo,e.target.checked)}/>
+      <div className="fiscal-mobile-cargo-identity">
+       <strong>Carga {c.cargo}</strong>
+       <small>{displayDate?displayDate.split("-").reverse().join("/"):"Sem data"}
+        {!o?.service_date&&c.emailDate?" · data do e-mail":""}</small>
+      </div>
+      <span className={`fiscal-mobile-cargo-status ${paid?"is-paid":open?"is-pending":""}`}>{paymentStatus}</span>
+     </div>
+     {(o?.route_description||o?.driver_id)&&<p className="fiscal-mobile-route">
+      {o?.route_description||"Rota não informada"}
+      {o?.driver_id&&<span> · {names.get(o.driver_id)||"Motorista não cadastrado"}</span>}
+     </p>}
+     <div className="fiscal-mobile-metrics">
+      <div><span>Frete</span><strong>{brl(c.freight)}</strong></div>
+      <div><span>Saldo pendente</span><strong className={open?"is-pending":undefined}>{brl(c.pending)}</strong></div>
+      <div className="fiscal-mobile-result"><span>Resultado previsto</span><strong>{brl(x.result)}</strong></div>
+     </div>
+     <div className="fiscal-mobile-actions">
+      <details className="fiscal-mobile-extra">
+       <summary>Ver detalhes</summary>
+       <dl className="fiscal-mobile-details">
+        <div><dt>Adiantamento</dt><dd>{brl(c.advance)}</dd></div>
+        <div><dt>Saldo recebido</dt><dd>{brl(c.received)}</dd></div>
+        <div><dt>Motorista</dt><dd>{names.get(o?.driver_id||"")||"Não atribuído"}</dd></div>
+        <div><dt>Motorista a pagar</dt><dd>{brl(x.driverDue)}</dd></div>
+        <div><dt>Ajudantes a pagar</dt><dd>{brl(x.helperDue)}</dd></div>
+        <div><dt>Diesel / pedágio / outros</dt><dd>{brl(x.other)}</dd></div>
+       </dl>
+      </details>
+      <button type="button" className="button compact" aria-expanded={expanded===c.cargo}
+       onClick={()=>setExpanded(expanded===c.cargo?null:c.cargo)}>
+       {expanded===c.cargo?"Fechar edição":"Editar"}
+      </button>
+     </div>
+     {expanded===c.cargo&&<div className="fiscal-mobile-editor">
+      <CargoEditor key={JSON.stringify(o)} cargo={c} drivers={drivers}
+       onSaved={()=>{setExpanded(null);setMessage("Carga "+c.cargo+" salva.");router.refresh();}}/>
+     </div>}
+    </article>;
+   })}
+   {!filtered.length&&<p className="fiscal-mobile-empty">Nenhuma carga encontrada para esses filtros.</p>}
   </div>
   <p style={{fontSize:12,opacity:.75,marginTop:10}}>Verde: saldo quitado (por e-mail ou baixa manual). Vermelho: saldo pendente. A baixa manual é reversível e não movimenta a conta bancária.
    O fechamento gera valores a pagar, sem movimentação bancária.
