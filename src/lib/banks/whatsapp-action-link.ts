@@ -21,7 +21,7 @@ export function bankActionLink(id:string,base:string,secret:string,now=Date.now(
  }catch{return null;}
 }
 export function verifyBankAction(id:string,expiresText:string,sig:string,secret:string,now=Date.now()){
- if(!outboxPattern.test(id)||secret.length<24||!/^\\d{10}$/.test(expiresText)
+ if(!outboxPattern.test(id)||secret.length<24||!/^\d{10}$/.test(expiresText)
  ||!/^[a-f0-9]{64}$/.test(sig))return false;
  const expires=Number(expiresText);
  if(!Number.isSafeInteger(expires)||expires*1000<=now
