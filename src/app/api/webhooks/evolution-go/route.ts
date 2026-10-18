@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { processWhatsAppQueue } from "@/lib/whatsapp/worker";
 import {parseEvolutionBankButtonClick,readEvolutionGoBankReply} from "@/lib/banks/interactive-bank-buttons";
+import {pollVoteDestination} from "@/lib/banks/evolution-go-poll-votes";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -100,6 +101,46 @@ export async function POST(request: Request) {
     return NextResponse.json({received:true,messages:0});
   }
   const message = object(data.Message || data.message);
+  const pollUpdate=object(message.pollUpdateMessage);
+  if(Object.keys(pollUpdate).length){
+    // Vote payload is end-to-end encrypted. We only write classifications
+    // after AES-GCM authentication, option-hash match, and owner/poll lookup.
+    const creation=object(pollUpdate.pollCreationMessageKey);
+    const pollId=string(creation.ID||creation.id);
+    if(!/^[A-Za-z0-9_-]{8,150}$/.test(pollId))
+      return NextResponse.json({received:true,poll:"unresolved"});
+    async function pollRpc(name:string,args:Record<string,unknown>){
+      const response=await fetch(baseUrl.replace(/\/$/,"")+"/rest/v1/rpc/"+name,{
+       method:"POST",cache:"no-store",signal:AbortSignal.timeout(10000),
+       headers:{apikey:key,Authorization:"Bearer "+key,"Content-Type":"application/json"},
+       body:JSON.stringify({p_secret:ingress,...args})
+      });
+      if(!response.ok)throw Error("Poll RPC "+name+" HTTP "+response.status);
+      return response.json() as Promise<unknown>;
+    }
+    try{
+     const meta=await pollRpc("prime_get_bank_poll_vote",{
+       p_poll_id:pollId,p_phone:sender
+     }) as {secret?:string;senderJid?:string}|null;
+     if(!meta?.secret||!meta.senderJid)return NextResponse.json({received:true,poll:"unknown"});
+     const selected=pollVoteDestination(pollId,meta.secret,pollUpdate,
+       senderJid,meta.senderJid);
+     if(!selected){
+       console.error("Native bank poll vote could not be decrypted; no classification saved");
+       return NextResponse.json({received:true,poll:"unresolved"});
+     }
+     const saved=await pollRpc("prime_apply_bank_poll_vote",{
+       p_poll_id:pollId,p_phone:sender,p_vote_message_id:messageId,
+       p_destination:selected
+     }) as boolean;
+     if(!saved)return NextResponse.json({received:true,poll:"not_saved"});
+     return NextResponse.json({received:true,poll:"classified"});
+    }catch(error){
+     console.error("Native bank poll processing failed",error instanceof Error?error.message:"unknown");
+     return NextResponse.json({error:"Vote processing temporarily unavailable"},{status:502});
+    }
+  }
+
   const extended = object(message.extendedTextMessage);
   const image = object(message.imageMessage);
   const document = object(message.documentMessage);
