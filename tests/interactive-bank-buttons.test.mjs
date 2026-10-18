@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {firstBankButtons,extraBankButtons,bankButtonId,readBankButtonId,parseEvolutionBankButtonClick,readEvolutionGoBankReply} from "../src/lib/banks/interactive-bank-buttons.ts";
+import {bankTextFallbackMessage} from "../src/lib/banks/whatsapp-bank-fallback.ts";
 const id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 test("three button options per message have unique transaction-message references",()=>{
  const first=firstBankButtons(id),second=extraBankButtons(id);
@@ -43,4 +44,15 @@ test("Evolution Go v1 carousel template replies are real interactive messages",(
  assert.equal(readEvolutionGoBankReply({conversation:bankButtonId(id,"P")}),null);
  assert.equal(readEvolutionGoBankReply({templateButtonReplyMessage:{selectedID:"unknown"}}),null);
  assert.equal(readEvolutionGoBankReply(null),null);
+});
+
+test("Every bank movement has readable text and a unique classifiable reference",()=>{
+ const one=bankTextFallbackMessage("SAÍDA · R$ 60,00",id);
+ const two=bankTextFallbackMessage("ENTRADA · R$ 50,00","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+ assert.match(one,/SAÍDA · R\$ 60,00/);
+ assert.match(one,/classificar AAAAAAAA empresa/);
+ assert.match(one,/classificar AAAAAAAA pessoal/);
+ assert.match(two,/classificar BBBBBBBB empresa/);
+ assert.notEqual(one,two);
+ assert.throws(()=>bankTextFallbackMessage("SAÍDA · R$ 5","bad"),/Invalid/);
 });
