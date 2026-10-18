@@ -1,6 +1,7 @@
 import { sendScheduledWhatsAppMessage } from "@/lib/whatsapp/worker";
 import {ensurePluggyWebhooks} from "@/lib/banks/webhook-setup";
 import {parseEvolutionGoDeliveryStatus} from "@/lib/banks/evolution-go-delivery-status";
+import {bankTextFallbackMessage} from "@/lib/banks/whatsapp-bank-fallback";
 
 type OutboxItem={id:string;phone:string;message:string;bankTransactionId:string|null};
 function settings(){
@@ -82,10 +83,7 @@ export async function runPrimeOutbox(maxBatches=1){
      // Evolution Go carousel can return a message ID without rendering.
      // Always deliver readable bank information first, then try interactive
      // quick replies as an optional enhancement.
-     const reference=item.id.slice(0,8).toUpperCase();
-     const readable=item.message.trim().slice(0,480)+
-      "\nClassificar: envie 'classificar "+reference+" empresa' ou "+
-      "'classificar "+reference+" pessoal'.";
+     const readable=bankTextFallbackMessage(item.message,item.id);
      await sendScheduledWhatsAppMessage(item.phone,readable);
      let providerId:string|undefined;
      try{
