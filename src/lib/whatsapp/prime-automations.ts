@@ -1,4 +1,4 @@
-import { sendScheduledWhatsAppMessage } from "@/lib/whatsapp/worker";
+import { sendScheduledWhatsAppMessage,sendEvolutionGoBankPoll } from "@/lib/whatsapp/worker";
 import {ensurePluggyWebhooks} from "@/lib/banks/webhook-setup";
 import {parseEvolutionGoDeliveryStatus} from "@/lib/banks/evolution-go-delivery-status";
 import {bankTextFallbackMessage} from "@/lib/banks/whatsapp-bank-fallback";
@@ -70,6 +70,11 @@ export async function refreshBankDeliveryStatus(limit=12){
 export async function runPrimeOutbox(maxBatches=1){
  if(process.env.WHATSAPP_PROVIDER!=="evolution_go")return {sent:0,failed:0,claimed:0,disabled:true};
  let sent=0,claimed=0,failed=0;
+ // Do not flood the user with 13 unproven polls; only switch automatically
+ // after a single real vote was decoded and recorded by the pilot webhook.
+ let pollsReady=false;
+ try{pollsReady=await primeRpc<boolean>("prime_bank_native_polls_ready",{});}
+ catch{pollsReady=false;}
  for(let batch=0;batch<Math.min(Math.max(maxBatches,1),5);batch++){
   const items=await primeRpc<OutboxItem[]>("prime_claim_outbox",{p_limit:8});
   if(!items.length)break;
@@ -80,12 +85,30 @@ export async function runPrimeOutbox(maxBatches=1){
    try{
     if(!/^[0-9]{10,15}$/.test(item.phone))throw new Error("Invalid linked recipient");
     if(item.bankTransactionId){
-     // Interactive WhatsApp reply buttons are deprecated by Evolution Go for
-     // standard QR-linked accounts. Deliver one readable message and one secure
-     // short-lived link to actual HTML buttons instead of invisible carousels.
-     const actionLink=bankActionLinkFromEnv(item.id);
-     const readable=bankTextFallbackMessage(item.message,item.id,actionLink);
-     await sendScheduledWhatsAppMessage(item.phone,readable);
+     const pilot=item.message.startsWith("[ENQUETE PRIME] ");
+     let handledByPoll=false;
+     if(pilot||pollsReady){
+      try{
+       const poll=await sendEvolutionGoBankPoll(item.phone,
+        pilot?item.message.slice("[ENQUETE PRIME] ".length):item.message);
+       const own=String(process.env.EVOLUTION_GO_PHONE_NUMBER||"").replace(/\\D/g,"");
+       if(poll&&/^[0-9]{10,15}$/.test(own)){
+        handledByPoll=await primeRpc<boolean>("prime_register_bank_poll",{
+         p_outbox_id:item.id,p_poll_id:poll.id,p_message_secret:poll.secret,
+         p_sender_jid:own+"@s.whatsapp.net"
+        });
+       }
+      }catch(error){
+       console.error("Native WhatsApp poll unsupported; using clickable link",
+        error instanceof Error?error.message:"unknown");
+      }
+     }
+     if(!handledByPoll){
+      // Fallback remains actionable when native poll isn't fully supported.
+      const actionLink=bankActionLinkFromEnv(item.id);
+      const readable=bankTextFallbackMessage(item.message,item.id,actionLink);
+      await sendScheduledWhatsAppMessage(item.phone,readable);
+     }
      await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
     }else{
      await sendScheduledWhatsAppMessage(item.phone,item.message);
