@@ -3,7 +3,7 @@ import {firstBankButtons,extraBankButtons} from "./interactive-bank-buttons.ts";
  * At least two cards with image headers; all actions stay bound to one outbox UUID.
  */
 export function bankCarouselPayload(number:string,description:string,outboxId:string,
- more=false,imageUrl="https://prime-finance-ochre.vercel.app/api/banks/card-image"){
+ more=false,imageUrl="https://raw.githubusercontent.com/guilhermerodriguesheik-boop/prime-group-app/main/public/prime-interactive-card.png"){
  const groups=[
   {title:"Classifique a movimentação",buttons:firstBankButtons(outboxId)},
   {title:"Outras áreas",buttons:extraBankButtons(outboxId)},
