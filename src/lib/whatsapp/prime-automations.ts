@@ -77,16 +77,35 @@ export async function runPrimeOutbox(maxBatches=1){
   for(const item of items){
    try{
     if(!/^[0-9]{10,15}$/.test(item.phone))throw new Error("Invalid linked recipient");
-    const providerId=await sendScheduledWhatsAppMessage(
-      item.phone,item.message,item.bankTransactionId?item.id:null);
     if(item.bankTransactionId){
-     if(typeof providerId!=="string"||!providerId)
-       throw Error("Interactive card has no provider message ID");
-     const saved=await primeRpc<boolean>("prime_finish_outbox_with_provider",{
-      p_id:item.id,p_provider_message_id:providerId
-     });
-     if(!saved)throw Error("Bank outbox claim not finalized");
+     // Plain text has already been observed on the user's WhatsApp, while the
+     // Evolution Go carousel can return a message ID without rendering.
+     // Always deliver readable bank information first, then try interactive
+     // quick replies as an optional enhancement.
+     const reference=item.id.slice(0,8).toUpperCase();
+     const readable=item.message.trim().slice(0,480)+
+      "\\nClassificar: envie 'classificar "+reference+" empresa' ou "+
+      "'classificar "+reference+" pessoal'.";
+     await sendScheduledWhatsAppMessage(item.phone,readable);
+     let providerId:string|undefined;
+     try{
+      const attempt=await sendScheduledWhatsAppMessage(item.phone,item.message,item.id);
+      if(typeof attempt==="string")providerId=attempt;
+     }catch(error){
+      console.error("Evolution Go optional bank buttons not displayed",
+       error instanceof Error?error.message:"unknown");
+     }
+     if(providerId){
+      const saved=await primeRpc<boolean>("prime_finish_outbox_with_provider",{
+       p_id:item.id,p_provider_message_id:providerId
+      });
+      if(!saved)throw Error("Bank outbox claim not finalized");
+     }else{
+      // The report is still usable with the text classification command.
+      await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
+     }
     }else{
+     await sendScheduledWhatsAppMessage(item.phone,item.message);
      await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
     }
     sent++;
