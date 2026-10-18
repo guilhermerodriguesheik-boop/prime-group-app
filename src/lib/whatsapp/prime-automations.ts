@@ -132,6 +132,8 @@ export async function runPrimeOutbox(maxBatches=1){
  // consume the time budget of an active multi-card report. Idle cron runs
  // will check the provider receipts separately.
  if(claimed===0){
+  try{await reconcileBankPolls(primeRpc);}
+  catch{console.error("Evolution Go poll results unavailable");}
   try{await refreshBankDeliveryStatus(12);}
   catch(error){console.error("Evolution Go delivery probe unavailable",
    error instanceof Error?error.message:"unknown");}
