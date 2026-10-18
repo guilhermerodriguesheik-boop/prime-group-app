@@ -2,7 +2,7 @@ import {createHash} from "node:crypto";
 import {BANK_POLL_OPTIONS,type BankPollArea} from "./evolution-go-poll-votes";
 type Json=Record<string,unknown>;
 const obj=(v:unknown):Json=>v&&typeof v==="object"&&!Array.isArray(v)?v as Json:{};
-const cleanPhone=(s:unknown)=>typeof s==="string"?s.replace(/\\D/g,""):"";
+const cleanPhone=(s:unknown)=>typeof s==="string"?Array.from(s).filter(c=>c>="0"&&c<="9").join(""):"";
 /** Never classify on votes from another recipient or ambiguous vote tallies. */
 export function recoverOwnerPollVote(raw:unknown,pollId:string,phone:string):
  {destination:BankPollArea;voteId:string}|null {
