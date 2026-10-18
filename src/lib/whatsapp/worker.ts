@@ -125,7 +125,7 @@ async function sendEvolutionGoBankButtons(to:string,body:string,outboxId:string,
 export async function sendEvolutionGoBankPoll(to:string,question:string){
  if(!isEvolutionGoProvider())throw new Error("Polls require Evolution Go");
  const {base,token}=evolutionGoConfig();
- const number=to.replace(/\\D/g,"");
+ const number=to.replace(/\D/g,"");
  if(!/^[0-9]{10,15}$/.test(number))throw Error("Invalid poll recipient");
  const response=await fetch(base+"/send/poll",{
   method:"POST",cache:"no-store",signal:AbortSignal.timeout(15000),
