@@ -8,7 +8,7 @@ export function bankTextFallbackMessage(message:string,outboxId:string,actionLin
   throw Error("Invalid bank outbox reference");
  const ref=outboxId.slice(0,8).toUpperCase();
  if(actionLink&&actionLink.startsWith("https://"))
-  return message.trim().slice(0,350)+"\\nClassificar com botões: "+actionLink;
+  return message.trim().slice(0,350)+"\nClassificar com botões: "+actionLink;
  return message.trim().slice(0,480)+
   "\nClassificar: envie 'classificar "+ref+" empresa' ou "+
   "'classificar "+ref+" pessoal'.";
