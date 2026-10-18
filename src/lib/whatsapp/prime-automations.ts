@@ -2,6 +2,7 @@ import { sendScheduledWhatsAppMessage } from "@/lib/whatsapp/worker";
 import {ensurePluggyWebhooks} from "@/lib/banks/webhook-setup";
 import {parseEvolutionGoDeliveryStatus} from "@/lib/banks/evolution-go-delivery-status";
 import {bankTextFallbackMessage} from "@/lib/banks/whatsapp-bank-fallback";
+import {bankActionLinkFromEnv} from "@/lib/banks/whatsapp-action-link";
 
 type OutboxItem={id:string;phone:string;message:string;bankTransactionId:string|null};
 function settings(){
@@ -79,29 +80,13 @@ export async function runPrimeOutbox(maxBatches=1){
    try{
     if(!/^[0-9]{10,15}$/.test(item.phone))throw new Error("Invalid linked recipient");
     if(item.bankTransactionId){
-     // Plain text has already been observed on the user's WhatsApp, while the
-     // Evolution Go carousel can return a message ID without rendering.
-     // Always deliver readable bank information first, then try interactive
-     // quick replies as an optional enhancement.
-     const readable=bankTextFallbackMessage(item.message,item.id);
+     // Interactive WhatsApp reply buttons are deprecated by Evolution Go for
+     // standard QR-linked accounts. Deliver one readable message and one secure
+     // short-lived link to actual HTML buttons instead of invisible carousels.
+     const actionLink=bankActionLinkFromEnv(item.id);
+     const readable=bankTextFallbackMessage(item.message,item.id,actionLink);
      await sendScheduledWhatsAppMessage(item.phone,readable);
-     let providerId:string|undefined;
-     try{
-      const attempt=await sendScheduledWhatsAppMessage(item.phone,item.message,item.id);
-      if(typeof attempt==="string")providerId=attempt;
-     }catch(error){
-      console.error("Evolution Go optional bank buttons not displayed",
-       error instanceof Error?error.message:"unknown");
-     }
-     if(providerId){
-      const saved=await primeRpc<boolean>("prime_finish_outbox_with_provider",{
-       p_id:item.id,p_provider_message_id:providerId
-      });
-      if(!saved)throw Error("Bank outbox claim not finalized");
-     }else{
-      // The report is still usable with the text classification command.
-      await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
-     }
+     await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
     }else{
      await sendScheduledWhatsAppMessage(item.phone,item.message);
      await primeRpc("prime_finish_outbox",{p_id:item.id,p_success:true});
