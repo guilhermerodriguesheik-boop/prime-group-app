@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {bankActionLink,verifyBankAction} from "../src/lib/banks/whatsapp-action-link.ts";
+import {bankActionLink,verifyBankAction,compactBankActionLink,compactBankActionTarget} from "../src/lib/banks/whatsapp-action-link.ts";
 import {bankTextFallbackMessage} from "../src/lib/banks/whatsapp-bank-fallback.ts";
 
 const id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -32,4 +32,26 @@ test("bank message displays one real URL with buttons instead of invisible carou
  assert.ok(text.includes("\nClassificar com botões:"));
  assert.equal((text.match(/https:\/\//g)||[]).length,1);
  assert.doesNotMatch(text,/classificar AAAAAAAA empresa/);
+});
+
+test("WhatsApp links use one compact path, no query that the client can truncate",()=>{
+ const link=compactBankActionLink(id,"https://finance.example.com",secret,now);
+ assert.ok(link);
+ const parsed=new URL(link);
+ assert.equal(parsed.pathname.startsWith("/b/"),true);
+ assert.equal(parsed.search,"");
+ assert.equal(parsed.pathname.length,51);
+ const token=parsed.pathname.slice(3);
+ const target=compactBankActionTarget(token,"https://finance.example.com",secret,now);
+ assert.ok(target);
+ const next=new URL(target);
+ assert.equal(next.pathname,"/bancos/classificar/"+id);
+ assert.ok(verifyBankAction(id,next.searchParams.get("expires")||"",
+  next.searchParams.get("sig")||"",secret,now));
+ const text=bankTextFallbackMessage("ENTRADA · R$ 50,00",id,link);
+ assert.ok(text.includes("Classificar com botões: "+link));
+ assert.equal(text.split("https://").length,2);
+ assert.equal(compactBankActionTarget((token[0]==="A"?"B":"A")+token.slice(1),"https://finance.example.com",secret,now),null);
+ assert.equal(compactBankActionTarget(token,"https://finance.example.com",secret,now+73*3600000),null);
+ assert.equal(compactBankActionTarget(token,"https://finance.example.com",secret+"tampered",now),null);
 });
