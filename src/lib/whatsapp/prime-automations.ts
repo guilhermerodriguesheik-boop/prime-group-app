@@ -119,10 +119,14 @@ export async function runPrimeOutbox(maxBatches=1){
   }
   if(items.length<8)break;
  }
- // Probe delivery separately; an HTTP send alone must never count as received.
- try{await refreshBankDeliveryStatus(12);}
- catch(error){console.error("Evolution Go delivery probe unavailable",
-  error instanceof Error?error.message:"unknown");}
+ // Delivery probes can take multiple seconds per card; never let polling
+ // consume the time budget of an active multi-card report. Idle cron runs
+ // will check the provider receipts separately.
+ if(claimed===0){
+  try{await refreshBankDeliveryStatus(12);}
+  catch(error){console.error("Evolution Go delivery probe unavailable",
+   error instanceof Error?error.message:"unknown");}
+ }
  return {claimed,sent,failed};
 }
 export async function runPrimeDailyJobs(){
