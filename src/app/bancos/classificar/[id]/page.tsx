@@ -64,7 +64,7 @@ export default async function BankActionPage({
     <p style={{fontSize:13,color:"#667"}}>{card.account} · {card.occurredOn}
      {card.pendingBank?" · Pendente no banco":""}</p>
     <p style={{fontSize:14}}>Área atual: <strong>{chosen}</strong></p>
-    {query.saved&&choices.some(x=>x.code===query.saved)&&
+    {query.saved&&query.saved===card.destination&&choices.some(x=>x.code===query.saved)&&
      <p role="status" style={{padding:12,background:"#def6e6",color:"#17512e",borderRadius:10}}>
       Classificação salva: {choices.find(x=>x.code===query.saved)?.label}.
      </p>}
