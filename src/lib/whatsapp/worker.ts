@@ -437,10 +437,10 @@ export async function processWhatsAppQueue(maxMessages=1) {
           ?"As "+batch.alreadyQueued+" movimentações desse período já foram encaminhadas anteriormente. "+
            "Não reenviei para evitar mensagens duplicadas."
           :"Encontrei "+batch.selected+" movimentações bancárias. "+
-           dispatched.sent+" cartão(ões) aceitos pela Evolution Go; "+
+           dispatched.sent+" movimentação(ões) encaminhadas em mensagens de texto; "+
            (Math.max(0,batch.queued-dispatched.sent))+" ainda sem confirmação de envio. "+
-           "Cada movimentação tem seus próprios botões. "+
-           "Aceitação da API não confirma entrega no aparelho."+
+           "Também tentei enviar os botões interativos. "+
+           "A confirmação da API não comprova entrega no aparelho."+
            (batch.truncated?" Há mais movimentações no Financeiro.":"");
         await sendText(event.from||"",answer);
         await rpc("whatsapp_finish_event",{
