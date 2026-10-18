@@ -17,7 +17,7 @@ export async function GET(request:Request,{params}:{params:Promise<{token:string
  if(!target)return new Response("Link inválido ou expirado.",{
   status:404,headers:{"Cache-Control":"no-store","Referrer-Policy":"no-referrer"}
  });
- return NextResponse.redirect(target,307,{
-  headers:{"Cache-Control":"private, no-store","Referrer-Policy":"no-referrer"}
+ return NextResponse.redirect(target,{
+  status:307,headers:{"Cache-Control":"private, no-store","Referrer-Policy":"no-referrer"}
  });
 }
