@@ -144,18 +144,17 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
     <th>Diesel/pedágio/outros</th><th>Resultado previsto</th><th>Situação</th><th>Ação</th></tr></thead>
     <tbody>{filtered.map(c=>{
      const o=c.operation,x=cargoCosts(o,c.freight),paid=c.status==="Pago"||c.status==="Adiantado";
-     const open=c.status==="Pendente",color=paid?"#166534":open?"#b91c1c":"#64748b";
+     const open=c.status==="Pendente";
      return <Fragment key={c.cargo}>
-      <tr style={{backgroundColor:paid?"#ebf8ee":open?"#fff0f0":undefined}}>
+      <tr className={`fiscal-cargo-row ${paid?"is-paid":open?"is-pending":""}`}>
        <td><input type="checkbox" aria-label={"Selecionar carga "+c.cargo}
         checked={selectedSet.has(c.cargo)} onChange={e=>toggleSelected(c.cargo,e.target.checked)}/></td>
        <td>{o?.service_date||c.emailDate||"—"}{!o?.service_date&&c.emailDate&&<small style={{display:"block"}}>e-mail</small>}</td>
-       <td><strong style={{color}}>{c.cargo}</strong>{o?.route_description&&<small style={{display:"block"}}>{o.route_description}</small>}</td>
+       <td><strong className="fiscal-cargo-reference">{c.cargo}</strong>{o?.route_description&&<small style={{display:"block"}}>{o.route_description}</small>}</td>
        <td>{brl(c.freight)}</td><td>{brl(c.advance)}</td><td>{brl(c.received)}</td>
-       <td><strong style={{color}}>{brl(c.pending)}</strong></td><td>{names.get(o?.driver_id||"")||"—"}</td>
+       <td><strong className="fiscal-cargo-balance">{brl(c.pending)}</strong></td><td>{names.get(o?.driver_id||"")||"—"}</td>
        <td>{brl(x.driverDue)}</td><td>{brl(x.helperDue)}</td><td>{brl(x.other)}</td><td>{brl(x.result)}</td>
-       <td><span style={{color,fontWeight:700,padding:"5px 9px",borderRadius:18,
-        backgroundColor:paid?"#d1fae5":open?"#fee2e2":"#e2e8f0"}}>
+       <td><span className={`fiscal-cargo-payment ${paid?"is-paid":open?"is-pending":""}`}>
         {c.paymentSource==="manual"?(paid?"Pago manual":"Parcial manual"):c.paymentSource==="email"?"Pago por e-mail":c.status}
        </span></td>
        <td><button type="button" className="button" aria-expanded={expanded===c.cargo}
