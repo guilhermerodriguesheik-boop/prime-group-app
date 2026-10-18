@@ -84,7 +84,7 @@ export async function runPrimeOutbox(maxBatches=1){
      // quick replies as an optional enhancement.
      const reference=item.id.slice(0,8).toUpperCase();
      const readable=item.message.trim().slice(0,480)+
-      "\\nClassificar: envie 'classificar "+reference+" empresa' ou "+
+      "\nClassificar: envie 'classificar "+reference+" empresa' ou "+
       "'classificar "+reference+" pessoal'.";
      await sendScheduledWhatsAppMessage(item.phone,readable);
      let providerId:string|undefined;
