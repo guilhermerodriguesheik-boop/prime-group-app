@@ -3,6 +3,7 @@ import { after, NextResponse } from "next/server";
 import { processWhatsAppQueue } from "@/lib/whatsapp/worker";
 import {parseEvolutionBankButtonClick,readEvolutionGoBankReply} from "@/lib/banks/interactive-bank-buttons";
 import {pollVoteDestination} from "@/lib/banks/evolution-go-poll-votes";
+import {getEvolutionGoPollIdentity} from "@/lib/banks/evolution-go-poll-identity";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -77,32 +78,62 @@ export async function POST(request: Request) {
         error instanceof Error?error.message:"unknown");}});
     return NextResponse.json({received:true,buttons:1});
   }
-  if (event !== "message" && event !== "messagesupsert") {
+  const envelope=object(input.data);
+  const incomingMessage=object(envelope.Message||envelope.message);
+  const incomingPoll=object(incomingMessage.pollUpdateMessage);
+  const hasPollUpdate=Object.keys(incomingPoll).length>0;
+  // Evolution GO may emit polls as Message, PollUpdate or PollVote, depending
+  // on the instance's version/event subscription.
+  if (event !== "message" && event !== "messagesupsert" &&
+      !(hasPollUpdate && (event==="pollupdate" || event==="pollvote" || event==="pollsupdate"))) {
     return NextResponse.json({received:true,messages:0});
   }
 
-  const data = object(input.data);
+  const data = envelope;
   const info = object(data.Info || data.info);
   const legacyKey = object(data.key);
   const isFromMe = info.IsFromMe === true || legacyKey.fromMe === true;
   const isGroup = info.IsGroup === true;
-  const senderJid = string(info.Sender || legacyKey.remoteJid);
-  const chatJid = string(info.Chat || legacyKey.remoteJid);
+  const senderJid = string(info.Sender || info.sender || legacyKey.participant || legacyKey.remoteJid);
+  const chatJid = string(info.Chat || info.chat || legacyKey.remoteJid);
+  const message = object(data.Message || data.message);
+  const pollUpdateMessage=object(message.pollUpdateMessage);
+  const isPoll=Object.keys(pollUpdateMessage).length>0;
+  const pollKey=object(pollUpdateMessage.pollCreationMessageKey);
+  const auditPollId=string(pollKey.ID||pollKey.id);
+  async function notePoll(stage:string){
+    if(!isPoll||!/^[a-zA-Z0-9_-]{8,150}$/.test(auditPollId))return;
+    try{
+      await fetch(baseUrl.replace(/\/$/,"")+"/rest/v1/rpc/prime_bank_poll_ingress_stage",{
+       method:"POST",cache:"no-store",signal:AbortSignal.timeout(5000),
+       headers:{apikey:key,Authorization:"Bearer "+key,"Content-Type":"application/json"},
+       body:JSON.stringify({p_secret:ingress,p_poll_id:auditPollId,p_stage:stage})
+      });
+    }catch{/* Audit failure must not discard a valid bank vote. */}
+  }
   if (isFromMe || isGroup || /@(g\.us|broadcast|newsletter)$/.test(chatJid)) {
     return NextResponse.json({received:true,messages:0});
   }
-  // Reject @lid identities rather than attributing events to a guessed owner.
-  if (!/@s\.whatsapp\.net$/.test(senderJid) || !/@s\.whatsapp\.net$/.test(chatJid)) {
+  // Preserve LID as the crypto voter identity; phone comes from the
+  // authenticated private-chat envelope and is checked against pairing in SQL.
+  const identity=getEvolutionGoPollIdentity({
+    senderJid,chatJid,isPoll,
+    senderAlt:string(info.SenderAlt||info.senderAlt),
+    chatAlt:string(info.ChatAlt||info.chatAlt),
+    legacyJid:string(legacyKey.remoteJid)
+  });
+  if(!identity){
+    if(isPoll)await notePoll("no_phone_identity");
     return NextResponse.json({received:true,messages:0});
   }
-  const sender = senderJid.split("@")[0].replace(/\D/g,"");
+  const sender=identity.phone;
   const messageId = string(info.ID || legacyKey.id);
-  if (!/^[0-9]{10,15}$/.test(sender) || !/^[a-zA-Z0-9_-]{8,150}$/.test(messageId)) {
+  if (!/^[a-zA-Z0-9_-]{8,150}$/.test(messageId)) {
     return NextResponse.json({received:true,messages:0});
   }
-  const message = object(data.Message || data.message);
-  const pollUpdate=object(message.pollUpdateMessage);
-  if(Object.keys(pollUpdate).length){
+  const pollUpdate=pollUpdateMessage;
+  if(isPoll){
+    await notePoll("received");
     // Vote payload is end-to-end encrypted. We only write classifications
     // after AES-GCM authentication, option-hash match, and owner/poll lookup.
     const creation=object(pollUpdate.pollCreationMessageKey);
@@ -122,18 +153,26 @@ export async function POST(request: Request) {
      const meta=await pollRpc("prime_get_bank_poll_vote",{
        p_poll_id:pollId,p_phone:sender
      }) as {secret?:string;senderJid?:string}|null;
-     if(!meta?.secret||!meta.senderJid)return NextResponse.json({received:true,poll:"unknown"});
+     if(!meta?.secret||!meta.senderJid){
+       await notePoll("unknown_owner");
+       return NextResponse.json({received:true,poll:"unknown"});
+     }
      const selected=pollVoteDestination(pollId,meta.secret,pollUpdate,
-       senderJid,meta.senderJid);
+       identity.voterJid,meta.senderJid);
      if(!selected){
        console.error("Native bank poll vote could not be decrypted; no classification saved");
+       await notePoll("decrypt_failed");
        return NextResponse.json({received:true,poll:"unresolved"});
      }
      const saved=await pollRpc("prime_apply_bank_poll_vote",{
        p_poll_id:pollId,p_phone:sender,p_vote_message_id:messageId,
        p_destination:selected
      }) as boolean;
-     if(!saved)return NextResponse.json({received:true,poll:"not_saved"});
+     if(!saved){
+       await notePoll("save_failed");
+       return NextResponse.json({received:true,poll:"not_saved"});
+     }
+     await notePoll("saved");
      return NextResponse.json({received:true,poll:"classified"});
     }catch(error){
      console.error("Native bank poll processing failed",error instanceof Error?error.message:"unknown");
