@@ -7,6 +7,7 @@ import {detectBankReportIntent} from "@/lib/banks/report-intent";
 import {parseWhatsAppBankNumber} from "@/lib/banks/whatsapp-classification";
 import {readBankButtonId} from "@/lib/banks/interactive-bank-buttons";
 import {bankCarouselPayload} from "@/lib/banks/evolution-go-carousel";
+import {parseEvolutionGoPollSend} from "@/lib/banks/evolution-go-poll-votes";
 
 
 type Obj = Record<string, unknown>;
@@ -119,6 +120,23 @@ async function sendEvolutionGoBankButtons(to:string,body:string,outboxId:string,
  return data.data.Info.ID;
 }
 
+
+/** Native WhatsApp poll — user taps an option inside the chat, no browser. */
+export async function sendEvolutionGoBankPoll(to:string,question:string){
+ if(!isEvolutionGoProvider())throw new Error("Polls require Evolution Go");
+ const {base,token}=evolutionGoConfig();
+ const number=to.replace(/\\D/g,"");
+ if(!/^[0-9]{10,15}$/.test(number))throw Error("Invalid poll recipient");
+ const response=await fetch(base+"/send/poll",{
+  method:"POST",cache:"no-store",signal:AbortSignal.timeout(15000),
+  headers:{apikey:token,"Content-Type":"application/json"},
+  body:JSON.stringify({number,question:question.slice(0,190),maxAnswer:1,
+   options:["Empresa","Pessoal","Empréstimos","Transferência","Pendente"]}),
+ });
+ if(!response.ok)throw Error("Evolution Go native poll HTTP "+response.status);
+ const raw:unknown=await response.json();
+ return parseEvolutionGoPollSend(raw);
+}
 
 // Automatic reminders may use only the already-configured Evolution Go provider.
 // Do not route scheduled financial notifications through legacy Meta configuration.
