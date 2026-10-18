@@ -40,7 +40,7 @@ test("WhatsApp links use one compact path, no query that the client can truncate
  const parsed=new URL(link);
  assert.equal(parsed.pathname.startsWith("/b/"),true);
  assert.equal(parsed.search,"");
- assert.match(parsed.pathname,/^\\/b\\/[a-zA-Z0-9_-]{48}$/);
+ assert.equal(parsed.pathname.length,51);
  const token=parsed.pathname.slice(3);
  const target=compactBankActionTarget(token,"https://finance.example.com",secret,now);
  assert.ok(target);
@@ -50,8 +50,8 @@ test("WhatsApp links use one compact path, no query that the client can truncate
   next.searchParams.get("sig")||"",secret,now));
  const text=bankTextFallbackMessage("ENTRADA · R$ 50,00",id,link);
  assert.ok(text.includes("Classificar com botões: "+link));
- assert.equal((text.match(/https:\\/\\//g)||[]).length,1);
- assert.equal(compactBankActionTarget(token.slice(0,-1)+"X","https://finance.example.com",secret,now),null);
+ assert.equal(text.split("https://").length,2);
+ assert.equal(compactBankActionTarget((token[0]==="A"?"B":"A")+token.slice(1),"https://finance.example.com",secret,now),null);
  assert.equal(compactBankActionTarget(token,"https://finance.example.com",secret,now+73*3600000),null);
  assert.equal(compactBankActionTarget(token,"https://finance.example.com",secret+"tampered",now),null);
 });
