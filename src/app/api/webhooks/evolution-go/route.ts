@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     if(!/^[A-Za-z0-9_-]{8,150}$/.test(pollId))
       return NextResponse.json({received:true,poll:"unresolved"});
     async function pollRpc(name:string,args:Record<string,unknown>){
-      const response=await fetch(baseUrl.replace(/\\/$/,"")+"/rest/v1/rpc/"+name,{
+      const response=await fetch(baseUrl.replace(/\/$/,"")+"/rest/v1/rpc/"+name,{
        method:"POST",cache:"no-store",signal:AbortSignal.timeout(10000),
        headers:{apikey:key,Authorization:"Bearer "+key,"Content-Type":"application/json"},
        body:JSON.stringify({p_secret:ingress,...args})
