@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/whatsapp",
-      "schedule": "50 23 * * *"
+      "schedule": "27 1 * * *"
     },
     {
       "path": "/api/cron/fiscal-gmail",
