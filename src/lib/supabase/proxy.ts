@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   "/api/webhooks/evolution-go",
   "/api/banks/card-image", // Generic public PNG needed by WhatsApp carousel; no user data
   "/bancos/classificar", // Every card request is HMAC-signed and expires; no public access otherwise
+  "/b", // Query-free short signed links; signature is verified in the route
   "/api/cron/whatsapp",
   "/empresa",
 ];
