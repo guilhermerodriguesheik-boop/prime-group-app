@@ -9,12 +9,26 @@ export async function GET(request:Request){
   if(expected.length<24||actual.length!==expected.length||
       !timingSafeEqual(Buffer.from(actual),Buffer.from(expected)))
     return NextResponse.json({error:"Não autorizado"},{status:401});
-  if(!process.env.SUPABASE_SERVICE_ROLE_KEY||!process.env.GOOGLE_GMAIL_CLIENT_ID||
-     !process.env.GOOGLE_GMAIL_CLIENT_SECRET||!process.env.GMAIL_TOKEN_ENCRYPTION_KEY)
-    return NextResponse.json({skipped:"Gmail OAuth not configured"},{headers:{"Cache-Control":"no-store"}});
+  const required=["SUPABASE_SERVICE_ROLE_KEY","GOOGLE_GMAIL_CLIENT_ID",
+    "GOOGLE_GMAIL_CLIENT_SECRET","GMAIL_TOKEN_ENCRYPTION_KEY"] as const;
+  const missing=required.filter(name=>!process.env[name]);
+  if(missing.length){
+    console.warn("Prime Gmail cron: missing variable names",missing.join(","));
+    return NextResponse.json({ok:false,error:"Configuração Gmail incompleta.",missing},
+      {status:503,headers:{"Cache-Control":"no-store"}});
+  }
   try{
-    return NextResponse.json({results:await syncAllGmailWorkspaces()},{headers:{"Cache-Control":"no-store"}});
+    const results=await syncAllGmailWorkspaces();
+    const failed=results.filter(row=>
+      ("error" in row&&Boolean(row.error))||("error" in row.finance&&Boolean(row.finance.error)));
+    if(failed.length){
+      console.warn("Prime Gmail cron: workspaces with import failures:",failed.length);
+      return NextResponse.json({ok:false,error:"Sincronização Gmail com falhas.",results},
+        {status:503,headers:{"Cache-Control":"no-store"}});
+    }
+    return NextResponse.json({ok:true,results},{headers:{"Cache-Control":"no-store"}});
   }catch{
-    return NextResponse.json({error:"Sincronização não disponível"},{status:503});
+    return NextResponse.json({ok:false,error:"Sincronização não disponível"},
+      {status:503,headers:{"Cache-Control":"no-store"}});
   }
 }

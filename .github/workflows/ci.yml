@@ -74,6 +74,9 @@ jobs:
       - name: Google OAuth and fiscal readiness tests
         run: npm run test:fiscal-readiness
 
+      - name: Gmail synchronization health regression tests
+        run: node --experimental-strip-types --test tests/gmail-health.test.mjs
+
       - name: DotCompany sandbox adapter contract tests
         run: npm run test:dotcompany
 

@@ -17,9 +17,13 @@ export function GmailConnector({connected,ready,clientStatus,lastSync,lastError}
       const res=await fetch("/api/fiscal/gmail/operational-sync",{
         method:"POST",headers:{"x-prime-action":"prime-operations-email-sync"},
       });
-      const data=await res.json() as {error?:string;cargos?:{imported:number;invoices:number;errors:number;scanned:number};finance?:{imported:number;errors:number};cteEmails?:{imported:number;errors:number};};
+      const data=await res.json() as {error?:string;partial?:boolean;warnings?:string[];
+       cargos?:{imported:number;invoices:number;errors:number;scanned:number};finance?:{imported:number;errors:number};};
       if(!res.ok)throw Error(data.error||"Falha na sincronização.");
-      setMessage("Cargas: "+(data.cargos?.imported??0)+" · NF-e: "+(data.cargos?.invoices??0)+" · adiantamentos/acertos: "+(data.finance?.imported??0)+" · CT-e anexados: "+(data.cteEmails?.imported??0)+" · pendências: "+((data.cargos?.errors??0)+(data.finance?.errors??0)+(data.cteEmails?.errors??0))+".");
+      const totals="Cargas: "+(data.cargos?.imported??0)+" · NF-e: "+(data.cargos?.invoices??0)+
+        " · adiantamentos/acertos: "+(data.finance?.imported??0)+".";
+      setMessage((data.partial?"Atualização parcial. ":"Atualização concluída. ")+totals+
+        (data.partial?" "+(data.warnings||[]).join(" "):""));
       router.refresh();
     }catch(error){setMessage(error instanceof Error?error.message:"Falha na sincronização.");}
     finally{setBusy(false);}

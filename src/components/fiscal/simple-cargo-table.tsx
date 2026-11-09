@@ -56,9 +56,12 @@ export function SimpleCargoTable({cargo,drivers,connected}:{cargo:CargoDisplay[]
   setBusy(true);setMessage("");
   try{
    const r=await fetch("/api/fiscal/gmail/operational-sync",{method:"POST",headers:{"x-prime-action":"prime-operations-email-sync"}});
-   const x=await r.json() as {error?:string;finance?:{imported:number}};
+   const x=await r.json() as {error?:string;partial?:boolean;warnings?:string[];
+    cargos?:{imported:number;errors:number};finance?:{imported:number;errors:number}};
    if(!r.ok)throw Error(x.error||"Gmail indisponível.");
-   setMessage("Atualizado: "+(x.finance?.imported||0)+" e-mails novos.");router.refresh();
+   const summary="Cargas novas: "+(x.cargos?.imported??0)+" · Demonstrativos novos: "+(x.finance?.imported??0)+".";
+   setMessage(x.partial?"Atualização parcial. "+summary+" "+(x.warnings||[]).join(" "):"Atualização concluída. "+summary);
+   router.refresh();
   }catch(e){setMessage(e instanceof Error?e.message:"Erro na importação.");}finally{setBusy(false);}
  }
  async function createDriver(e:FormEvent<HTMLFormElement>){
