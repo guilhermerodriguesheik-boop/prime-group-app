@@ -6,6 +6,7 @@ import { parseAuthorizedNfeXml } from "@/lib/fiscal/nfe";
 import { isOrtobomSender, parseOrtobomEmail } from "@/lib/fiscal/ortobom-email";
 import { probeGoogleClient, type GoogleClientStatus } from "@/lib/fiscal/google-credential";
 import { parseOrtobomFinancialEmail } from "@/lib/fiscal/ortobom-finance-parser";
+import { diagnoseGmailFailure } from "@/lib/fiscal/gmail-sync-health";
 
 export const GMAIL_ACCOUNT = "lgtransporteelogistica@gmail.com";
 let clientStatusCache:{time:number;value:GoogleClientStatus}|null=null;
@@ -72,7 +73,7 @@ type OAuthResponse={access_token?:string;refresh_token?:string;error?:string};
 async function fetchOAuth(params:URLSearchParams):Promise<OAuthResponse>{
   const response=await fetch("https://oauth2.googleapis.com/token",{
     method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},
-    body:params,cache:"no-store",
+    body:params,cache:"no-store",signal:AbortSignal.timeout(15000),
   });
   const parsed=await response.json().catch(()=>null) as (OAuthResponse|{error?:string})|null;
   if(!response.ok){
@@ -120,7 +121,7 @@ async function accessToken(encrypted:string){
 }
 async function gmailJson<T>(token:string,path:string):Promise<T>{
   const res=await fetch("https://gmail.googleapis.com/gmail/v1"+path,{
-    headers:{authorization:"Bearer "+token},cache:"no-store",
+    headers:{authorization:"Bearer "+token},cache:"no-store",signal:AbortSignal.timeout(20000),
   });
   if(!res.ok)throw Error("Gmail indisponível ("+res.status+").");
   return res.json() as Promise<T>;
@@ -211,7 +212,7 @@ async function importMessage(db:SupabaseClient,token:string,workspaceId:string,o
   return {skipped:false,invoices:invoices.length};
 }
 export async function gmailStatus(workspaceId:string){
-  const {data,error}=await admin().from("fiscal_gmail_connections").select("email,last_sync_at,last_error")
+  const {data,error}=await admin().from("fiscal_gmail_connections").select("email,last_sync_at,financial_last_sync_at,last_error")
     .eq("workspace_id",workspaceId).maybeSingle();
   if(error)throw Error("Estado Gmail indisponível.");
   return data;
@@ -245,24 +246,32 @@ export async function syncGmailWorkspace(workspaceId:string,ownerId:string):Prom
       last_error:stats.errors?stats.errors+" e-mail(s) necessitam conferência manual":null,
     }).eq("workspace_id",workspaceId);
     return stats;
-  }catch{
-    await db.from("fiscal_gmail_connections").update({last_error:"Falha de conexão Google. Reconecte se necessário."})
-      .eq("workspace_id",workspaceId);
-    throw Error("Não foi possível sincronizar o Gmail da Ortobom.");
+  }catch(cause){
+    const diagnosis=diagnoseGmailFailure(cause);
+    const {error:updateError}=await db.from("fiscal_gmail_connections")
+      .update({last_error:diagnosis.message}).eq("workspace_id",workspaceId).eq("owner_id",ownerId);
+    if(updateError)console.warn("Prime Gmail: unable to record diagnostic",updateError.code||"unknown");
+    console.warn("Prime Gmail cargo synchronization failed:",diagnosis.code);
+    throw cause;
   }
 }
 export async function syncAllGmailWorkspaces(){
   const {data,error}=await admin().from("fiscal_gmail_connections").select("workspace_id,owner_id").limit(15);
   if(error)throw Error("Conexões Gmail indisponíveis.");
-  const result=[];for(const item of data||[]){
-    try{
-      const cargos=await syncGmailWorkspace(item.workspace_id,item.owner_id);
-      let finance:FinancialGmailSync|{error:string};
-      try{finance=await syncOrtobomFinancialReports(item.workspace_id,item.owner_id);}
-      catch{finance={error:"finance_sync_failed"};}
-      result.push({workspace_id:item.workspace_id,...cargos,finance});
-    }catch{result.push({workspace_id:item.workspace_id,error:"sync_failed"});}
-  }return result;
+  const result=[];
+  for(const item of data||[]){
+    // Uma falha na importação das cargas não deve impedir os relatórios financeiros.
+    const [cargos,finance]=await Promise.allSettled([
+      syncGmailWorkspace(item.workspace_id,item.owner_id),
+      syncOrtobomFinancialReports(item.workspace_id,item.owner_id),
+    ]);
+    result.push({
+      workspace_id:item.workspace_id,
+      ...(cargos.status==="fulfilled"?cargos.value:{error:diagnoseGmailFailure(cargos.reason).code}),
+      finance:finance.status==="fulfilled"?finance.value:{error:diagnoseGmailFailure(finance.reason).code},
+    });
+  }
+  return result;
 }
 
 /** Listagem manual: somente metadados de e-mails reais do Gmail da Ortobom,
