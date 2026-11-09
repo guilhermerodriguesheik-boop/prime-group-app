@@ -103,7 +103,8 @@ export async function exchangeAuthorizationCode(code:string){
   const {error}=await database.from("fiscal_gmail_connections").upsert({
     workspace_id:workspaceId,owner_id:ownerId,email:GMAIL_ACCOUNT,
     encrypted_refresh_token:encryptToken(tokens.refresh_token),
-    next_page_token:null,last_error:null,
+    // Page tokens belong to the previous authorization; restart pagination safely.
+    next_page_token:null,financial_next_page_token:null,cte_next_page_token:null,last_error:null,
   },{onConflict:"workspace_id"});
   if(error){
     console.error("Fiscal Gmail connection insert failed; Supabase error code:",error.code||"unknown");
