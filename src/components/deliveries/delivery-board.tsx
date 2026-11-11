@@ -1,5 +1,6 @@
 "use client";
-import {useMemo,useState} from "react";\nimport type {CSSProperties} from "react";
+import {useMemo,useState} from "react";
+import type {CSSProperties} from "react";
 
 export type DeliveryOrder={
  id:string;account_name:string;romaneio:string;document_number:string;document_kind:"NF"|"Pedido";
@@ -166,6 +167,8 @@ export function DeliveryBoard({initialOrders,today,loadError}:{initialOrders:Del
        {Object.entries(stages).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></td>
       <td><input style={control} value={r.romaneio} onChange={e=>updateDraft(i,"romaneio",e.target.value.replace(/\D/g,""))}/></td>
       <td><input style={control} value={r.document_number} onChange={e=>updateDraft(i,"document_number",e.target.value)}/></td>
+      <td><select style={control} value={r.document_kind} onChange={e=>updateDraft(i,"document_kind",e.target.value)}><option>NF</option><option>Pedido</option></select></td>
+      <td><input style={{...control,minWidth:160}} value={r.carrier} onChange={e=>updateDraft(i,"carrier",e.target.value)}/></td>
       <td><input style={{...control,minWidth:190}} value={r.recipient} onChange={e=>updateDraft(i,"recipient",e.target.value)}/></td>
       <td><input style={control} value={r.neighborhood} onChange={e=>updateDraft(i,"neighborhood",e.target.value)}/></td>
       <td><input aria-label="Volumes informados" type="number" min="1" style={{...control,maxWidth:110,background:r.declared_volumes===null?"#FEF3C7":undefined,color:r.declared_volumes===null?"#7C2D12":undefined}}
