@@ -73,6 +73,7 @@ export default async function FiscalPage({searchParams}:{searchParams:Promise<{g
    <a className={"button "+(gmailHealth==="recent"?"":"primary")} href="/api/fiscal/gmail/connect">
     {gmail?"Renovar conexão Google":"Conectar Gmail"}
    </a>
+   <Link className="button" href="/entregas">Entregas por volume</Link>
    <Link className="button" href="/prime">Gestão Prime Group</Link>
    <Link className="button" href="/frota">Frota</Link>
   </div>
