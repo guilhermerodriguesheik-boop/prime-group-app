@@ -12,7 +12,7 @@ import {
 // dentro das áreas, sem lotar o menu lateral com links duplicados.
 const sections=[
  {label:"Transporte",href:"/fiscal",icon:Truck,
-  paths:["/fiscal","/prime","/frota","/motoristas","/viagens","/equipes"]},
+  paths:["/fiscal","/entregas","/prime","/frota","/motoristas","/viagens","/equipes"]},
  {label:"Empréstimos",href:"/juros",icon:Percent,paths:["/juros"]},
  {label:"Pessoal",href:"/pessoal",icon:UserRound,paths:["/pessoal"]},
  {label:"Bancos",href:"/bancos",icon:Landmark,paths:["/bancos"]},
