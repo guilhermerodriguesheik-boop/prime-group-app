@@ -7,7 +7,7 @@ import type {SupabaseClient} from "@supabase/supabase-js";
 export const runtime="nodejs";
 const err=(error:string,status=400)=>NextResponse.json({error},{status:status,headers:{"Cache-Control":"no-store"}});
 const uuid=z.string().uuid();
-const day=z.string().regex(/^20\d{2}-\d{2}-\d{2}$/).refine(v=>new Date(v+"T12:00:00Z").toISOString().slice(0,10)===v);
+const day=z.string().regex(/^20\d{2}-\d{2}-\d{2}$/).refine(v=>(()=>{const date=new Date(v+"T12:00:00Z");return !Number.isNaN(date.getTime())&&date.toISOString().slice(0,10)===v;})());
 const optDay=day.nullable();
 const positive=z.number().int().min(1).max(50000).nullable();
 const status=z.enum(["a_conferir","aguardando_coleta","coletado","em_rota","entregue","ocorrencia","devolvido","cancelado"]);
