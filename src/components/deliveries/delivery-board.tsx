@@ -1,5 +1,5 @@
 "use client";
-import {useMemo,useState} from "react";
+import {useMemo,useState} from "react";\nimport type {CSSProperties} from "react";
 
 export type DeliveryOrder={
  id:string;account_name:string;romaneio:string;document_number:string;document_kind:"NF"|"Pedido";
@@ -19,7 +19,7 @@ const statuses:Record<DeliveryOrder["delivery_status"],string>={
  a_conferir:"A conferir",aguardando_coleta:"Aguardando coleta",coletado:"Coletado",em_rota:"Em rota",
  entregue:"Entregue",ocorrencia:"Ocorrência",devolvido:"Devolvido",cancelado:"Cancelado"
 };
-const control:React.CSSProperties={width:"100%",padding:"9px 10px",border:"1px solid #94A3B8",borderRadius:8,background:"transparent",color:"inherit",minWidth:90};
+const control:CSSProperties={width:"100%",padding:"9px 10px",border:"1px solid #94A3B8",borderRadius:8,background:"transparent",color:"inherit",minWidth:90};
 const amount=(n:number)=>new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(n);
 const dateLabel=(v:string|null)=>v?new Date(v+"T12:00:00Z").toLocaleDateString("pt-BR",{timeZone:"UTC"}):"—";
 function shiftDay(day:string,days:number){return new Date(Date.parse(day+"T12:00:00Z")+days*86400000).toISOString().slice(0,10)}
@@ -87,7 +87,7 @@ export function DeliveryBoard({initialOrders,today,loadError}:{initialOrders:Del
   setBusy(true);
   try{const result=await jsonFetch("/api/entregas",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
    action:"import",account_name:account,report_received_on:reportDate,source_filename:image?.name||"foto",
-   rows:selected.map(({include,...row})=>row)
+   rows:selected.map(row=>({romaneio:row.romaneio,document_number:row.document_number,document_kind:row.document_kind,carrier:row.carrier,recipient:row.recipient,neighborhood:row.neighborhood,source_stage:row.source_stage,declared_volumes:row.declared_volumes}))
   })});
    await refresh();setPreview([]);setBillAccount(account.trim().toUpperCase());
    setMessage(`Importação concluída: ${result.created} novos pedidos; ${result.duplicates} já existentes. Os pedidos ainda exigem conferência operacional.`);
@@ -159,7 +159,7 @@ export function DeliveryBoard({initialOrders,today,loadError}:{initialOrders:Del
      <p style={{fontSize:12}}>Volumes ausentes: {preview.filter(x=>x.include&&x.declared_volumes===null).length}. Podem ficar pendentes, mas não serão faturados até a conferência.</p>
      {scanNotes&&<p style={{fontSize:12}}>Observação da leitura: {scanNotes}</p>}
     </div>
-    <div className="table-wrap"><table><thead><tr><th>Importar</th><th>Origem</th><th>Romaneio</th><th>NF/Pedido</th><th>Destinatário</th><th>Bairro</th><th>Volumes</th></tr></thead><tbody>
+    <div className="table-wrap"><table><thead><tr><th>Importar</th><th>Origem</th><th>Romaneio</th><th>NF/Pedido</th><th>Tipo</th><th>Transportadora</th><th>Destinatário</th><th>Bairro</th><th>Volumes</th></tr></thead><tbody>
      {preview.map((r,i)=><tr key={i} style={{opacity:r.include?1:.5}}>
       <td><input type="checkbox" checked={r.include} onChange={e=>updateDraft(i,"include",e.target.checked)}/></td>
       <td><select style={control} value={r.source_stage} onChange={e=>updateDraft(i,"source_stage",e.target.value)}>
